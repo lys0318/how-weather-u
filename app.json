@@ -6,7 +6,7 @@
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -29,9 +29,7 @@
         "ACCESS_COARSE_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE"
-      ],
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      ]
     },
     "web": {
       "favicon": "./assets/favicon.png"

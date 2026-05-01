@@ -41,7 +41,7 @@ function MainTabs() {
 }
 
 export default function App() {
-  const hasOnboarded = false; // S5에서 AsyncStorage로 대체 예정
+  const hasOnboarded = true; // S5에서 AsyncStorage로 대체 예정 (현재는 홈 화면 확인용)
 
   return (
     <NavigationContainer>
