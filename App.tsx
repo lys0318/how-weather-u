@@ -4,6 +4,9 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 
+// 백그라운드 태스크는 최상단에서 import해야 등록됨
+import './src/tasks/backgroundTask';
+
 import OnboardingScreen from './src/screens/OnboardingScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
@@ -41,7 +44,7 @@ function MainTabs() {
 }
 
 export default function App() {
-  const hasOnboarded = true; // S5에서 AsyncStorage로 대체 예정 (현재는 홈 화면 확인용)
+  const hasOnboarded = true; // S5에서 AsyncStorage로 대체 예정
 
   return (
     <NavigationContainer>
