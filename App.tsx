@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
+import { View, ActivityIndicator } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -11,6 +12,7 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import { getHasOnboarded } from './src/utils/storage';
 
 export type RootStackParamList = {
   Onboarding: undefined;
@@ -44,14 +46,31 @@ function MainTabs() {
 }
 
 export default function App() {
-  const hasOnboarded = true; // S5에서 AsyncStorage로 대체 예정
+  const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    getHasOnboarded().then((value) => setHasOnboarded(value));
+  }, []);
+
+  // AsyncStorage 확인 중 로딩 스크린
+  if (hasOnboarded === null) {
+    return (
+      <View style={{ flex: 1, backgroundColor: '#0f0f0f', justifyContent: 'center', alignItems: 'center' }}>
+        <ActivityIndicator color="#ffffff" />
+      </View>
+    );
+  }
 
   return (
     <NavigationContainer>
       <StatusBar style="light" />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!hasOnboarded ? (
-          <Stack.Screen name="Onboarding" component={OnboardingScreen} />
+          <Stack.Screen name="Onboarding">
+            {() => (
+              <OnboardingScreen onComplete={() => setHasOnboarded(true)} />
+            )}
+          </Stack.Screen>
         ) : null}
         <Stack.Screen name="Main" component={MainTabs} />
       </Stack.Navigator>
