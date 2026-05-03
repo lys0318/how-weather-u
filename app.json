@@ -14,12 +14,18 @@
     },
     "ios": {
       "supportsTablet": false,
+      "bundleIdentifier": "com.howweatheryou.app",
+      "buildNumber": "1",
       "infoPlist": {
         "NSLocationWhenInUseUsageDescription": "현재 날씨를 기반으로 맞춤 메시지를 보내드리기 위해 위치 정보가 필요합니다.",
-        "NSLocationAlwaysAndWhenInUseUsageDescription": "백그라운드에서도 날씨 기반 메시지를 보내드리기 위해 위치 정보가 필요합니다."
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "백그라운드에서도 날씨 기반 메시지를 보내드리기 위해 위치 정보가 필요합니다.",
+        "NSUserNotificationsUsageDescription": "날씨에 맞는 감성 메시지를 주기적으로 알려드리기 위해 알림 권한이 필요합니다.",
+        "UIBackgroundModes": ["fetch", "remote-notification"]
       }
     },
     "android": {
+      "package": "com.howweatheryou.app",
+      "versionCode": 1,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f0f0f"
@@ -28,7 +34,8 @@
         "ACCESS_FINE_LOCATION",
         "ACCESS_COARSE_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
-        "VIBRATE"
+        "VIBRATE",
+        "POST_NOTIFICATIONS"
       ]
     },
     "web": {
@@ -48,7 +55,16 @@
           "color": "#0f0f0f",
           "sounds": []
         }
+      ],
+      [
+        "expo-background-fetch",
+        {}
       ]
-    ]
+    ],
+    "extra": {
+      "eas": {
+        "projectId": "YOUR_EAS_PROJECT_ID"
+      }
+    }
   }
 }
