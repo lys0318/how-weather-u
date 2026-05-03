@@ -20,7 +20,10 @@
         "NSLocationWhenInUseUsageDescription": "현재 날씨를 기반으로 맞춤 메시지를 보내드리기 위해 위치 정보가 필요합니다.",
         "NSLocationAlwaysAndWhenInUseUsageDescription": "백그라운드에서도 날씨 기반 메시지를 보내드리기 위해 위치 정보가 필요합니다.",
         "NSUserNotificationsUsageDescription": "날씨에 맞는 감성 메시지를 주기적으로 알려드리기 위해 알림 권한이 필요합니다.",
-        "UIBackgroundModes": ["fetch", "remote-notification"]
+        "UIBackgroundModes": [
+          "fetch",
+          "remote-notification"
+        ]
       }
     },
     "android": {
@@ -35,7 +38,11 @@
         "ACCESS_COARSE_LOCATION",
         "RECEIVE_BOOT_COMPLETED",
         "VIBRATE",
-        "POST_NOTIFICATIONS"
+        "POST_NOTIFICATIONS",
+        "android.permission.ACCESS_COARSE_LOCATION",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.RECEIVE_BOOT_COMPLETED",
+        "android.permission.WAKE_LOCK"
       ]
     },
     "web": {
@@ -63,8 +70,9 @@
     ],
     "extra": {
       "eas": {
-        "projectId": "YOUR_EAS_PROJECT_ID"
+        "projectId": "d07d8b4f-4c32-4381-9a5a-c22473730d15"
       }
-    }
+    },
+    "owner": "lys03"
   }
 }
