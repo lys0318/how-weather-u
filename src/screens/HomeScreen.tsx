@@ -7,12 +7,36 @@ import {
   TouchableOpacity,
   ScrollView,
   Share,
+  Dimensions,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '../hooks/useWeather';
 import { useMessage } from '../hooks/useMessage';
-import { getTimeOfDay, TIME_OF_DAY_KO, DAY_OF_WEEK_KO } from '../constants/weather';
+import { getTimeOfDay, TIME_OF_DAY_KO, DAY_OF_WEEK_KO, WeatherCondition } from '../constants/weather';
 import { getPreference, saveMessage } from '../utils/storage';
 import { Preference } from '../constants/weather';
+import WeatherAnimation from '../components/WeatherAnimation';
+
+const { height } = Dimensions.get('window');
+
+// ── 날씨 + 시간대별 그라디언트 ───────────────────────────
+function getGradient(condition: WeatherCondition | null, hour: number): [string, string, string] {
+  const timeOfDay = getTimeOfDay(hour);
+
+  if (condition === 'clear') {
+    if (timeOfDay === 'morning') return ['#1a2a4a', '#2d4a7a', '#3a6494'];
+    if (timeOfDay === 'afternoon') return ['#0a1628', '#1a3a6a', '#1e4d8c'];
+    if (timeOfDay === 'evening') return ['#1a0a2e', '#3d1a5e', '#6b2d8b'];
+    return ['#050d1a', '#0a1628', '#0d2040']; // night
+  }
+  if (condition === 'rain' || condition === 'drizzle') return ['#0d1520', '#1a2535', '#1e3045'];
+  if (condition === 'thunderstorm') return ['#080d14', '#111824', '#0d1520'];
+  if (condition === 'snow') return ['#0d1a2e', '#1a2d42', '#1e3550'];
+  if (condition === 'mist') return ['#111820', '#1a2530', '#1e2e3a'];
+  if (condition === 'clouds') return ['#0d1520', '#171f2e', '#1a2535'];
+  // unknown / default
+  return ['#0a0f1a', '#111824', '#141d2e'];
+}
 
 export default function HomeScreen() {
   const { weather, loading: weatherLoading, error: weatherError, refetch } = useWeather();
@@ -20,15 +44,16 @@ export default function HomeScreen() {
   const [preference, setPreference] = useState<Preference>('comfort');
 
   const now = new Date();
-  const timeOfDay = TIME_OF_DAY_KO[getTimeOfDay(now.getHours())];
+  const hour = now.getHours();
+  const timeOfDay = TIME_OF_DAY_KO[getTimeOfDay(hour)];
   const dayOfWeek = DAY_OF_WEEK_KO[now.getDay()];
 
-  // AsyncStorage에서 취향 로드
+  const gradientColors = getGradient(weather?.condition ?? null, hour);
+
   useEffect(() => {
     getPreference().then(setPreference);
   }, []);
 
-  // 메시지 생성 후 AsyncStorage에 저장
   useEffect(() => {
     if (message && weather) {
       saveMessage(message, weather.emoji).catch(console.error);
@@ -36,211 +61,259 @@ export default function HomeScreen() {
   }, [message]);
 
   const handleGenerateMessage = () => {
-    if (weather) {
-      generate(weather, preference);
-    }
+    if (weather) generate(weather, preference);
   };
 
   const handleShare = async () => {
     if (!message || !weather) return;
-    const days = DAY_OF_WEEK_KO;
-    const d = new Date();
     await Share.share({
-      message: `${weather.emoji} ${days[d.getDay()]} ${timeOfDay}\n\n${message.text}\n\n— 하우웨더유 (How Weather You)`,
+      message: `${weather.emoji} ${dayOfWeek} ${timeOfDay}\n\n${message.text}\n\n— 하우웨더유 (How Weather You)`,
     });
   };
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
-      <Text style={styles.context}>
-        {dayOfWeek} {timeOfDay}
-      </Text>
+    <LinearGradient colors={gradientColors} style={styles.gradient}>
+      {/* 날씨 파티클 애니메이션 */}
+      {weather && <WeatherAnimation condition={weather.condition} />}
 
-      {/* 날씨 카드 */}
-      {weatherLoading && <ActivityIndicator color="#ffffff" style={{ marginTop: 24 }} />}
-
-      {weatherError && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{weatherError}</Text>
-          <TouchableOpacity onPress={refetch} style={styles.retryButton}>
-            <Text style={styles.retryText}>다시 시도</Text>
-          </TouchableOpacity>
+      <ScrollView
+        style={styles.scroll}
+        contentContainerStyle={styles.container}
+        showsVerticalScrollIndicator={false}
+      >
+        {/* 날짜/시간 */}
+        <View style={styles.topBar}>
+          <Text style={styles.dateText}>{dayOfWeek}</Text>
+          <Text style={styles.timeText}>{timeOfDay}</Text>
         </View>
-      )}
 
-      {weather && !weatherLoading && (
-        <View style={styles.weatherCard}>
-          <Text style={styles.emoji}>{weather.emoji}</Text>
-          <Text style={styles.condition}>{weather.conditionKo}</Text>
-          <Text style={styles.temp}>{weather.temp}°C</Text>
-          <Text style={styles.city}>{weather.city}</Text>
-        </View>
-      )}
+        {/* 날씨 영역 */}
+        {weatherLoading && (
+          <View style={styles.loadingArea}>
+            <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" />
+            <Text style={styles.loadingText}>날씨 불러오는 중...</Text>
+          </View>
+        )}
 
-      {/* 메시지 생성 버튼 */}
-      {weather && !weatherLoading && (
-        <TouchableOpacity
-          style={[styles.generateButton, messageLoading && styles.generateButtonDisabled]}
-          onPress={handleGenerateMessage}
-          disabled={messageLoading}
-        >
-          {messageLoading ? (
-            <ActivityIndicator color="#ffffff" size="small" />
-          ) : (
-            <Text style={styles.generateButtonText}>
-              {message ? '메시지 다시 생성' : '오늘의 메시지 받기'}
-            </Text>
-          )}
-        </TouchableOpacity>
-      )}
-
-      {/* 에러 */}
-      {messageError && (
-        <View style={styles.errorBox}>
-          <Text style={styles.errorText}>{messageError}</Text>
-        </View>
-      )}
-
-      {/* 메시지 카드 */}
-      {message && (
-        <View style={styles.messageCard}>
-          <Text style={styles.messageText}>{message.text}</Text>
-          <View style={styles.messageActions}>
-            <TouchableOpacity onPress={handleShare} style={styles.messageActionBtn}>
-              <Text style={styles.messageActionText}>↑ 공유</Text>
+        {weatherError && (
+          <View style={styles.errorArea}>
+            <Text style={styles.errorText}>{weatherError}</Text>
+            <TouchableOpacity onPress={refetch} style={styles.retryBtn}>
+              <Text style={styles.retryText}>다시 시도</Text>
             </TouchableOpacity>
           </View>
-        </View>
-      )}
+        )}
 
-      <Text style={styles.title}>하우웨더유</Text>
-      <Text style={styles.subtitle}>How Weather You</Text>
-    </ScrollView>
+        {weather && !weatherLoading && (
+          <View style={styles.weatherArea}>
+            <Text style={styles.weatherEmoji}>{weather.emoji}</Text>
+            <Text style={styles.weatherTemp}>{weather.temp}°</Text>
+            <Text style={styles.weatherCondition}>{weather.conditionKo}</Text>
+            <Text style={styles.weatherCity}>{weather.city}</Text>
+          </View>
+        )}
+
+        {/* 메시지 카드 */}
+        {message && (
+          <View style={styles.messageCard}>
+            <Text style={styles.messageText}>{message.text}</Text>
+            <TouchableOpacity onPress={handleShare} style={styles.shareBtn}>
+              <Text style={styles.shareBtnText}>공유하기 ↑</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+
+        {messageError && (
+          <View style={styles.messageErrorBox}>
+            <Text style={styles.errorText}>{messageError}</Text>
+          </View>
+        )}
+
+        {/* 생성 버튼 */}
+        {weather && !weatherLoading && (
+          <TouchableOpacity
+            style={[styles.generateBtn, messageLoading && styles.generateBtnDisabled]}
+            onPress={handleGenerateMessage}
+            disabled={messageLoading}
+          >
+            {messageLoading ? (
+              <ActivityIndicator color="#000" size="small" />
+            ) : (
+              <Text style={styles.generateBtnText}>
+                {message ? '새 메시지 받기' : '오늘의 메시지 받기'}
+              </Text>
+            )}
+          </TouchableOpacity>
+        )}
+
+        {/* 앱 이름 */}
+        <View style={styles.appNameArea}>
+          <Text style={styles.appName}>하우웨더유</Text>
+          <Text style={styles.appNameEn}>How Weather You</Text>
+        </View>
+      </ScrollView>
+    </LinearGradient>
   );
 }
 
 const styles = StyleSheet.create({
+  gradient: {
+    flex: 1,
+  },
   scroll: {
     flex: 1,
-    backgroundColor: '#0f0f0f',
   },
   container: {
+    minHeight: height,
+    paddingHorizontal: 28,
+    paddingTop: 64,
+    paddingBottom: 48,
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-    paddingTop: 60,
-    paddingBottom: 40,
   },
-  context: {
-    color: '#888',
-    fontSize: 14,
-    marginBottom: 8,
-  },
-  weatherCard: {
+  // 상단 날짜
+  topBar: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginVertical: 20,
-    padding: 24,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 16,
-    width: '100%',
+    gap: 8,
+    marginBottom: 40,
+    alignSelf: 'flex-start',
   },
-  emoji: {
-    fontSize: 56,
-    marginBottom: 8,
-  },
-  condition: {
-    color: '#ffffff',
-    fontSize: 20,
+  dateText: {
+    fontSize: 16,
+    color: 'rgba(255,255,255,0.9)',
     fontWeight: '600',
   },
-  temp: {
-    color: '#aaaaaa',
+  timeText: {
     fontSize: 16,
-    marginTop: 4,
+    color: 'rgba(255,255,255,0.4)',
   },
-  city: {
-    color: '#666',
-    fontSize: 14,
-    marginTop: 4,
-  },
-  generateButton: {
-    backgroundColor: '#2a2a2a',
-    borderRadius: 12,
-    paddingHorizontal: 28,
-    paddingVertical: 14,
-    width: '100%',
+  // 로딩
+  loadingArea: {
     alignItems: 'center',
-    borderWidth: 1,
-    borderColor: '#444',
+    marginTop: 60,
+    gap: 16,
+  },
+  loadingText: {
+    color: 'rgba(255,255,255,0.4)',
+    fontSize: 14,
+  },
+  // 날씨
+  weatherArea: {
+    alignItems: 'center',
+    marginBottom: 40,
+  },
+  weatherEmoji: {
+    fontSize: 90,
     marginBottom: 16,
   },
-  generateButtonDisabled: {
-    opacity: 0.6,
-  },
-  generateButtonText: {
+  weatherTemp: {
+    fontSize: 72,
+    fontWeight: '200',
     color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
+    letterSpacing: -2,
+    lineHeight: 80,
   },
+  weatherCondition: {
+    fontSize: 18,
+    color: 'rgba(255,255,255,0.7)',
+    marginTop: 8,
+    fontWeight: '400',
+  },
+  weatherCity: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.35)',
+    marginTop: 4,
+    letterSpacing: 2,
+    textTransform: 'uppercase',
+  },
+  // 메시지 카드
   messageCard: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 16,
-    padding: 20,
     width: '100%',
-    marginBottom: 24,
-    borderLeftWidth: 3,
-    borderLeftColor: '#555',
+    backgroundColor: 'rgba(255,255,255,0.07)',
+    borderRadius: 20,
+    padding: 22,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.1)',
   },
   messageText: {
-    color: '#e0e0e0',
     fontSize: 16,
-    lineHeight: 26,
+    color: 'rgba(255,255,255,0.88)',
+    lineHeight: 27,
+    fontWeight: '300',
   },
-  messageActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    marginTop: 12,
-  },
-  messageActionBtn: {
-    paddingHorizontal: 12,
+  shareBtn: {
+    alignSelf: 'flex-end',
+    marginTop: 14,
+    paddingHorizontal: 14,
     paddingVertical: 6,
-    backgroundColor: '#2a2a2a',
-    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
   },
-  messageActionText: {
-    color: '#888',
-    fontSize: 13,
-  },
-  title: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#333',
-    marginTop: 8,
-  },
-  subtitle: {
+  shareBtnText: {
+    color: 'rgba(255,255,255,0.5)',
     fontSize: 12,
-    color: '#2a2a2a',
-    marginTop: 4,
   },
-  errorBox: {
-    alignItems: 'center',
-    marginVertical: 12,
+  messageErrorBox: {
     width: '100%',
+    marginBottom: 16,
+  },
+  // 생성 버튼
+  generateBtn: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 16,
+    paddingVertical: 17,
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  generateBtnDisabled: {
+    opacity: 0.5,
+  },
+  generateBtnText: {
+    color: '#0a1628',
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  // 에러
+  errorArea: {
+    alignItems: 'center',
+    marginTop: 40,
+    gap: 12,
   },
   errorText: {
-    color: '#ff6b6b',
+    color: 'rgba(255,100,100,0.8)',
     fontSize: 13,
     textAlign: 'center',
   },
-  retryButton: {
-    marginTop: 10,
+  retryBtn: {
     paddingHorizontal: 20,
     paddingVertical: 8,
-    backgroundColor: '#333',
-    borderRadius: 8,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+    borderRadius: 10,
   },
   retryText: {
-    color: '#ffffff',
+    color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
+  },
+  // 앱 이름
+  appNameArea: {
+    alignItems: 'center',
+    marginTop: 32,
+  },
+  appName: {
+    fontSize: 14,
+    color: 'rgba(255,255,255,0.15)',
+    fontWeight: '500',
+    letterSpacing: 3,
+  },
+  appNameEn: {
+    fontSize: 10,
+    color: 'rgba(255,255,255,0.08)',
+    marginTop: 2,
+    letterSpacing: 2,
   },
 });
