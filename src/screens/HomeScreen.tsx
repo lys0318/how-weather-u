@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   View,
   Text,
@@ -6,23 +6,48 @@ import {
   ActivityIndicator,
   TouchableOpacity,
   ScrollView,
+  Share,
 } from 'react-native';
 import { useWeather } from '../hooks/useWeather';
 import { useMessage } from '../hooks/useMessage';
 import { getTimeOfDay, TIME_OF_DAY_KO, DAY_OF_WEEK_KO } from '../constants/weather';
+import { getPreference, saveMessage } from '../utils/storage';
+import { Preference } from '../constants/weather';
 
 export default function HomeScreen() {
   const { weather, loading: weatherLoading, error: weatherError, refetch } = useWeather();
   const { message, loading: messageLoading, error: messageError, generate } = useMessage();
+  const [preference, setPreference] = useState<Preference>('comfort');
 
   const now = new Date();
   const timeOfDay = TIME_OF_DAY_KO[getTimeOfDay(now.getHours())];
   const dayOfWeek = DAY_OF_WEEK_KO[now.getDay()];
 
+  // AsyncStorage에서 취향 로드
+  useEffect(() => {
+    getPreference().then(setPreference);
+  }, []);
+
+  // 메시지 생성 후 AsyncStorage에 저장
+  useEffect(() => {
+    if (message && weather) {
+      saveMessage(message, weather.emoji).catch(console.error);
+    }
+  }, [message]);
+
   const handleGenerateMessage = () => {
     if (weather) {
-      generate(weather, 'comfort'); // S5 온보딩에서 취향 선택으로 대체 예정
+      generate(weather, preference);
     }
+  };
+
+  const handleShare = async () => {
+    if (!message || !weather) return;
+    const days = DAY_OF_WEEK_KO;
+    const d = new Date();
+    await Share.share({
+      message: `${weather.emoji} ${days[d.getDay()]} ${timeOfDay}\n\n${message.text}\n\n— 하우웨더유 (How Weather You)`,
+    });
   };
 
   return (
@@ -69,16 +94,22 @@ export default function HomeScreen() {
         </TouchableOpacity>
       )}
 
-      {/* 메시지 카드 */}
+      {/* 에러 */}
       {messageError && (
         <View style={styles.errorBox}>
           <Text style={styles.errorText}>{messageError}</Text>
         </View>
       )}
 
+      {/* 메시지 카드 */}
       {message && (
         <View style={styles.messageCard}>
           <Text style={styles.messageText}>{message.text}</Text>
+          <View style={styles.messageActions}>
+            <TouchableOpacity onPress={handleShare} style={styles.messageActionBtn}>
+              <Text style={styles.messageActionText}>↑ 공유</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -164,6 +195,21 @@ const styles = StyleSheet.create({
     color: '#e0e0e0',
     fontSize: 16,
     lineHeight: 26,
+  },
+  messageActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 12,
+  },
+  messageActionBtn: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: '#2a2a2a',
+    borderRadius: 8,
+  },
+  messageActionText: {
+    color: '#888',
+    fontSize: 13,
   },
   title: {
     fontSize: 24,
