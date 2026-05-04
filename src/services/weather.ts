@@ -66,6 +66,8 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
     conditionKo: meta.ko,
     emoji: meta.emoji,
     temp: Math.round(data.main.temp),
+    tempMin: Math.round(data.main.temp_min),
+    tempMax: Math.round(data.main.temp_max),
     city: data.name,
     description: data.weather[0].description,
   };

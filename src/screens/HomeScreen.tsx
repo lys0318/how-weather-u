@@ -12,6 +12,7 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '../hooks/useWeather';
 import { useMessage } from '../hooks/useMessage';
+import { useOutfit } from '../hooks/useOutfit';
 import { getTimeOfDay, TIME_OF_DAY_KO, DAY_OF_WEEK_KO, WeatherCondition } from '../constants/weather';
 import { getPreference, saveMessage } from '../utils/storage';
 import { Preference } from '../constants/weather';
@@ -27,20 +28,20 @@ function getGradient(condition: WeatherCondition | null, hour: number): [string,
     if (timeOfDay === 'morning') return ['#1a2a4a', '#2d4a7a', '#3a6494'];
     if (timeOfDay === 'afternoon') return ['#0a1628', '#1a3a6a', '#1e4d8c'];
     if (timeOfDay === 'evening') return ['#1a0a2e', '#3d1a5e', '#6b2d8b'];
-    return ['#050d1a', '#0a1628', '#0d2040']; // night
+    return ['#050d1a', '#0a1628', '#0d2040'];
   }
   if (condition === 'rain' || condition === 'drizzle') return ['#0d1520', '#1a2535', '#1e3045'];
   if (condition === 'thunderstorm') return ['#080d14', '#111824', '#0d1520'];
   if (condition === 'snow') return ['#0d1a2e', '#1a2d42', '#1e3550'];
   if (condition === 'mist') return ['#111820', '#1a2530', '#1e2e3a'];
   if (condition === 'clouds') return ['#0d1520', '#171f2e', '#1a2535'];
-  // unknown / default
   return ['#0a0f1a', '#111824', '#141d2e'];
 }
 
 export default function HomeScreen() {
   const { weather, loading: weatherLoading, error: weatherError, refetch } = useWeather();
   const { message, loading: messageLoading, error: messageError, generate } = useMessage();
+  const { outfit, loading: outfitLoading, error: outfitError, generate: generateOutfit } = useOutfit();
   const [preference, setPreference] = useState<Preference>('comfort');
 
   const now = new Date();
@@ -63,14 +64,16 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (message && weather) {
-      saveMessage(message, weather.emoji).catch(() => {
-        // 저장 실패 시 조용히 처리 (메시지 표시는 정상 유지)
-      });
+      saveMessage(message, weather.emoji).catch(() => {});
     }
   }, [message]);
 
   const handleGenerateMessage = () => {
     if (weather) generate(weather, preference);
+  };
+
+  const handleGenerateOutfit = () => {
+    if (weather) generateOutfit(weather);
   };
 
   const handleShare = async () => {
@@ -82,7 +85,6 @@ export default function HomeScreen() {
 
   return (
     <LinearGradient colors={gradientColors} style={styles.gradient}>
-      {/* 날씨 파티클 애니메이션 */}
       {weather && <WeatherAnimation condition={weather.condition} />}
 
       <ScrollView
@@ -117,14 +119,19 @@ export default function HomeScreen() {
           <View style={styles.weatherArea}>
             <Text style={styles.weatherEmoji}>{weather.emoji}</Text>
             <Text style={styles.weatherTemp}>{weather.temp}°</Text>
+            {/* 최저/최고 기온 */}
+            <Text style={styles.weatherTempRange}>
+              최저 {weather.tempMin}° / 최고 {weather.tempMax}°
+            </Text>
             <Text style={styles.weatherCondition}>{weather.conditionKo}</Text>
             <Text style={styles.weatherCity}>{weather.city}</Text>
           </View>
         )}
 
-        {/* 메시지 카드 */}
+        {/* 감성 메시지 카드 */}
         {message && (
           <View style={styles.messageCard}>
+            <Text style={styles.cardLabel}>오늘의 메시지</Text>
             <Text style={styles.messageText}>{message.text}</Text>
             <TouchableOpacity onPress={handleShare} style={styles.shareBtn}>
               <Text style={styles.shareBtnText}>공유하기 ↑</Text>
@@ -138,21 +145,53 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* 생성 버튼 */}
+        {/* 의상 추천 카드 */}
+        {outfit && (
+          <View style={styles.outfitCard}>
+            <Text style={styles.cardLabel}>오늘의 의상</Text>
+            <Text style={styles.outfitText}>{outfit.text}</Text>
+          </View>
+        )}
+
+        {outfitError && (
+          <View style={styles.messageErrorBox}>
+            <Text style={styles.errorText}>{outfitError}</Text>
+          </View>
+        )}
+
+        {/* 버튼 영역 */}
         {weather && !weatherLoading && (
-          <TouchableOpacity
-            style={[styles.generateBtn, messageLoading && styles.generateBtnDisabled]}
-            onPress={handleGenerateMessage}
-            disabled={messageLoading}
-          >
-            {messageLoading ? (
-              <ActivityIndicator color="#000" size="small" />
-            ) : (
-              <Text style={styles.generateBtnText}>
-                {message ? '새 메시지 받기' : '오늘의 메시지 받기'}
-              </Text>
-            )}
-          </TouchableOpacity>
+          <View style={styles.btnGroup}>
+            {/* 메시지 버튼 */}
+            <TouchableOpacity
+              style={[styles.generateBtn, messageLoading && styles.generateBtnDisabled]}
+              onPress={handleGenerateMessage}
+              disabled={messageLoading}
+            >
+              {messageLoading ? (
+                <ActivityIndicator color="#000" size="small" />
+              ) : (
+                <Text style={styles.generateBtnText}>
+                  {message ? '새 메시지 받기' : '오늘의 메시지 받기'}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            {/* 의상 추천 버튼 */}
+            <TouchableOpacity
+              style={[styles.outfitBtn, outfitLoading && styles.generateBtnDisabled]}
+              onPress={handleGenerateOutfit}
+              disabled={outfitLoading}
+            >
+              {outfitLoading ? (
+                <ActivityIndicator color="rgba(255,255,255,0.7)" size="small" />
+              ) : (
+                <Text style={styles.outfitBtnText}>
+                  {outfit ? '👕 의상 다시 추천받기' : '👕 오늘의 의상 추천받기'}
+                </Text>
+              )}
+            </TouchableOpacity>
+          </View>
         )}
 
         {/* 앱 이름 */}
@@ -166,12 +205,8 @@ export default function HomeScreen() {
 }
 
 const styles = StyleSheet.create({
-  gradient: {
-    flex: 1,
-  },
-  scroll: {
-    flex: 1,
-  },
+  gradient: { flex: 1 },
+  scroll: { flex: 1 },
   container: {
     minHeight: height,
     paddingHorizontal: 28,
@@ -222,6 +257,12 @@ const styles = StyleSheet.create({
     letterSpacing: -2,
     lineHeight: 80,
   },
+  weatherTempRange: {
+    fontSize: 13,
+    color: 'rgba(255,255,255,0.35)',
+    marginTop: 6,
+    letterSpacing: 0.5,
+  },
   weatherCondition: {
     fontSize: 18,
     color: 'rgba(255,255,255,0.7)',
@@ -235,13 +276,21 @@ const styles = StyleSheet.create({
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
-  // 메시지 카드
+  // 카드 공통
+  cardLabel: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.3)',
+    letterSpacing: 1.5,
+    textTransform: 'uppercase',
+    marginBottom: 10,
+  },
+  // 감성 메시지 카드
   messageCard: {
     width: '100%',
     backgroundColor: 'rgba(255,255,255,0.07)',
     borderRadius: 20,
     padding: 22,
-    marginBottom: 20,
+    marginBottom: 12,
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.1)',
   },
@@ -265,18 +314,38 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
     fontSize: 12,
   },
+  // 의상 추천 카드
+  outfitCard: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 20,
+    padding: 22,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+  },
+  outfitText: {
+    fontSize: 15,
+    color: 'rgba(255,255,255,0.75)',
+    lineHeight: 25,
+    fontWeight: '300',
+  },
   messageErrorBox: {
     width: '100%',
-    marginBottom: 16,
+    marginBottom: 12,
   },
-  // 생성 버튼
+  // 버튼 그룹
+  btnGroup: {
+    width: '100%',
+    gap: 10,
+    marginBottom: 12,
+  },
   generateBtn: {
     width: '100%',
     backgroundColor: 'rgba(255,255,255,0.95)',
     borderRadius: 16,
     paddingVertical: 17,
     alignItems: 'center',
-    marginBottom: 12,
   },
   generateBtnDisabled: {
     opacity: 0.5,
@@ -285,6 +354,21 @@ const styles = StyleSheet.create({
     color: '#0a1628',
     fontSize: 15,
     fontWeight: '700',
+    letterSpacing: 0.3,
+  },
+  outfitBtn: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 16,
+    paddingVertical: 15,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  outfitBtnText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 15,
+    fontWeight: '600',
     letterSpacing: 0.3,
   },
   // 에러

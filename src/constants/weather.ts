@@ -17,6 +17,8 @@ export interface WeatherInfo {
   conditionKo: string;
   emoji: string;
   temp: number;
+  tempMin: number;
+  tempMax: number;
   city: string;
   description: string;
 }
