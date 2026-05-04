@@ -24,8 +24,8 @@ TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
     const currentHour = now.getHours();
 
     // 방해금지 시간대 확인
-    const { start, end } = await getDndRange();
-    if (isWithinDnd(currentHour, start, end)) {
+    const { enabled: dndEnabled, start, end } = await getDndRange();
+    if (dndEnabled && isWithinDnd(currentHour, start, end)) {
       return BackgroundFetch.BackgroundFetchResult.NoData;
     }
 

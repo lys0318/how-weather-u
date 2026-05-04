@@ -6,6 +6,7 @@ const KEYS = {
   ONBOARDED: 'hasOnboarded',
   PREFERENCE: 'preference',
   INTERVAL_HOURS: 'intervalHours',
+  DO_NOT_DISTURB_ENABLED: 'dndEnabled',
   DO_NOT_DISTURB_START: 'dndStart', // 방해금지 시작 시각 (0~23)
   DO_NOT_DISTURB_END: 'dndEnd',     // 방해금지 종료 시각 (0~23)
   MESSAGES: 'messages',
@@ -42,18 +43,29 @@ export async function setIntervalHours(value: 1 | 2 | 3): Promise<void> {
 }
 
 // ─── 방해금지 시간대 ────────────────────────────────────
-export async function getDndRange(): Promise<{ start: number; end: number }> {
-  const [s, e] = await Promise.all([
+export async function getDndEnabled(): Promise<boolean> {
+  const v = await AsyncStorage.getItem(KEYS.DO_NOT_DISTURB_ENABLED);
+  return v !== 'false'; // 기본값 true
+}
+export async function setDndEnabled(value: boolean): Promise<void> {
+  await AsyncStorage.setItem(KEYS.DO_NOT_DISTURB_ENABLED, value ? 'true' : 'false');
+}
+
+export async function getDndRange(): Promise<{ enabled: boolean; start: number; end: number }> {
+  const [enabled, s, e] = await Promise.all([
+    AsyncStorage.getItem(KEYS.DO_NOT_DISTURB_ENABLED),
     AsyncStorage.getItem(KEYS.DO_NOT_DISTURB_START),
     AsyncStorage.getItem(KEYS.DO_NOT_DISTURB_END),
   ]);
   return {
-    start: s !== null ? Number(s) : 23, // 기본 밤 11시
-    end: e !== null ? Number(e) : 7,    // 기본 아침 7시
+    enabled: enabled !== 'false',        // 기본 true
+    start: s !== null ? Number(s) : 23,  // 기본 밤 11시
+    end: e !== null ? Number(e) : 7,     // 기본 아침 7시
   };
 }
-export async function setDndRange(start: number, end: number): Promise<void> {
+export async function setDndRange(enabled: boolean, start: number, end: number): Promise<void> {
   await Promise.all([
+    AsyncStorage.setItem(KEYS.DO_NOT_DISTURB_ENABLED, enabled ? 'true' : 'false'),
     AsyncStorage.setItem(KEYS.DO_NOT_DISTURB_START, String(start)),
     AsyncStorage.setItem(KEYS.DO_NOT_DISTURB_END, String(end)),
   ]);

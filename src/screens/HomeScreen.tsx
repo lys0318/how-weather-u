@@ -54,9 +54,18 @@ export default function HomeScreen() {
     getPreference().then(setPreference);
   }, []);
 
+  // 날씨 로드 완료 시 첫 메시지 자동 생성
+  useEffect(() => {
+    if (weather && !message && !messageLoading) {
+      generate(weather, preference);
+    }
+  }, [weather]);
+
   useEffect(() => {
     if (message && weather) {
-      saveMessage(message, weather.emoji).catch(console.error);
+      saveMessage(message, weather.emoji).catch(() => {
+        // 저장 실패 시 조용히 처리 (메시지 표시는 정상 유지)
+      });
     }
   }, [message]);
 

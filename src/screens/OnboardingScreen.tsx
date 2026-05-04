@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Linking,
   Dimensions,
 } from 'react-native';
 import { requestLocationPermission } from '../services/weather';
@@ -34,8 +35,17 @@ export default function OnboardingScreen({ onComplete }: Props) {
       if (!granted) {
         Alert.alert(
           '위치 권한 필요',
-          '날씨를 가져오려면 위치 권한이 필요해요. 설정 앱에서 허용해주세요.',
-          [{ text: '확인', onPress: () => setStep('notification') }]
+          '날씨를 가져오려면 위치 권한이 필요해요.',
+          [
+            {
+              text: '설정 앱 열기',
+              onPress: () => {
+                Linking.openSettings();
+                setStep('notification');
+              },
+            },
+            { text: '나중에', style: 'cancel', onPress: () => setStep('notification') },
+          ]
         );
         return;
       }
@@ -52,8 +62,17 @@ export default function OnboardingScreen({ onComplete }: Props) {
       if (!granted) {
         Alert.alert(
           '알림 권한 필요',
-          '날씨 메시지를 받으려면 알림 권한이 필요해요. 설정 앱에서 허용해주세요.',
-          [{ text: '확인', onPress: () => setStep('preference') }]
+          '날씨 메시지를 받으려면 알림 권한이 필요해요.',
+          [
+            {
+              text: '설정 앱 열기',
+              onPress: () => {
+                Linking.openSettings();
+                setStep('preference');
+              },
+            },
+            { text: '나중에', style: 'cancel', onPress: () => setStep('preference') },
+          ]
         );
         return;
       }

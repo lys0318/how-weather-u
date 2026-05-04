@@ -7,6 +7,7 @@ import {
   ScrollView,
   Alert,
   Switch,
+  Linking,
 } from 'react-native';
 import {
   getIntervalHours,
@@ -17,7 +18,40 @@ import {
   setDndRange,
 } from '../utils/storage';
 import { registerBackgroundTask, unregisterBackgroundTask } from '../tasks/backgroundTask';
-import { requestNotificationPermission } from '../services/notification';
+import { requestNotificationPermission, sendTestNotification } from '../services/notification';
+
+// ── 다음 알림 예상 시각 계산 ──────────────────────────────
+function getNextNotificationLabel(
+  intervalHours: 1 | 2 | 3,
+  dndEnabled: boolean,
+  dndStart: number,
+  dndEnd: number
+): string {
+  const now = new Date();
+  let nextHour = now.getHours() + intervalHours;
+
+  if (dndEnabled) {
+    // 자정을 넘는 DND 범위 처리 (예: 23~07)
+    const inDnd = (h: number) => {
+      const hh = h % 24;
+      return dndStart > dndEnd
+        ? hh >= dndStart || hh < dndEnd
+        : hh >= dndStart && hh < dndEnd;
+    };
+    // DND 안에 걸리면 DND 종료 시각으로 밀기
+    if (inDnd(nextHour)) {
+      nextHour = dndEnd;
+    }
+  }
+
+  const displayHour = nextHour % 24;
+  const ampm = displayHour < 12 ? '오전' : '오후';
+  const h12 = displayHour === 0 ? 12 : displayHour > 12 ? displayHour - 12 : displayHour;
+  const diff = nextHour - now.getHours();
+  const diffLabel = diff <= 0 ? '' : ` (약 ${diff}시간 후)`;
+
+  return `${ampm} ${h12}시경${diffLabel}`;
+}
 
 export default function SettingsScreen() {
   const [interval, setIntervalState] = useState<1 | 2 | 3>(2);
@@ -26,6 +60,8 @@ export default function SettingsScreen() {
   const [dndStart, setDndStart] = useState(23);
   const [dndEnd, setDndEnd] = useState(7);
   const [saving, setSaving] = useState(false);
+  const [testSending, setTestSending] = useState(false);
+  const [loaded, setLoaded] = useState(false);
 
   useEffect(() => {
     (async () => {
@@ -36,8 +72,10 @@ export default function SettingsScreen() {
       ]);
       setIntervalState(iv);
       setPreferenceState(pref);
+      setDndEnabled(dnd.enabled);
       setDndStart(dnd.start);
       setDndEnd(dnd.end);
+      setLoaded(true);
     })();
   }, []);
 
@@ -46,13 +84,20 @@ export default function SettingsScreen() {
     try {
       const granted = await requestNotificationPermission();
       if (!granted) {
-        Alert.alert('알림 권한 필요', '설정 앱에서 알림 권한을 허용해주세요.');
+        Alert.alert(
+          '알림 권한 필요',
+          '알림 권한이 없어요.',
+          [
+            { text: '설정 앱 열기', onPress: () => Linking.openSettings() },
+            { text: '취소', style: 'cancel' },
+          ]
+        );
         return;
       }
 
       await setIntervalHours(interval);
       await setPreference(preference);
-      await setDndRange(dndEnabled ? dndStart : -1, dndEnabled ? dndEnd : -1);
+      await setDndRange(dndEnabled, dndStart, dndEnd);
       await registerBackgroundTask(interval);
 
       Alert.alert('저장 완료', `${interval}시간마다 날씨 메시지를 받아볼게요.`);
@@ -67,6 +112,27 @@ export default function SettingsScreen() {
     await unregisterBackgroundTask();
     Alert.alert('알림 중지', '날씨 메시지 알림을 중지했습니다.');
   };
+
+  const handleTestNotification = async () => {
+    setTestSending(true);
+    try {
+      const granted = await requestNotificationPermission();
+      if (!granted) {
+        Alert.alert('알림 권한 필요', '알림 권한을 먼저 허용해주세요.');
+        return;
+      }
+      await sendTestNotification();
+      Alert.alert('전송 완료', '잠시 후 테스트 알림이 도착해요.');
+    } catch {
+      Alert.alert('오류', '테스트 알림 전송에 실패했습니다.');
+    } finally {
+      setTestSending(false);
+    }
+  };
+
+  const nextLabel = loaded
+    ? getNextNotificationLabel(interval, dndEnabled, dndStart, dndEnd)
+    : '—';
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
@@ -87,6 +153,11 @@ export default function SettingsScreen() {
               </Text>
             </TouchableOpacity>
           ))}
+        </View>
+        {/* 다음 알림 예상 시각 */}
+        <View style={styles.nextNotifRow}>
+          <Text style={styles.nextNotifLabel}>다음 알림 예상</Text>
+          <Text style={styles.nextNotifValue}>{nextLabel}</Text>
         </View>
       </View>
 
@@ -122,11 +193,11 @@ export default function SettingsScreen() {
             thumbColor={dndEnabled ? '#fff' : '#888'}
           />
         </View>
-        {dndEnabled && (
-          <Text style={styles.dndDesc}>
-            밤 {dndStart}시 ~ 아침 {dndEnd}시 사이엔 알림을 보내지 않아요
-          </Text>
-        )}
+        <Text style={styles.dndDesc}>
+          {dndEnabled
+            ? `밤 ${dndStart}시 ~ 아침 ${dndEnd}시 사이엔 알림을 보내지 않아요`
+            : '방해금지가 꺼져 있어요. 언제든지 알림이 올 수 있어요.'}
+        </Text>
       </View>
 
       {/* 저장 버튼 */}
@@ -136,6 +207,17 @@ export default function SettingsScreen() {
         disabled={saving}
       >
         <Text style={styles.saveButtonText}>{saving ? '저장 중...' : '설정 저장 및 알림 시작'}</Text>
+      </TouchableOpacity>
+
+      {/* 테스트 알림 */}
+      <TouchableOpacity
+        style={[styles.testButton, testSending && styles.saveButtonDisabled]}
+        onPress={handleTestNotification}
+        disabled={testSending}
+      >
+        <Text style={styles.testButtonText}>
+          {testSending ? '전송 중...' : '🔔 테스트 알림 받기'}
+        </Text>
       </TouchableOpacity>
 
       <TouchableOpacity style={styles.stopButton} onPress={handleStop}>
@@ -170,6 +252,17 @@ const styles = StyleSheet.create({
   chipText: { color: '#666', fontSize: 14, fontWeight: '600' },
   chipTextActive: { color: '#000' },
   dndDesc: { color: '#555', fontSize: 13, marginTop: 10 },
+  nextNotifRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 14,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#2a2a2a',
+  },
+  nextNotifLabel: { color: '#555', fontSize: 12 },
+  nextNotifValue: { color: '#888', fontSize: 12 },
   saveButton: {
     backgroundColor: '#ffffff',
     borderRadius: 14,
@@ -179,11 +272,21 @@ const styles = StyleSheet.create({
   },
   saveButtonDisabled: { opacity: 0.5 },
   saveButtonText: { color: '#000', fontSize: 15, fontWeight: '700' },
-  stopButton: {
+  testButton: {
+    backgroundColor: '#1a1a1a',
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 10,
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
   },
-  stopButtonText: { color: '#555', fontSize: 14 },
+  testButtonText: { color: '#888', fontSize: 14 },
+  stopButton: {
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    marginTop: 6,
+  },
+  stopButtonText: { color: '#444', fontSize: 14 },
 });

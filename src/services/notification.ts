@@ -45,3 +45,14 @@ export async function sendLocalNotification(message: string, emoji: string): Pro
 export async function cancelAllNotifications(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
+
+export async function sendTestNotification(): Promise<void> {
+  await Notifications.scheduleNotificationAsync({
+    content: {
+      title: '하우웨더유 🌤️',
+      body: '테스트 알림이에요. 알림이 정상적으로 작동하고 있어요!',
+      sound: false,
+    },
+    trigger: null,
+  });
+}
