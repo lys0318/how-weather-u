@@ -14,28 +14,71 @@ import { useWeather } from '../hooks/useWeather';
 import { useMessage } from '../hooks/useMessage';
 import { useOutfit } from '../hooks/useOutfit';
 import { getTimeOfDay, TIME_OF_DAY_KO, DAY_OF_WEEK_KO, WeatherCondition } from '../constants/weather';
-import { getPreference, saveMessage } from '../utils/storage';
+import { getPreference, saveMessage, getIntervalHours, getDndRange } from '../utils/storage';
 import { Preference } from '../constants/weather';
 import WeatherAnimation from '../components/WeatherAnimation';
+import { refreshNotificationsIfNeeded } from '../services/notification';
 
 const { height } = Dimensions.get('window');
 
-// ── 날씨 + 시간대별 그라디언트 ───────────────────────────
+// ── 낮/밤 테마 분류 ──────────────────────────────────────────
+type Theme = 'day' | 'night';
+
+function getTheme(hour: number): Theme {
+  return hour >= 5 && hour < 21 ? 'day' : 'night';
+}
+
+// ── 날씨 + 시간대별 그라디언트 ───────────────────────────────
 function getGradient(condition: WeatherCondition | null, hour: number): [string, string, string] {
   const timeOfDay = getTimeOfDay(hour);
+  const theme = getTheme(hour);
 
   if (condition === 'clear') {
-    if (timeOfDay === 'morning') return ['#1a2a4a', '#2d4a7a', '#3a6494'];
-    if (timeOfDay === 'afternoon') return ['#0a1628', '#1a3a6a', '#1e4d8c'];
-    if (timeOfDay === 'evening') return ['#1a0a2e', '#3d1a5e', '#6b2d8b'];
-    return ['#050d1a', '#0a1628', '#0d2040'];
+    if (theme === 'day') {
+      if (timeOfDay === 'morning') return ['#1A4A88', '#2E72B8', '#4A9AD4']; // 아침 하늘색
+      return ['#0E52A8', '#1870CC', '#2490E8'];                              // 낮 밝은 파랑
+    }
+    if (timeOfDay === 'evening') return ['#1a0a2e', '#3d1a5e', '#6b2d8b'];   // 저녁 보라
+    return ['#050d1a', '#0a1628', '#0d2040'];                                // 밤
   }
-  if (condition === 'rain' || condition === 'drizzle') return ['#0d1520', '#1a2535', '#1e3045'];
+  if (condition === 'rain' || condition === 'drizzle') {
+    if (theme === 'day') return ['#2A3E52', '#3A5266', '#4A6478'];
+    return ['#0d1520', '#1a2535', '#1e3045'];
+  }
   if (condition === 'thunderstorm') return ['#080d14', '#111824', '#0d1520'];
-  if (condition === 'snow') return ['#0d1a2e', '#1a2d42', '#1e3550'];
-  if (condition === 'mist') return ['#111820', '#1a2530', '#1e2e3a'];
-  if (condition === 'clouds') return ['#0d1520', '#171f2e', '#1a2535'];
+  if (condition === 'snow') {
+    if (theme === 'day') return ['#3A5470', '#4A6888', '#5A7EA0'];
+    return ['#0d1a2e', '#1a2d42', '#1e3550'];
+  }
+  if (condition === 'mist') {
+    if (theme === 'day') return ['#3A4A56', '#4E6070', '#607280'];
+    return ['#111820', '#1a2530', '#1e2e3a'];
+  }
+  if (condition === 'clouds') {
+    if (theme === 'day') return ['#243040', '#324454', '#405060'];
+    return ['#0d1520', '#171f2e', '#1a2535'];
+  }
+  if (theme === 'day') return ['#1A3050', '#264068', '#305080'];
   return ['#0a0f1a', '#111824', '#141d2e'];
+}
+
+// ── 텍스트 투명도 (낮엔 좀 더 진하게) ───────────────────────
+function getTextColors(hour: number) {
+  const theme = getTheme(hour);
+  if (theme === 'day') {
+    return {
+      primary:   'rgba(255,255,255,1)',
+      secondary: 'rgba(255,255,255,0.85)',
+      muted:     'rgba(255,255,255,0.6)',
+      veryMuted: 'rgba(255,255,255,0.3)',
+    };
+  }
+  return {
+    primary:   '#ffffff',
+    secondary: 'rgba(255,255,255,0.7)',
+    muted:     'rgba(255,255,255,0.4)',
+    veryMuted: 'rgba(255,255,255,0.15)',
+  };
 }
 
 export default function HomeScreen() {
@@ -46,8 +89,12 @@ export default function HomeScreen() {
 
   const now = new Date();
   const hour = now.getHours();
+  const minutes = String(now.getMinutes()).padStart(2, '0');
+  const month = now.getMonth() + 1;
+  const day = now.getDate();
   const timeOfDay = TIME_OF_DAY_KO[getTimeOfDay(hour)];
   const dayOfWeek = DAY_OF_WEEK_KO[now.getDay()];
+  const tc = getTextColors(hour);
 
   const gradientColors = getGradient(weather?.condition ?? null, hour);
 
@@ -55,13 +102,15 @@ export default function HomeScreen() {
     getPreference().then(setPreference);
   }, []);
 
-  // 날씨 로드 완료 시 첫 메시지 자동 생성
+  // 앱 열 때 예약 알림 부족하면 자동 보충
   useEffect(() => {
-    if (weather && !message && !messageLoading) {
-      generate(weather, preference);
-    }
-  }, [weather]);
+    (async () => {
+      const [iv, dnd] = await Promise.all([getIntervalHours(), getDndRange()]);
+      await refreshNotificationsIfNeeded(iv, dnd.enabled, dnd.start, dnd.end);
+    })();
+  }, []);
 
+  // 메시지 저장 (생성될 때마다)
   useEffect(() => {
     if (message && weather) {
       saveMessage(message, weather.emoji).catch(() => {});
@@ -79,7 +128,7 @@ export default function HomeScreen() {
   const handleShare = async () => {
     if (!message || !weather) return;
     await Share.share({
-      message: `${weather.emoji} ${dayOfWeek} ${timeOfDay}\n\n${message.text}\n\n— 하우웨더유 (How Weather You)`,
+      message: `${weather.emoji} ${month}월 ${day}일 ${dayOfWeek} ${timeOfDay}\n\n${message.text}\n\n— 하우웨더유 (How Weather You)`,
     });
   };
 
@@ -94,15 +143,19 @@ export default function HomeScreen() {
       >
         {/* 날짜/시간 */}
         <View style={styles.topBar}>
-          <Text style={styles.dateText}>{dayOfWeek}</Text>
-          <Text style={styles.timeText}>{timeOfDay}</Text>
+          <Text style={[styles.dateText, { color: tc.primary }]}>
+            {month}월 {day}일 {dayOfWeek}
+          </Text>
+          <Text style={[styles.timeText, { color: tc.muted }]}>
+            {timeOfDay} {hour}:{minutes}
+          </Text>
         </View>
 
         {/* 날씨 영역 */}
         {weatherLoading && (
           <View style={styles.loadingArea}>
             <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" />
-            <Text style={styles.loadingText}>날씨 불러오는 중...</Text>
+            <Text style={[styles.loadingText, { color: tc.muted }]}>날씨 불러오는 중...</Text>
           </View>
         )}
 
@@ -110,7 +163,7 @@ export default function HomeScreen() {
           <View style={styles.errorArea}>
             <Text style={styles.errorText}>{weatherError}</Text>
             <TouchableOpacity onPress={refetch} style={styles.retryBtn}>
-              <Text style={styles.retryText}>다시 시도</Text>
+              <Text style={[styles.retryText, { color: tc.secondary }]}>다시 시도</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -118,13 +171,12 @@ export default function HomeScreen() {
         {weather && !weatherLoading && (
           <View style={styles.weatherArea}>
             <Text style={styles.weatherEmoji}>{weather.emoji}</Text>
-            <Text style={styles.weatherTemp}>{weather.temp}°</Text>
-            {/* 최저/최고 기온 */}
-            <Text style={styles.weatherTempRange}>
+            <Text style={[styles.weatherTemp, { color: tc.primary }]}>{weather.temp}°</Text>
+            <Text style={[styles.weatherTempRange, { color: tc.muted }]}>
               최저 {weather.tempMin}° / 최고 {weather.tempMax}°
             </Text>
-            <Text style={styles.weatherCondition}>{weather.conditionKo}</Text>
-            <Text style={styles.weatherCity}>{weather.city}</Text>
+            <Text style={[styles.weatherCondition, { color: tc.secondary }]}>{weather.conditionKo}</Text>
+            <Text style={[styles.weatherCity, { color: tc.muted }]}>{weather.city}</Text>
           </View>
         )}
 
@@ -162,7 +214,6 @@ export default function HomeScreen() {
         {/* 버튼 영역 */}
         {weather && !weatherLoading && (
           <View style={styles.btnGroup}>
-            {/* 메시지 버튼 */}
             <TouchableOpacity
               style={[styles.generateBtn, messageLoading && styles.generateBtnDisabled]}
               onPress={handleGenerateMessage}
@@ -177,7 +228,6 @@ export default function HomeScreen() {
               )}
             </TouchableOpacity>
 
-            {/* 의상 추천 버튼 */}
             <TouchableOpacity
               style={[styles.outfitBtn, outfitLoading && styles.generateBtnDisabled]}
               onPress={handleGenerateOutfit}
@@ -196,8 +246,8 @@ export default function HomeScreen() {
 
         {/* 앱 이름 */}
         <View style={styles.appNameArea}>
-          <Text style={styles.appName}>하우웨더유</Text>
-          <Text style={styles.appNameEn}>How Weather You</Text>
+          <Text style={[styles.appName, { color: tc.veryMuted }]}>하우웨더유</Text>
+          <Text style={[styles.appNameEn, { color: tc.veryMuted }]}>How Weather You</Text>
         </View>
       </ScrollView>
     </LinearGradient>
@@ -214,34 +264,28 @@ const styles = StyleSheet.create({
     paddingBottom: 48,
     alignItems: 'center',
   },
-  // 상단 날짜
   topBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: 4,
     marginBottom: 40,
     alignSelf: 'flex-start',
   },
   dateText: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.9)',
+    fontSize: 17,
     fontWeight: '600',
   },
   timeText: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.4)',
+    fontSize: 14,
   },
-  // 로딩
   loadingArea: {
     alignItems: 'center',
     marginTop: 60,
     gap: 16,
   },
   loadingText: {
-    color: 'rgba(255,255,255,0.4)',
     fontSize: 14,
   },
-  // 날씨
   weatherArea: {
     alignItems: 'center',
     marginBottom: 40,
@@ -253,30 +297,25 @@ const styles = StyleSheet.create({
   weatherTemp: {
     fontSize: 72,
     fontWeight: '200',
-    color: '#ffffff',
     letterSpacing: -2,
     lineHeight: 80,
   },
   weatherTempRange: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.35)',
     marginTop: 6,
     letterSpacing: 0.5,
   },
   weatherCondition: {
     fontSize: 18,
-    color: 'rgba(255,255,255,0.7)',
     marginTop: 8,
     fontWeight: '400',
   },
   weatherCity: {
     fontSize: 13,
-    color: 'rgba(255,255,255,0.35)',
     marginTop: 4,
     letterSpacing: 2,
     textTransform: 'uppercase',
   },
-  // 카드 공통
   cardLabel: {
     fontSize: 11,
     color: 'rgba(255,255,255,0.3)',
@@ -284,7 +323,6 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     marginBottom: 10,
   },
-  // 감성 메시지 카드
   messageCard: {
     width: '100%',
     backgroundColor: 'rgba(255,255,255,0.07)',
@@ -314,7 +352,6 @@ const styles = StyleSheet.create({
     color: 'rgba(255,255,255,0.5)',
     fontSize: 12,
   },
-  // 의상 추천 카드
   outfitCard: {
     width: '100%',
     backgroundColor: 'rgba(255,255,255,0.05)',
@@ -334,7 +371,6 @@ const styles = StyleSheet.create({
     width: '100%',
     marginBottom: 12,
   },
-  // 버튼 그룹
   btnGroup: {
     width: '100%',
     gap: 10,
@@ -371,7 +407,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 0.3,
   },
-  // 에러
   errorArea: {
     alignItems: 'center',
     marginTop: 40,
@@ -389,23 +424,19 @@ const styles = StyleSheet.create({
     borderRadius: 10,
   },
   retryText: {
-    color: 'rgba(255,255,255,0.7)',
     fontSize: 14,
   },
-  // 앱 이름
   appNameArea: {
     alignItems: 'center',
     marginTop: 32,
   },
   appName: {
     fontSize: 14,
-    color: 'rgba(255,255,255,0.15)',
     fontWeight: '500',
     letterSpacing: 3,
   },
   appNameEn: {
     fontSize: 10,
-    color: 'rgba(255,255,255,0.08)',
     marginTop: 2,
     letterSpacing: 2,
   },

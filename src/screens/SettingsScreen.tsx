@@ -17,48 +17,55 @@ import {
   getDndRange,
   setDndRange,
 } from '../utils/storage';
-import { registerBackgroundTask, unregisterBackgroundTask } from '../tasks/backgroundTask';
-import { requestNotificationPermission, sendTestNotification } from '../services/notification';
+import {
+  requestNotificationPermission,
+  sendTestNotification,
+  scheduleUpcomingNotifications,
+  cancelAllNotifications,
+} from '../services/notification';
+
+// ── 시간 표시 헬퍼 ─────────────────────────────────────────
+function formatHour(h: number): string {
+  if (h < 0 || h > 23) return '?시';
+  if (h === 0) return '자정';
+  if (h < 6) return `새벽 ${h}시`;
+  if (h < 12) return `오전 ${h}시`;
+  if (h === 12) return '정오';
+  if (h < 18) return `오후 ${h - 12}시`;
+  if (h < 20) return `저녁 ${h - 12}시`;
+  return `밤 ${h}시`;
+}
 
 // ── 다음 알림 예상 시각 계산 ──────────────────────────────
 function getNextNotificationLabel(
   intervalHours: 1 | 2 | 3,
   dndEnabled: boolean,
   dndStart: number,
-  dndEnd: number
+  dndEnd: number,
 ): string {
   const now = new Date();
   let nextHour = now.getHours() + intervalHours;
 
   if (dndEnabled) {
-    // 자정을 넘는 DND 범위 처리 (예: 23~07)
     const inDnd = (h: number) => {
       const hh = h % 24;
-      return dndStart > dndEnd
-        ? hh >= dndStart || hh < dndEnd
-        : hh >= dndStart && hh < dndEnd;
+      return dndStart > dndEnd ? hh >= dndStart || hh < dndEnd : hh >= dndStart && hh < dndEnd;
     };
-    // DND 안에 걸리면 DND 종료 시각으로 밀기
-    if (inDnd(nextHour)) {
-      nextHour = dndEnd;
-    }
+    if (inDnd(nextHour)) nextHour = dndEnd;
   }
 
   const displayHour = nextHour % 24;
-  const ampm = displayHour < 12 ? '오전' : '오후';
-  const h12 = displayHour === 0 ? 12 : displayHour > 12 ? displayHour - 12 : displayHour;
   const diff = nextHour - now.getHours();
-  const diffLabel = diff <= 0 ? '' : ` (약 ${diff}시간 후)`;
-
-  return `${ampm} ${h12}시경${diffLabel}`;
+  const diffLabel = diff > 0 ? ` (약 ${diff}시간 후)` : '';
+  return `${formatHour(displayHour)}경${diffLabel}`;
 }
 
 export default function SettingsScreen() {
   const [interval, setIntervalState] = useState<1 | 2 | 3>(2);
   const [preference, setPreferenceState] = useState<'comfort' | 'cheer'>('comfort');
   const [dndEnabled, setDndEnabled] = useState(true);
-  const [dndStart, setDndStart] = useState(23);
-  const [dndEnd, setDndEnd] = useState(7);
+  const [dndStart, setDndStart] = useState(1);
+  const [dndEnd, setDndEnd] = useState(6);
   const [saving, setSaving] = useState(false);
   const [testSending, setTestSending] = useState(false);
   const [loaded, setLoaded] = useState(false);
@@ -90,7 +97,7 @@ export default function SettingsScreen() {
           [
             { text: '설정 앱 열기', onPress: () => Linking.openSettings() },
             { text: '취소', style: 'cancel' },
-          ]
+          ],
         );
         return;
       }
@@ -98,9 +105,12 @@ export default function SettingsScreen() {
       await setIntervalHours(interval);
       await setPreference(preference);
       await setDndRange(dndEnabled, dndStart, dndEnd);
-      await registerBackgroundTask(interval);
 
-      Alert.alert('저장 완료', `${interval}시간마다 날씨 메시지를 받아볼게요.`);
+      // 앱 종료 시에도 동작하는 OS 예약 알림으로 48개 미리 등록
+      await scheduleUpcomingNotifications(interval, dndEnabled, dndStart, dndEnd);
+
+      const intervalLabel = interval === 1 ? '1시간' : interval === 2 ? '2시간' : '3시간';
+      Alert.alert('저장 완료', `${intervalLabel}마다 날씨 알림을 받아볼게요.`);
     } catch (e) {
       Alert.alert('오류', '설정 저장 중 문제가 발생했습니다.');
     } finally {
@@ -109,8 +119,8 @@ export default function SettingsScreen() {
   };
 
   const handleStop = async () => {
-    await unregisterBackgroundTask();
-    Alert.alert('알림 중지', '날씨 메시지 알림을 중지했습니다.');
+    await cancelAllNotifications();
+    Alert.alert('알림 중지', '날씨 메시지 알림을 모두 취소했습니다.');
   };
 
   const handleTestNotification = async () => {
@@ -134,6 +144,10 @@ export default function SettingsScreen() {
     ? getNextNotificationLabel(interval, dndEnabled, dndStart, dndEnd)
     : '—';
 
+  const dndDesc = dndEnabled
+    ? `${formatHour(dndStart)} ~ ${formatHour(dndEnd)} 사이엔 알림을 보내지 않아요`
+    : '방해금지가 꺼져 있어요. 언제든지 알림이 올 수 있어요.';
+
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.heading}>설정</Text>
@@ -154,7 +168,6 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           ))}
         </View>
-        {/* 다음 알림 예상 시각 */}
         <View style={styles.nextNotifRow}>
           <Text style={styles.nextNotifLabel}>다음 알림 예상</Text>
           <Text style={styles.nextNotifValue}>{nextLabel}</Text>
@@ -193,11 +206,12 @@ export default function SettingsScreen() {
             thumbColor={dndEnabled ? '#fff' : '#888'}
           />
         </View>
-        <Text style={styles.dndDesc}>
-          {dndEnabled
-            ? `밤 ${dndStart}시 ~ 아침 ${dndEnd}시 사이엔 알림을 보내지 않아요`
-            : '방해금지가 꺼져 있어요. 언제든지 알림이 올 수 있어요.'}
-        </Text>
+        <Text style={styles.dndDesc}>{dndDesc}</Text>
+        {dndEnabled && (
+          <Text style={styles.dndDefault}>
+            기본: 새벽 1시 ~ 오전 6시
+          </Text>
+        )}
       </View>
 
       {/* 저장 버튼 */}
@@ -251,7 +265,8 @@ const styles = StyleSheet.create({
   chipActive: { backgroundColor: '#fff', borderColor: '#fff' },
   chipText: { color: '#666', fontSize: 14, fontWeight: '600' },
   chipTextActive: { color: '#000' },
-  dndDesc: { color: '#555', fontSize: 13, marginTop: 10 },
+  dndDesc: { color: '#666', fontSize: 13, marginTop: 10 },
+  dndDefault: { color: '#444', fontSize: 12, marginTop: 6 },
   nextNotifRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

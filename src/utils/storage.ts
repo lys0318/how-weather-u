@@ -57,10 +57,13 @@ export async function getDndRange(): Promise<{ enabled: boolean; start: number; 
     AsyncStorage.getItem(KEYS.DO_NOT_DISTURB_START),
     AsyncStorage.getItem(KEYS.DO_NOT_DISTURB_END),
   ]);
+  const startNum = s !== null ? Number(s) : 1;
+  const endNum   = e !== null ? Number(e) : 6;
   return {
-    enabled: enabled !== 'false',        // 기본 true
-    start: s !== null ? Number(s) : 23,  // 기본 밤 11시
-    end: e !== null ? Number(e) : 7,     // 기본 아침 7시
+    enabled: enabled !== 'false',
+    // 0~23 범위 밖(구버전 -1 등)이면 기본값으로 복구
+    start: startNum >= 0 && startNum <= 23 ? startNum : 1,
+    end:   endNum   >= 0 && endNum   <= 23 ? endNum   : 6,
   };
 }
 export async function setDndRange(enabled: boolean, start: number, end: number): Promise<void> {

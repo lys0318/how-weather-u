@@ -47,9 +47,11 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
 
   const { lat, lon } = await getCurrentCoords();
 
-  const res = await fetch(
-    `${BASE_URL}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=kr`
-  );
+  // 현재 날씨 + 당일 예보 병렬 요청
+  const [res, forecastRes] = await Promise.all([
+    fetch(`${BASE_URL}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=kr`),
+    fetch(`${BASE_URL}/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&cnt=8`),
+  ]);
 
   if (!res.ok) {
     throw new Error(`날씨 데이터를 가져오지 못했습니다. (${res.status})`);
@@ -61,13 +63,38 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
   const condition = getConditionFromId(weatherId);
   const meta = CONDITION_META[condition];
 
+  // 예보 데이터로 오늘의 실제 최저/최고 계산
+  let tempMin = Math.round(data.main.temp);
+  let tempMax = Math.round(data.main.temp);
+
+  if (forecastRes.ok) {
+    try {
+      const forecastData = await forecastRes.json();
+      const endOfToday = new Date();
+      endOfToday.setHours(23, 59, 59, 999);
+
+      type ForecastItem = { dt: number; main: { temp_min: number; temp_max: number } };
+      const todayItems = (forecastData.list as ForecastItem[])
+        .filter(item => new Date(item.dt * 1000) <= endOfToday);
+
+      if (todayItems.length > 0) {
+        const mins = todayItems.map(i => i.main.temp_min);
+        const maxs = todayItems.map(i => i.main.temp_max);
+        tempMin = Math.round(Math.min(data.main.temp, ...mins));
+        tempMax = Math.round(Math.max(data.main.temp, ...maxs));
+      }
+    } catch {
+      // 예보 파싱 실패 → 현재 기온 그대로 유지
+    }
+  }
+
   const result: WeatherInfo = {
     condition,
     conditionKo: meta.ko,
     emoji: meta.emoji,
     temp: Math.round(data.main.temp),
-    tempMin: Math.round(data.main.temp_min),
-    tempMax: Math.round(data.main.temp_max),
+    tempMin,
+    tempMax,
     city: data.name,
     description: data.weather[0].description,
   };
