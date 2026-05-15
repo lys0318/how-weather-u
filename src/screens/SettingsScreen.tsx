@@ -112,7 +112,8 @@ export default function SettingsScreen() {
       const intervalLabel = interval === 1 ? '1시간' : interval === 2 ? '2시간' : '3시간';
       Alert.alert('저장 완료', `${intervalLabel}마다 날씨 알림을 받아볼게요.`);
     } catch (e) {
-      Alert.alert('오류', '설정 저장 중 문제가 발생했습니다.');
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert('오류', `설정 저장 실패: ${msg}`);
     } finally {
       setSaving(false);
     }

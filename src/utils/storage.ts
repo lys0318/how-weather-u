@@ -84,11 +84,26 @@ export interface StoredMessage {
   isBookmarked: boolean;
 }
 
+// 메시지 자동 보존 기간: 7일 (북마크된 메시지는 무기한 보존)
+const MESSAGE_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
+
 export async function getMessages(): Promise<StoredMessage[]> {
   const v = await AsyncStorage.getItem(KEYS.MESSAGES);
   if (!v) return [];
   try {
-    return JSON.parse(v) as StoredMessage[];
+    const all = JSON.parse(v) as StoredMessage[];
+    const cutoff = Date.now() - MESSAGE_RETENTION_MS;
+    // 북마크 OR 7일 이내 메시지만 유지
+    const filtered = all.filter(m => {
+      if (m.isBookmarked) return true;
+      const t = new Date(m.generatedAt).getTime();
+      return !isNaN(t) && t >= cutoff;
+    });
+    // 줄어든 만큼 저장소에도 반영 (다음 읽기 시 빠르게)
+    if (filtered.length !== all.length) {
+      AsyncStorage.setItem(KEYS.MESSAGES, JSON.stringify(filtered)).catch(() => {});
+    }
+    return filtered;
   } catch {
     return [];
   }

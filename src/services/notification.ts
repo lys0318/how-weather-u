@@ -80,24 +80,36 @@ export async function scheduleUpcomingNotifications(
 
   let nextTime = new Date();
   let scheduled = 0;
+  let attempts = 0;
   const MAX = 48; // 최대 예약 개수
+  const MAX_ATTEMPTS = 200; // 무한루프 방지
 
-  while (scheduled < MAX) {
+  while (scheduled < MAX && attempts < MAX_ATTEMPTS) {
+    attempts++;
     nextTime = new Date(nextTime.getTime() + intervalHours * 60 * 60 * 1000);
     const hour = nextTime.getHours();
 
     // DND 시간대면 건너뜀
     if (dndEnabled && isInDnd(hour, dndStart, dndEnd)) continue;
 
-    await Notifications.scheduleNotificationAsync({
-      content: {
-        title: '하우웨더유',
-        body: getNotificationBody(hour),
-        sound: false,
-      },
-      trigger: { date: nextTime } as Notifications.DateTriggerInput,
-    });
-    scheduled++;
+    try {
+      await Notifications.scheduleNotificationAsync({
+        content: {
+          title: '하우웨더유',
+          body: getNotificationBody(hour),
+          sound: false,
+        },
+        // expo-notifications 0.32.x 정식 트리거 포맷
+        trigger: {
+          type: Notifications.SchedulableTriggerInputTypes.DATE,
+          date: nextTime,
+        },
+      });
+      scheduled++;
+    } catch (err) {
+      // 개별 알림 실패는 무시하고 다음으로
+      console.warn('[scheduleUpcomingNotifications] skip:', err);
+    }
   }
 }
 
