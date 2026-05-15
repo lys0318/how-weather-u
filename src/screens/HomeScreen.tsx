@@ -105,8 +105,10 @@ export default function HomeScreen() {
   // 앱 열 때 예약 알림 부족하면 자동 보충
   useEffect(() => {
     (async () => {
-      const [iv, dnd] = await Promise.all([getIntervalHours(), getDndRange()]);
-      await refreshNotificationsIfNeeded(iv, dnd.enabled, dnd.start, dnd.end);
+      try {
+        const [iv, dnd] = await Promise.all([getIntervalHours(), getDndRange()]);
+        await refreshNotificationsIfNeeded(iv, dnd.enabled, dnd.start, dnd.end);
+      } catch {}
     })();
   }, []);
 

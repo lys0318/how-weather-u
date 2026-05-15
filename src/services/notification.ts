@@ -1,17 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-// 알림이 포그라운드에서도 표시되도록 설정
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: false,
-    shouldSetBadge: false,
-  }),
-});
-
 export async function requestNotificationPermission(): Promise<boolean> {
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
 
