@@ -12,8 +12,6 @@ import {
 import {
   getIntervalHours,
   setIntervalHours,
-  getPreference,
-  setPreference,
   getDndRange,
   setDndRange,
 } from '../utils/storage';
@@ -62,7 +60,6 @@ function getNextNotificationLabel(
 
 export default function SettingsScreen() {
   const [interval, setIntervalState] = useState<1 | 2 | 3>(2);
-  const [preference, setPreferenceState] = useState<'comfort' | 'cheer'>('comfort');
   const [dndEnabled, setDndEnabled] = useState(true);
   const [dndStart, setDndStart] = useState(1);
   const [dndEnd, setDndEnd] = useState(6);
@@ -72,13 +69,11 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     (async () => {
-      const [iv, pref, dnd] = await Promise.all([
+      const [iv, dnd] = await Promise.all([
         getIntervalHours(),
-        getPreference(),
         getDndRange(),
       ]);
       setIntervalState(iv);
-      setPreferenceState(pref);
       setDndEnabled(dnd.enabled);
       setDndStart(dnd.start);
       setDndEnd(dnd.end);
@@ -103,7 +98,6 @@ export default function SettingsScreen() {
       }
 
       await setIntervalHours(interval);
-      await setPreference(preference);
       await setDndRange(dndEnabled, dndStart, dndEnd);
 
       // 앱 종료 시에도 동작하는 OS 예약 알림으로 48개 미리 등록
@@ -172,27 +166,6 @@ export default function SettingsScreen() {
         <View style={styles.nextNotifRow}>
           <Text style={styles.nextNotifLabel}>다음 알림 예상</Text>
           <Text style={styles.nextNotifValue}>{nextLabel}</Text>
-        </View>
-      </View>
-
-      {/* 메시지 톤 */}
-      <View style={styles.section}>
-        <Text style={styles.sectionTitle}>메시지 톤</Text>
-        <View style={styles.row}>
-          {([
-            { key: 'comfort', label: '위로' },
-            { key: 'cheer', label: '응원' },
-          ] as const).map(({ key, label }) => (
-            <TouchableOpacity
-              key={key}
-              style={[styles.chip, preference === key && styles.chipActive]}
-              onPress={() => setPreferenceState(key)}
-            >
-              <Text style={[styles.chipText, preference === key && styles.chipTextActive]}>
-                {label}
-              </Text>
-            </TouchableOpacity>
-          ))}
         </View>
       </View>
 

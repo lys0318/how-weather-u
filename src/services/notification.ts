@@ -46,14 +46,42 @@ export async function sendTestNotification(): Promise<void> {
   });
 }
 
-// ── 시간대별 알림 메시지 ──────────────────────────────────────
-function getNotificationBody(hour: number): string {
-  if (hour >= 5 && hour < 9)  return '좋은 아침이에요 ☀️ 오늘 날씨에 맞게 옷을 챙겨보세요';
-  if (hour >= 9 && hour < 12) return '오전 날씨 확인해볼까요? 🌤️';
-  if (hour >= 12 && hour < 14) return '점심 시간이에요 🍱 오늘 날씨는 어때요?';
-  if (hour >= 14 && hour < 18) return '오후 날씨 메시지가 도착했어요 🌈';
-  if (hour >= 18 && hour < 21) return '저녁이에요 🌙 오늘 하루 날씨는 어떠셨나요?';
-  return '오늘 하루도 수고하셨어요 🌟';
+// ── 시간대별 알림 메시지 (메시지 생성 유도형) ─────────────────
+function getNotificationContent(hour: number): { title: string; body: string } {
+  if (hour >= 5 && hour < 9) {
+    return {
+      title: '아침이에요 ☀️',
+      body: '오늘의 메시지를 받아보세요! 응원 한마디 어떠세요?',
+    };
+  }
+  if (hour >= 9 && hour < 12) {
+    return {
+      title: '오전 한 잔 어떠세요? ☕',
+      body: '날씨에 맞는 메시지를 받아보세요',
+    };
+  }
+  if (hour >= 12 && hour < 14) {
+    return {
+      title: '점심 시간이에요 🍱',
+      body: '잠깐 쉬어가며 메시지 한 줄 어떠세요?',
+    };
+  }
+  if (hour >= 14 && hour < 18) {
+    return {
+      title: '오후엔 조언 한 줄? 💡',
+      body: '오늘 어떻게 보내면 좋을지 추천 받아보세요',
+    };
+  }
+  if (hour >= 18 && hour < 21) {
+    return {
+      title: '수고했어요 🌙',
+      body: '제가 위로해드릴게요. 위로 메시지를 받아보세요!',
+    };
+  }
+  return {
+    title: '오늘 하루도 수고했어요 🌟',
+    body: '잠들기 전 따뜻한 메시지 한 줄 받아보세요',
+  };
 }
 
 // ── DND 체크 헬퍼 ────────────────────────────────────────────
@@ -93,10 +121,11 @@ export async function scheduleUpcomingNotifications(
     if (dndEnabled && isInDnd(hour, dndStart, dndEnd)) continue;
 
     try {
+      const { title, body } = getNotificationContent(hour);
       await Notifications.scheduleNotificationAsync({
         content: {
-          title: '하우웨더유',
-          body: getNotificationBody(hour),
+          title,
+          body,
           sound: false,
         },
         // expo-notifications 0.32.x 정식 트리거 포맷

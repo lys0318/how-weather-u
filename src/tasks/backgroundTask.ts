@@ -1,77 +1,28 @@
+// ⚠️ 이 파일은 더 이상 Claude API를 호출하지 않습니다.
+// 알림은 services/notification.ts 의 scheduleUpcomingNotifications()가
+// OS AlarmManager 기반 예약 알림으로 처리하며,
+// 사용자가 앱을 열어 직접 메시지를 생성하도록 유도합니다 (비용 통제).
+//
+// 백그라운드 태스크 정의만 남겨두지만 등록은 하지 않습니다.
+
 import * as BackgroundFetch from 'expo-background-fetch';
 import * as TaskManager from 'expo-task-manager';
-import { fetchWeather } from '../services/weather';
-import { generateMessage } from '../services/message';
-import { sendLocalNotification } from '../services/notification';
-import { saveMessage, getPreference, getDndRange } from '../utils/storage';
-import { getTimeOfDay, CONDITION_META } from '../constants/weather';
 
 export const BACKGROUND_TASK_NAME = 'weather-message-task';
 
-function isWithinDnd(hour: number, start: number, end: number): boolean {
-  // 방해금지 시간대 체크 (ex: 23~7시)
-  if (start > end) {
-    // 자정을 넘어가는 경우 (예: 23 ~ 07)
-    return hour >= start || hour < end;
-  }
-  return hour >= start && hour < end;
-}
-
-// 백그라운드 태스크 정의
+// 빈 태스크 — 등록되더라도 아무 작업도 하지 않음
 TaskManager.defineTask(BACKGROUND_TASK_NAME, async () => {
-  try {
-    const now = new Date();
-    const currentHour = now.getHours();
-
-    // 방해금지 시간대 확인
-    const { enabled: dndEnabled, start, end } = await getDndRange();
-    if (dndEnabled && isWithinDnd(currentHour, start, end)) {
-      return BackgroundFetch.BackgroundFetchResult.NoData;
-    }
-
-    // 날씨 가져오기
-    const weather = await fetchWeather();
-
-    // 취향 가져오기
-    const preference = await getPreference();
-
-    // 메시지 생성
-    const message = await generateMessage({
-      condition: weather.condition,
-      timeOfDay: getTimeOfDay(currentHour),
-      dayOfWeek: now.getDay(),
-      preference,
-    });
-
-    // 로컬 알림 발송
-    await sendLocalNotification(message.text, weather.emoji);
-
-    // AsyncStorage에 저장
-    await saveMessage(message, weather.emoji);
-
-    return BackgroundFetch.BackgroundFetchResult.NewData;
-  } catch (error) {
-    console.error('[BackgroundTask] 오류:', error);
-    return BackgroundFetch.BackgroundFetchResult.Failed;
-  }
+  return BackgroundFetch.BackgroundFetchResult.NoData;
 });
 
-export async function registerBackgroundTask(intervalHours: 1 | 2 | 3): Promise<void> {
-  const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_TASK_NAME);
-  if (isRegistered) {
-    await BackgroundFetch.unregisterTaskAsync(BACKGROUND_TASK_NAME);
-  }
-
-  await BackgroundFetch.registerTaskAsync(BACKGROUND_TASK_NAME, {
-    minimumInterval: intervalHours * 60 * 60, // 초 단위
-    stopOnTerminate: false,
-    startOnBoot: true,
-  });
-}
-
+// 이전 버전에서 등록되어 있던 태스크가 있다면 해제
 export async function unregisterBackgroundTask(): Promise<void> {
-  const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_TASK_NAME);
-  if (isRegistered) {
-    await BackgroundFetch.unregisterTaskAsync(BACKGROUND_TASK_NAME);
+  try {
+    const isRegistered = await TaskManager.isTaskRegisteredAsync(BACKGROUND_TASK_NAME);
+    if (isRegistered) {
+      await BackgroundFetch.unregisterTaskAsync(BACKGROUND_TASK_NAME);
+    }
+  } catch {
+    // 무시
   }
 }

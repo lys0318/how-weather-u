@@ -10,13 +10,15 @@ import {
   Dimensions,
 } from 'react-native';
 import { requestLocationPermission } from '../services/weather';
-import { requestNotificationPermission } from '../services/notification';
-import { setHasOnboarded, setPreference, setIntervalHours } from '../utils/storage';
-import { registerBackgroundTask } from '../tasks/backgroundTask';
+import {
+  requestNotificationPermission,
+  scheduleUpcomingNotifications,
+} from '../services/notification';
+import { setHasOnboarded, setIntervalHours, getDndRange } from '../utils/storage';
 
 const { width } = Dimensions.get('window');
 
-type Step = 'welcome' | 'location' | 'notification' | 'preference' | 'interval' | 'done';
+type Step = 'welcome' | 'location' | 'notification' | 'interval' | 'done';
 
 interface Props {
   onComplete: () => void;
@@ -25,7 +27,6 @@ interface Props {
 export default function OnboardingScreen({ onComplete }: Props) {
   const [step, setStep] = useState<Step>('welcome');
   const [loading, setLoading] = useState(false);
-  const [selectedPreference, setSelectedPreference] = useState<'comfort' | 'cheer'>('comfort');
   const [selectedInterval, setSelectedInterval] = useState<1 | 2 | 3>(2);
 
   const handleLocationStep = async () => {
@@ -68,15 +69,15 @@ export default function OnboardingScreen({ onComplete }: Props) {
               text: '설정 앱 열기',
               onPress: () => {
                 Linking.openSettings();
-                setStep('preference');
+                setStep('interval');
               },
             },
-            { text: '나중에', style: 'cancel', onPress: () => setStep('preference') },
+            { text: '나중에', style: 'cancel', onPress: () => setStep('interval') },
           ]
         );
         return;
       }
-      setStep('preference');
+      setStep('interval');
     } finally {
       setLoading(false);
     }
@@ -85,9 +86,9 @@ export default function OnboardingScreen({ onComplete }: Props) {
   const handleComplete = async () => {
     setLoading(true);
     try {
-      await setPreference(selectedPreference);
       await setIntervalHours(selectedInterval);
-      await registerBackgroundTask(selectedInterval);
+      const dnd = await getDndRange();
+      await scheduleUpcomingNotifications(selectedInterval, dnd.enabled, dnd.start, dnd.end);
       await setHasOnboarded(true);
       onComplete();
     } catch (e) {
@@ -114,7 +115,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
         <TouchableOpacity style={styles.button} onPress={() => setStep('location')}>
           <Text style={styles.buttonText}>시작하기</Text>
         </TouchableOpacity>
-        <StepIndicator current={0} total={4} />
+        <StepIndicator current={0} total={3} />
       </View>
     );
   }
@@ -142,7 +143,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
             <Text style={styles.buttonText}>위치 권한 허용</Text>
           )}
         </TouchableOpacity>
-        <StepIndicator current={1} total={4} />
+        <StepIndicator current={1} total={3} />
       </View>
     );
   }
@@ -170,61 +171,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
             <Text style={styles.buttonText}>알림 권한 허용</Text>
           )}
         </TouchableOpacity>
-        <StepIndicator current={2} total={4} />
-      </View>
-    );
-  }
-
-  if (step === 'preference') {
-    return (
-      <View style={styles.container}>
-        <View style={styles.content}>
-          <Text style={styles.emoji}>💬</Text>
-          <Text style={styles.stepTitle}>메시지 스타일</Text>
-          <Text style={styles.desc}>어떤 느낌의 메시지를 받고 싶으세요?</Text>
-          <View style={styles.optionRow}>
-            <TouchableOpacity
-              style={[
-                styles.optionCard,
-                selectedPreference === 'comfort' && styles.optionCardActive,
-              ]}
-              onPress={() => setSelectedPreference('comfort')}
-            >
-              <Text style={styles.optionEmoji}>🤗</Text>
-              <Text
-                style={[
-                  styles.optionLabel,
-                  selectedPreference === 'comfort' && styles.optionLabelActive,
-                ]}
-              >
-                위로
-              </Text>
-              <Text style={styles.optionDesc}>따뜻한 공감과 위로</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.optionCard,
-                selectedPreference === 'cheer' && styles.optionCardActive,
-              ]}
-              onPress={() => setSelectedPreference('cheer')}
-            >
-              <Text style={styles.optionEmoji}>🔥</Text>
-              <Text
-                style={[
-                  styles.optionLabel,
-                  selectedPreference === 'cheer' && styles.optionLabelActive,
-                ]}
-              >
-                응원
-              </Text>
-              <Text style={styles.optionDesc}>에너지 넘치는 격려</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-        <TouchableOpacity style={styles.button} onPress={() => setStep('interval')}>
-          <Text style={styles.buttonText}>다음</Text>
-        </TouchableOpacity>
-        <StepIndicator current={3} total={4} />
+        <StepIndicator current={2} total={3} />
       </View>
     );
   }
@@ -275,7 +222,7 @@ export default function OnboardingScreen({ onComplete }: Props) {
             <Text style={styles.buttonText}>시작하기 🎉</Text>
           )}
         </TouchableOpacity>
-        <StepIndicator current={4} total={4} />
+        <StepIndicator current={3} total={3} />
       </View>
     );
   }

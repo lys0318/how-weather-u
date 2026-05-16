@@ -6,8 +6,10 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 
-// 백그라운드 태스크는 최상단에서 import해야 등록됨
-import './src/tasks/backgroundTask';
+// 백그라운드 태스크 정의 (이전 버전 호환용 — 더 이상 사용 안 함)
+import { unregisterBackgroundTask } from './src/tasks/backgroundTask';
+// 시작 시 한 번 이전 등록 해제
+unregisterBackgroundTask();
 
 // 포그라운드 알림 표시 설정
 Notifications.setNotificationHandler({

@@ -10,7 +10,19 @@ export type WeatherCondition =
 
 export type TimeOfDay = 'morning' | 'afternoon' | 'evening' | 'night';
 
-export type Preference = 'comfort' | 'cheer';
+export type Preference = 'comfort' | 'cheer' | 'advice';
+
+export const PREFERENCE_KO: Record<Preference, string> = {
+  comfort: '위로',
+  cheer:   '응원',
+  advice:  '조언',
+};
+
+export const PREFERENCE_EMOJI: Record<Preference, string> = {
+  comfort: '💖',
+  cheer:   '🔥',
+  advice:  '💡',
+};
 
 export interface WeatherInfo {
   condition: WeatherCondition;

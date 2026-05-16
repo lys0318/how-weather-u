@@ -8,14 +8,23 @@ import {
   ScrollView,
   Share,
   Dimensions,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '../hooks/useWeather';
 import { useMessage } from '../hooks/useMessage';
-import { useOutfit } from '../hooks/useOutfit';
-import { getTimeOfDay, TIME_OF_DAY_KO, DAY_OF_WEEK_KO, WeatherCondition } from '../constants/weather';
-import { getPreference, saveMessage, getIntervalHours, getDndRange } from '../utils/storage';
-import { Preference } from '../constants/weather';
+import { useActivity } from '../hooks/useActivity';
+import {
+  getTimeOfDay,
+  TIME_OF_DAY_KO,
+  DAY_OF_WEEK_KO,
+  WeatherCondition,
+  Preference,
+  PREFERENCE_KO,
+  PREFERENCE_EMOJI,
+} from '../constants/weather';
+import { saveMessage, getIntervalHours, getDndRange } from '../utils/storage';
 import WeatherAnimation from '../components/WeatherAnimation';
 import { refreshNotificationsIfNeeded } from '../services/notification';
 
@@ -35,11 +44,11 @@ function getGradient(condition: WeatherCondition | null, hour: number): [string,
 
   if (condition === 'clear') {
     if (theme === 'day') {
-      if (timeOfDay === 'morning') return ['#1A4A88', '#2E72B8', '#4A9AD4']; // 아침 하늘색
-      return ['#0E52A8', '#1870CC', '#2490E8'];                              // 낮 밝은 파랑
+      if (timeOfDay === 'morning') return ['#1A4A88', '#2E72B8', '#4A9AD4'];
+      return ['#0E52A8', '#1870CC', '#2490E8'];
     }
-    if (timeOfDay === 'evening') return ['#1a0a2e', '#3d1a5e', '#6b2d8b'];   // 저녁 보라
-    return ['#050d1a', '#0a1628', '#0d2040'];                                // 밤
+    if (timeOfDay === 'evening') return ['#1a0a2e', '#3d1a5e', '#6b2d8b'];
+    return ['#050d1a', '#0a1628', '#0d2040'];
   }
   if (condition === 'rain' || condition === 'drizzle') {
     if (theme === 'day') return ['#2A3E52', '#3A5266', '#4A6478'];
@@ -62,7 +71,6 @@ function getGradient(condition: WeatherCondition | null, hour: number): [string,
   return ['#0a0f1a', '#111824', '#141d2e'];
 }
 
-// ── 텍스트 투명도 (낮엔 좀 더 진하게) ───────────────────────
 function getTextColors(hour: number) {
   const theme = getTheme(hour);
   if (theme === 'day') {
@@ -81,11 +89,17 @@ function getTextColors(hour: number) {
   };
 }
 
+const PREF_OPTIONS: { key: Preference; desc: string }[] = [
+  { key: 'comfort', desc: '힘든 하루를 따뜻하게 안아주는 한마디' },
+  { key: 'cheer',   desc: '에너지가 솟는 응원과 격려' },
+  { key: 'advice',  desc: '날씨에 맞춰 지금 해볼만한 행동 추천' },
+];
+
 export default function HomeScreen() {
   const { weather, loading: weatherLoading, error: weatherError, refetch } = useWeather();
   const { message, loading: messageLoading, error: messageError, generate } = useMessage();
-  const { outfit, loading: outfitLoading, error: outfitError, generate: generateOutfit } = useOutfit();
-  const [preference, setPreference] = useState<Preference>('comfort');
+  const { activity, loading: activityLoading, error: activityError, generate: generateActivity } = useActivity();
+  const [pickerOpen, setPickerOpen] = useState(false);
 
   const now = new Date();
   const hour = now.getHours();
@@ -97,10 +111,6 @@ export default function HomeScreen() {
   const tc = getTextColors(hour);
 
   const gradientColors = getGradient(weather?.condition ?? null, hour);
-
-  useEffect(() => {
-    getPreference().then(setPreference);
-  }, []);
 
   // 앱 열 때 예약 알림 부족하면 자동 보충
   useEffect(() => {
@@ -119,12 +129,15 @@ export default function HomeScreen() {
     }
   }, [message]);
 
-  const handleGenerateMessage = () => {
-    if (weather) generate(weather, preference);
+  const openPicker = () => setPickerOpen(true);
+
+  const handlePickPreference = (pref: Preference) => {
+    setPickerOpen(false);
+    if (weather) generate(weather, pref);
   };
 
-  const handleGenerateOutfit = () => {
-    if (weather) generateOutfit(weather);
+  const handleGenerateActivity = () => {
+    if (weather) generateActivity(weather);
   };
 
   const handleShare = async () => {
@@ -185,7 +198,9 @@ export default function HomeScreen() {
         {/* 감성 메시지 카드 */}
         {message && (
           <View style={styles.messageCard}>
-            <Text style={styles.cardLabel}>오늘의 메시지</Text>
+            <Text style={styles.cardLabel}>
+              {PREFERENCE_EMOJI[message.context.preference]} {PREFERENCE_KO[message.context.preference]} 메시지
+            </Text>
             <Text style={styles.messageText}>{message.text}</Text>
             <TouchableOpacity onPress={handleShare} style={styles.shareBtn}>
               <Text style={styles.shareBtnText}>공유하기 ↑</Text>
@@ -199,17 +214,17 @@ export default function HomeScreen() {
           </View>
         )}
 
-        {/* 의상 추천 카드 */}
-        {outfit && (
-          <View style={styles.outfitCard}>
-            <Text style={styles.cardLabel}>오늘의 의상</Text>
-            <Text style={styles.outfitText}>{outfit.text}</Text>
+        {/* 활동 추천 카드 */}
+        {activity && (
+          <View style={styles.activityCard}>
+            <Text style={styles.cardLabel}>오늘의 활동 추천</Text>
+            <Text style={styles.activityText}>{activity.text}</Text>
           </View>
         )}
 
-        {outfitError && (
+        {activityError && (
           <View style={styles.messageErrorBox}>
-            <Text style={styles.errorText}>{outfitError}</Text>
+            <Text style={styles.errorText}>{activityError}</Text>
           </View>
         )}
 
@@ -218,7 +233,7 @@ export default function HomeScreen() {
           <View style={styles.btnGroup}>
             <TouchableOpacity
               style={[styles.generateBtn, messageLoading && styles.generateBtnDisabled]}
-              onPress={handleGenerateMessage}
+              onPress={openPicker}
               disabled={messageLoading}
             >
               {messageLoading ? (
@@ -231,15 +246,15 @@ export default function HomeScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.outfitBtn, outfitLoading && styles.generateBtnDisabled]}
-              onPress={handleGenerateOutfit}
-              disabled={outfitLoading}
+              style={[styles.activityBtn, activityLoading && styles.generateBtnDisabled]}
+              onPress={handleGenerateActivity}
+              disabled={activityLoading}
             >
-              {outfitLoading ? (
+              {activityLoading ? (
                 <ActivityIndicator color="rgba(255,255,255,0.7)" size="small" />
               ) : (
-                <Text style={styles.outfitBtnText}>
-                  {outfit ? '👕 의상 다시 추천받기' : '👕 오늘의 의상 추천받기'}
+                <Text style={styles.activityBtnText}>
+                  {activity ? '🌈 다른 활동 추천받기' : '🌈 오늘 날씨엔 뭘 하면 좋을까?'}
                 </Text>
               )}
             </TouchableOpacity>
@@ -252,6 +267,44 @@ export default function HomeScreen() {
           <Text style={[styles.appNameEn, { color: tc.veryMuted }]}>How Weather You</Text>
         </View>
       </ScrollView>
+
+      {/* 메시지 유형 선택 모달 */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={pickerOpen}
+        onRequestClose={() => setPickerOpen(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setPickerOpen(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>오늘은 어떤 메시지를 받고 싶으세요?</Text>
+            <Text style={styles.modalSubtitle}>지금 기분에 맞는 톤을 골라주세요</Text>
+
+            <View style={styles.modalOptions}>
+              {PREF_OPTIONS.map(({ key, desc }) => (
+                <TouchableOpacity
+                  key={key}
+                  style={styles.optionRow}
+                  onPress={() => handlePickPreference(key)}
+                >
+                  <Text style={styles.optionEmoji}>{PREFERENCE_EMOJI[key]}</Text>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.optionTitle}>{PREFERENCE_KO[key]}</Text>
+                    <Text style={styles.optionDesc}>{desc}</Text>
+                  </View>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <TouchableOpacity
+              style={styles.modalCancel}
+              onPress={() => setPickerOpen(false)}
+            >
+              <Text style={styles.modalCancelText}>취소</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -273,56 +326,20 @@ const styles = StyleSheet.create({
     marginBottom: 40,
     alignSelf: 'flex-start',
   },
-  dateText: {
-    fontSize: 17,
-    fontWeight: '600',
-  },
-  timeText: {
-    fontSize: 14,
-  },
-  loadingArea: {
-    alignItems: 'center',
-    marginTop: 60,
-    gap: 16,
-  },
-  loadingText: {
-    fontSize: 14,
-  },
-  weatherArea: {
-    alignItems: 'center',
-    marginBottom: 40,
-  },
-  weatherEmoji: {
-    fontSize: 90,
-    marginBottom: 16,
-  },
-  weatherTemp: {
-    fontSize: 72,
-    fontWeight: '200',
-    letterSpacing: -2,
-    lineHeight: 80,
-  },
-  weatherTempRange: {
-    fontSize: 13,
-    marginTop: 6,
-    letterSpacing: 0.5,
-  },
-  weatherCondition: {
-    fontSize: 18,
-    marginTop: 8,
-    fontWeight: '400',
-  },
-  weatherCity: {
-    fontSize: 13,
-    marginTop: 4,
-    letterSpacing: 2,
-    textTransform: 'uppercase',
-  },
+  dateText: { fontSize: 17, fontWeight: '600' },
+  timeText: { fontSize: 14 },
+  loadingArea: { alignItems: 'center', marginTop: 60, gap: 16 },
+  loadingText: { fontSize: 14 },
+  weatherArea: { alignItems: 'center', marginBottom: 40 },
+  weatherEmoji: { fontSize: 90, marginBottom: 16 },
+  weatherTemp: { fontSize: 72, fontWeight: '200', letterSpacing: -2, lineHeight: 80 },
+  weatherTempRange: { fontSize: 13, marginTop: 6, letterSpacing: 0.5 },
+  weatherCondition: { fontSize: 18, marginTop: 8, fontWeight: '400' },
+  weatherCity: { fontSize: 13, marginTop: 4, letterSpacing: 2, textTransform: 'uppercase' },
   cardLabel: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.3)',
-    letterSpacing: 1.5,
-    textTransform: 'uppercase',
+    color: 'rgba(255,255,255,0.45)',
+    letterSpacing: 1.2,
     marginBottom: 10,
   },
   messageCard: {
@@ -350,11 +367,8 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
   },
-  shareBtnText: {
-    color: 'rgba(255,255,255,0.5)',
-    fontSize: 12,
-  },
-  outfitCard: {
+  shareBtnText: { color: 'rgba(255,255,255,0.5)', fontSize: 12 },
+  activityCard: {
     width: '100%',
     backgroundColor: 'rgba(255,255,255,0.05)',
     borderRadius: 20,
@@ -363,21 +377,14 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.08)',
   },
-  outfitText: {
+  activityText: {
     fontSize: 15,
-    color: 'rgba(255,255,255,0.75)',
+    color: 'rgba(255,255,255,0.78)',
     lineHeight: 25,
     fontWeight: '300',
   },
-  messageErrorBox: {
-    width: '100%',
-    marginBottom: 12,
-  },
-  btnGroup: {
-    width: '100%',
-    gap: 10,
-    marginBottom: 12,
-  },
+  messageErrorBox: { width: '100%', marginBottom: 12 },
+  btnGroup: { width: '100%', gap: 10, marginBottom: 12 },
   generateBtn: {
     width: '100%',
     backgroundColor: 'rgba(255,255,255,0.95)',
@@ -385,16 +392,14 @@ const styles = StyleSheet.create({
     paddingVertical: 17,
     alignItems: 'center',
   },
-  generateBtnDisabled: {
-    opacity: 0.5,
-  },
+  generateBtnDisabled: { opacity: 0.5 },
   generateBtnText: {
     color: '#0a1628',
     fontSize: 15,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
-  outfitBtn: {
+  activityBtn: {
     width: '100%',
     backgroundColor: 'rgba(255,255,255,0.08)',
     borderRadius: 16,
@@ -403,43 +408,79 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255,255,255,0.12)',
   },
-  outfitBtnText: {
-    color: 'rgba(255,255,255,0.7)',
+  activityBtnText: {
+    color: 'rgba(255,255,255,0.78)',
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: 0.3,
   },
-  errorArea: {
-    alignItems: 'center',
-    marginTop: 40,
-    gap: 12,
-  },
-  errorText: {
-    color: 'rgba(255,100,100,0.8)',
-    fontSize: 13,
-    textAlign: 'center',
-  },
+  errorArea: { alignItems: 'center', marginTop: 40, gap: 12 },
+  errorText: { color: 'rgba(255,100,100,0.8)', fontSize: 13, textAlign: 'center' },
   retryBtn: {
     paddingHorizontal: 20,
     paddingVertical: 8,
     backgroundColor: 'rgba(255,255,255,0.1)',
     borderRadius: 10,
   },
-  retryText: {
-    fontSize: 14,
+  retryText: { fontSize: 14 },
+  appNameArea: { alignItems: 'center', marginTop: 32 },
+  appName: { fontSize: 14, fontWeight: '500', letterSpacing: 3 },
+  appNameEn: { fontSize: 10, marginTop: 2, letterSpacing: 2 },
+
+  // ── 모달 ─────────────────────────────────────
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.6)',
+    justifyContent: 'flex-end',
   },
-  appNameArea: {
+  modalSheet: {
+    backgroundColor: '#161b25',
+    borderTopLeftRadius: 28,
+    borderTopRightRadius: 28,
+    paddingHorizontal: 24,
+    paddingTop: 28,
+    paddingBottom: 36,
+  },
+  modalTitle: {
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    color: 'rgba(255,255,255,0.45)',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 6,
+    marginBottom: 22,
+  },
+  modalOptions: { gap: 10 },
+  optionRow: {
+    flexDirection: 'row',
     alignItems: 'center',
-    marginTop: 32,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    borderRadius: 16,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.08)',
+    gap: 16,
   },
-  appName: {
-    fontSize: 14,
-    fontWeight: '500',
-    letterSpacing: 3,
+  optionEmoji: { fontSize: 28 },
+  optionTitle: {
+    color: '#ffffff',
+    fontSize: 16,
+    fontWeight: '600',
   },
-  appNameEn: {
-    fontSize: 10,
+  optionDesc: {
+    color: 'rgba(255,255,255,0.55)',
+    fontSize: 12,
     marginTop: 2,
-    letterSpacing: 2,
   },
+  modalCancel: {
+    marginTop: 18,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  modalCancelText: { color: 'rgba(255,255,255,0.5)', fontSize: 14 },
 });
