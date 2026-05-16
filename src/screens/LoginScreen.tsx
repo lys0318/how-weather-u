@@ -11,7 +11,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginScreen() {
-  const { signInWithGoogle, lastDebug } = useAuth();
+  const { signInWithGoogle, getDebug } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
@@ -20,14 +20,14 @@ export default function LoginScreen() {
       await signInWithGoogle();
     } catch (err) {
       const msg = err instanceof Error ? err.message : '로그인 중 오류가 발생했어요.';
-      Alert.alert('로그인 실패', `${msg}\n\n--- 진단 정보 ---\n${lastDebug}`);
+      Alert.alert('로그인 실패', `${msg}\n\n--- 진단 정보 ---${getDebug()}`);
     } finally {
       setLoading(false);
     }
   };
 
   const showDebug = () => {
-    Alert.alert('진단 정보', lastDebug || '(아직 시도 안 함)');
+    Alert.alert('진단 정보', getDebug() || '(아직 시도 안 함)');
   };
 
   return (
