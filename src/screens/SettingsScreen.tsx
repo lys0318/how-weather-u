@@ -15,10 +15,36 @@ import {
   scheduleUpcomingNotifications,
   cancelAllNotifications,
 } from '../services/notification';
+import { useAuth } from '../contexts/AuthContext';
 
 export default function SettingsScreen() {
   const [testSending, setTestSending] = useState(false);
   const [resetting, setResetting] = useState(false);
+  const { user, signOut } = useAuth();
+
+  const userName =
+    user?.user_metadata?.full_name ||
+    user?.user_metadata?.name ||
+    user?.email ||
+    '게스트';
+  const userEmail = user?.email || '';
+
+  const handleLogout = () => {
+    Alert.alert(
+      '로그아웃',
+      '로그아웃하시겠어요? 다시 로그인하면 같은 계정으로 들어올 수 있어요.',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '로그아웃',
+          style: 'destructive',
+          onPress: async () => {
+            await signOut();
+          },
+        },
+      ],
+    );
+  };
 
   // 첫 진입 시, 알림이 한 번도 예약된 적이 없으면 기본값으로 자동 예약
   useEffect(() => {
@@ -85,6 +111,19 @@ export default function SettingsScreen() {
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.heading}>설정</Text>
 
+      {/* 사용자 카드 */}
+      <View style={styles.userCard}>
+        <View style={styles.userAvatar}>
+          <Text style={styles.userAvatarText}>
+            {userName.slice(0, 1).toUpperCase()}
+          </Text>
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.userName}>{userName}</Text>
+          {userEmail ? <Text style={styles.userEmail}>{userEmail}</Text> : null}
+        </View>
+      </View>
+
       {/* 알림 안내 */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>알림</Text>
@@ -121,6 +160,12 @@ export default function SettingsScreen() {
 
       <TouchableOpacity style={styles.tertiaryButton} onPress={handleStop}>
         <Text style={styles.tertiaryButtonText}>알림 끄기</Text>
+      </TouchableOpacity>
+
+      <View style={styles.divider} />
+
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <Text style={styles.logoutButtonText}>로그아웃</Text>
       </TouchableOpacity>
 
       {/* 앱 정보 */}
@@ -180,6 +225,54 @@ const styles = StyleSheet.create({
   },
   tertiaryButtonText: { color: '#444', fontSize: 14 },
   buttonDisabled: { opacity: 0.5 },
+  // 사용자 카드
+  userCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 14,
+    padding: 18,
+    marginBottom: 16,
+    gap: 14,
+  },
+  userAvatar: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#2e7dc4',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  userAvatarText: {
+    color: '#ffffff',
+    fontSize: 20,
+    fontWeight: '700',
+  },
+  userName: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  userEmail: {
+    color: '#777',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  // 로그아웃
+  divider: {
+    height: 1,
+    backgroundColor: '#1a1a1a',
+    marginVertical: 18,
+  },
+  logoutButton: {
+    paddingVertical: 14,
+    alignItems: 'center',
+  },
+  logoutButtonText: {
+    color: '#cc6666',
+    fontSize: 14,
+    fontWeight: '500',
+  },
   appInfo: {
     alignItems: 'center',
     marginTop: 40,

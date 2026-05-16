@@ -8,7 +8,6 @@ import * as Notifications from 'expo-notifications';
 
 // 백그라운드 태스크 정의 (이전 버전 호환용 — 더 이상 사용 안 함)
 import { unregisterBackgroundTask } from './src/tasks/backgroundTask';
-// 시작 시 한 번 이전 등록 해제
 unregisterBackgroundTask();
 
 // 포그라운드 알림 표시 설정
@@ -26,10 +25,13 @@ import OnboardingScreen from './src/screens/OnboardingScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import LoginScreen from './src/screens/LoginScreen';
 import { getHasOnboarded } from './src/utils/storage';
+import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 
 export type RootStackParamList = {
   Onboarding: undefined;
+  Login: undefined;
   Main: undefined;
 };
 
@@ -59,20 +61,25 @@ function MainTabs() {
   );
 }
 
-export default function App() {
+function LoadingScreen() {
+  return (
+    <View style={{ flex: 1, backgroundColor: '#0f0f0f', justifyContent: 'center', alignItems: 'center' }}>
+      <ActivityIndicator color="#ffffff" />
+    </View>
+  );
+}
+
+function AppNavigator() {
   const [hasOnboarded, setHasOnboarded] = useState<boolean | null>(null);
+  const { session, loading: authLoading } = useAuth();
 
   useEffect(() => {
     getHasOnboarded().then((value) => setHasOnboarded(value));
   }, []);
 
-  // AsyncStorage 확인 중 로딩 스크린
-  if (hasOnboarded === null) {
-    return (
-      <View style={{ flex: 1, backgroundColor: '#0f0f0f', justifyContent: 'center', alignItems: 'center' }}>
-        <ActivityIndicator color="#ffffff" />
-      </View>
-    );
+  // 온보딩 여부 or 세션 복원 중
+  if (hasOnboarded === null || authLoading) {
+    return <LoadingScreen />;
   }
 
   return (
@@ -81,13 +88,22 @@ export default function App() {
       <Stack.Navigator screenOptions={{ headerShown: false }}>
         {!hasOnboarded ? (
           <Stack.Screen name="Onboarding">
-            {() => (
-              <OnboardingScreen onComplete={() => setHasOnboarded(true)} />
-            )}
+            {() => <OnboardingScreen onComplete={() => setHasOnboarded(true)} />}
           </Stack.Screen>
-        ) : null}
-        <Stack.Screen name="Main" component={MainTabs} />
+        ) : !session ? (
+          <Stack.Screen name="Login" component={LoginScreen} />
+        ) : (
+          <Stack.Screen name="Main" component={MainTabs} />
+        )}
       </Stack.Navigator>
     </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <AppNavigator />
+    </AuthProvider>
   );
 }
