@@ -15,6 +15,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '../hooks/useWeather';
 import { useMessage } from '../hooks/useMessage';
 import { useActivity } from '../hooks/useActivity';
+import { useFood } from '../hooks/useFood';
 import {
   getTimeOfDay,
   TIME_OF_DAY_KO,
@@ -99,6 +100,7 @@ export default function HomeScreen() {
   const { weather, loading: weatherLoading, error: weatherError, refetch } = useWeather();
   const { message, loading: messageLoading, error: messageError, generate } = useMessage();
   const { activity, loading: activityLoading, error: activityError, generate: generateActivity } = useActivity();
+  const { food, loading: foodLoading, error: foodError, generate: generateFood } = useFood();
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const now = new Date();
@@ -138,6 +140,10 @@ export default function HomeScreen() {
 
   const handleGenerateActivity = () => {
     if (weather) generateActivity(weather);
+  };
+
+  const handleGenerateFood = () => {
+    if (weather) generateFood(weather);
   };
 
   const handleShare = async () => {
@@ -228,6 +234,20 @@ export default function HomeScreen() {
           </View>
         )}
 
+        {/* 음식 추천 카드 */}
+        {food && (
+          <View style={styles.activityCard}>
+            <Text style={styles.cardLabel}>오늘의 음식 추천</Text>
+            <Text style={styles.activityText}>{food.text}</Text>
+          </View>
+        )}
+
+        {foodError && (
+          <View style={styles.messageErrorBox}>
+            <Text style={styles.errorText}>{foodError}</Text>
+          </View>
+        )}
+
         {/* 버튼 영역 */}
         {weather && !weatherLoading && (
           <View style={styles.btnGroup}>
@@ -255,6 +275,20 @@ export default function HomeScreen() {
               ) : (
                 <Text style={styles.activityBtnText}>
                   {activity ? '🌈 다른 활동 추천받기' : '🌈 오늘 날씨엔 뭘 하면 좋을까?'}
+                </Text>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.activityBtn, foodLoading && styles.generateBtnDisabled]}
+              onPress={handleGenerateFood}
+              disabled={foodLoading}
+            >
+              {foodLoading ? (
+                <ActivityIndicator color="rgba(255,255,255,0.7)" size="small" />
+              ) : (
+                <Text style={styles.activityBtnText}>
+                  {food ? '🍱 다른 음식 추천받기' : '🍱 오늘 같은 날씨엔 뭘 먹을까?'}
                 </Text>
               )}
             </TouchableOpacity>

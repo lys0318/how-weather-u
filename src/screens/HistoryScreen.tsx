@@ -72,6 +72,11 @@ export default function HistoryScreen() {
         <Text style={styles.count}>{messages.length}개</Text>
       </View>
 
+      {/* 7일 보존 안내 */}
+      <Text style={styles.retentionNotice}>
+        메시지는 7일간 보관되고 자동으로 삭제돼요 · 북마크는 영구 보관 ★
+      </Text>
+
       {/* 탭 */}
       <View style={styles.tabBar}>
         <TouchableOpacity
@@ -254,6 +259,13 @@ const styles = StyleSheet.create({
   count: {
     fontSize: 13,
     color: '#555',
+  },
+  retentionNotice: {
+    fontSize: 11,
+    color: '#555',
+    paddingHorizontal: 24,
+    marginBottom: 12,
+    lineHeight: 16,
   },
   // 탭
   tabBar: {

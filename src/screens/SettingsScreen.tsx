@@ -6,15 +6,9 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  Switch,
   Linking,
 } from 'react-native';
-import {
-  getIntervalHours,
-  setIntervalHours,
-  getDndRange,
-  setDndRange,
-} from '../utils/storage';
+import { getIntervalHours, getDndRange } from '../utils/storage';
 import {
   requestNotificationPermission,
   sendTestNotification,
@@ -22,67 +16,24 @@ import {
   cancelAllNotifications,
 } from '../services/notification';
 
-// ── 시간 표시 헬퍼 ─────────────────────────────────────────
-function formatHour(h: number): string {
-  if (h < 0 || h > 23) return '?시';
-  if (h === 0) return '자정';
-  if (h < 6) return `새벽 ${h}시`;
-  if (h < 12) return `오전 ${h}시`;
-  if (h === 12) return '정오';
-  if (h < 18) return `오후 ${h - 12}시`;
-  if (h < 20) return `저녁 ${h - 12}시`;
-  return `밤 ${h}시`;
-}
-
-// ── 다음 알림 예상 시각 계산 ──────────────────────────────
-function getNextNotificationLabel(
-  intervalHours: 1 | 2 | 3,
-  dndEnabled: boolean,
-  dndStart: number,
-  dndEnd: number,
-): string {
-  const now = new Date();
-  let nextHour = now.getHours() + intervalHours;
-
-  if (dndEnabled) {
-    const inDnd = (h: number) => {
-      const hh = h % 24;
-      return dndStart > dndEnd ? hh >= dndStart || hh < dndEnd : hh >= dndStart && hh < dndEnd;
-    };
-    if (inDnd(nextHour)) nextHour = dndEnd;
-  }
-
-  const displayHour = nextHour % 24;
-  const diff = nextHour - now.getHours();
-  const diffLabel = diff > 0 ? ` (약 ${diff}시간 후)` : '';
-  return `${formatHour(displayHour)}경${diffLabel}`;
-}
-
 export default function SettingsScreen() {
-  const [interval, setIntervalState] = useState<1 | 2 | 3>(2);
-  const [dndEnabled, setDndEnabled] = useState(true);
-  const [dndStart, setDndStart] = useState(1);
-  const [dndEnd, setDndEnd] = useState(6);
-  const [saving, setSaving] = useState(false);
   const [testSending, setTestSending] = useState(false);
-  const [loaded, setLoaded] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
+  // 첫 진입 시, 알림이 한 번도 예약된 적이 없으면 기본값으로 자동 예약
   useEffect(() => {
     (async () => {
-      const [iv, dnd] = await Promise.all([
-        getIntervalHours(),
-        getDndRange(),
-      ]);
-      setIntervalState(iv);
-      setDndEnabled(dnd.enabled);
-      setDndStart(dnd.start);
-      setDndEnd(dnd.end);
-      setLoaded(true);
+      try {
+        const iv = await getIntervalHours();
+        const dnd = await getDndRange();
+        // 백그라운드에서 한 번만 자동 보충 시도 (실패해도 무시)
+        await scheduleUpcomingNotifications(iv, dnd.enabled, dnd.start, dnd.end);
+      } catch {}
     })();
   }, []);
 
-  const handleSave = async () => {
-    setSaving(true);
+  const handleResetNotifications = async () => {
+    setResetting(true);
     try {
       const granted = await requestNotificationPermission();
       if (!granted) {
@@ -96,26 +47,16 @@ export default function SettingsScreen() {
         );
         return;
       }
-
-      await setIntervalHours(interval);
-      await setDndRange(dndEnabled, dndStart, dndEnd);
-
-      // 앱 종료 시에도 동작하는 OS 예약 알림으로 48개 미리 등록
-      await scheduleUpcomingNotifications(interval, dndEnabled, dndStart, dndEnd);
-
-      const intervalLabel = interval === 1 ? '1시간' : interval === 2 ? '2시간' : '3시간';
-      Alert.alert('저장 완료', `${intervalLabel}마다 날씨 알림을 받아볼게요.`);
+      const iv = await getIntervalHours();
+      const dnd = await getDndRange();
+      await scheduleUpcomingNotifications(iv, dnd.enabled, dnd.start, dnd.end);
+      Alert.alert('완료', '알림을 새로 등록했어요.');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      Alert.alert('오류', `설정 저장 실패: ${msg}`);
+      Alert.alert('오류', `알림 등록 실패: ${msg}`);
     } finally {
-      setSaving(false);
+      setResetting(false);
     }
-  };
-
-  const handleStop = async () => {
-    await cancelAllNotifications();
-    Alert.alert('알림 중지', '날씨 메시지 알림을 모두 취소했습니다.');
   };
 
   const handleTestNotification = async () => {
@@ -135,82 +76,58 @@ export default function SettingsScreen() {
     }
   };
 
-  const nextLabel = loaded
-    ? getNextNotificationLabel(interval, dndEnabled, dndStart, dndEnd)
-    : '—';
-
-  const dndDesc = dndEnabled
-    ? `${formatHour(dndStart)} ~ ${formatHour(dndEnd)} 사이엔 알림을 보내지 않아요`
-    : '방해금지가 꺼져 있어요. 언제든지 알림이 올 수 있어요.';
+  const handleStop = async () => {
+    await cancelAllNotifications();
+    Alert.alert('알림 중지', '예약된 알림을 모두 취소했습니다.');
+  };
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.heading}>설정</Text>
 
-      {/* 알림 주기 */}
+      {/* 알림 안내 */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>알림 주기</Text>
-        <View style={styles.row}>
-          {([1, 2, 3] as const).map((h) => (
-            <TouchableOpacity
-              key={h}
-              style={[styles.chip, interval === h && styles.chipActive]}
-              onPress={() => setIntervalState(h)}
-            >
-              <Text style={[styles.chipText, interval === h && styles.chipTextActive]}>
-                {h}시간
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </View>
-        <View style={styles.nextNotifRow}>
-          <Text style={styles.nextNotifLabel}>다음 알림 예상</Text>
-          <Text style={styles.nextNotifValue}>{nextLabel}</Text>
-        </View>
+        <Text style={styles.sectionTitle}>알림</Text>
+        <Text style={styles.desc}>
+          하우웨더유는 하루 중 적절한 시간대에 메시지를 받으러 오라고{'\n'}
+          살짝 알려드려요.
+        </Text>
+        <Text style={styles.subDesc}>
+          • 아침, 점심, 오후, 저녁마다 한 번씩{'\n'}
+          • 새벽 1시 ~ 오전 6시는 방해하지 않아요
+        </Text>
       </View>
 
-      {/* 방해금지 */}
-      <View style={styles.section}>
-        <View style={styles.rowBetween}>
-          <Text style={styles.sectionTitle}>방해금지 시간대</Text>
-          <Switch
-            value={dndEnabled}
-            onValueChange={setDndEnabled}
-            trackColor={{ false: '#333', true: '#555' }}
-            thumbColor={dndEnabled ? '#fff' : '#888'}
-          />
-        </View>
-        <Text style={styles.dndDesc}>{dndDesc}</Text>
-        {dndEnabled && (
-          <Text style={styles.dndDefault}>
-            기본: 새벽 1시 ~ 오전 6시
-          </Text>
-        )}
-      </View>
-
-      {/* 저장 버튼 */}
+      {/* 액션 버튼들 */}
       <TouchableOpacity
-        style={[styles.saveButton, saving && styles.saveButtonDisabled]}
-        onPress={handleSave}
-        disabled={saving}
+        style={[styles.primaryButton, resetting && styles.buttonDisabled]}
+        onPress={handleResetNotifications}
+        disabled={resetting}
       >
-        <Text style={styles.saveButtonText}>{saving ? '저장 중...' : '설정 저장 및 알림 시작'}</Text>
+        <Text style={styles.primaryButtonText}>
+          {resetting ? '등록 중...' : '알림 다시 등록하기'}
+        </Text>
       </TouchableOpacity>
 
-      {/* 테스트 알림 */}
       <TouchableOpacity
-        style={[styles.testButton, testSending && styles.saveButtonDisabled]}
+        style={[styles.secondaryButton, testSending && styles.buttonDisabled]}
         onPress={handleTestNotification}
         disabled={testSending}
       >
-        <Text style={styles.testButtonText}>
+        <Text style={styles.secondaryButtonText}>
           {testSending ? '전송 중...' : '🔔 테스트 알림 받기'}
         </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.stopButton} onPress={handleStop}>
-        <Text style={styles.stopButtonText}>알림 중지</Text>
+      <TouchableOpacity style={styles.tertiaryButton} onPress={handleStop}>
+        <Text style={styles.tertiaryButtonText}>알림 끄기</Text>
       </TouchableOpacity>
+
+      {/* 앱 정보 */}
+      <View style={styles.appInfo}>
+        <Text style={styles.appName}>하우웨더유</Text>
+        <Text style={styles.appVersion}>v1.0.0</Text>
+      </View>
     </ScrollView>
   );
 }
@@ -226,42 +143,26 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   sectionTitle: { color: '#aaa', fontSize: 13, marginBottom: 14 },
-  row: { flexDirection: 'row', gap: 10 },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  chip: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#333',
-    alignItems: 'center',
+  desc: {
+    color: '#dddddd',
+    fontSize: 14,
+    lineHeight: 22,
+    marginBottom: 12,
   },
-  chipActive: { backgroundColor: '#fff', borderColor: '#fff' },
-  chipText: { color: '#666', fontSize: 14, fontWeight: '600' },
-  chipTextActive: { color: '#000' },
-  dndDesc: { color: '#666', fontSize: 13, marginTop: 10 },
-  dndDefault: { color: '#444', fontSize: 12, marginTop: 6 },
-  nextNotifRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 14,
-    paddingTop: 12,
-    borderTopWidth: 1,
-    borderTopColor: '#2a2a2a',
+  subDesc: {
+    color: '#777',
+    fontSize: 12,
+    lineHeight: 20,
   },
-  nextNotifLabel: { color: '#555', fontSize: 12 },
-  nextNotifValue: { color: '#888', fontSize: 12 },
-  saveButton: {
+  primaryButton: {
     backgroundColor: '#ffffff',
     borderRadius: 14,
     paddingVertical: 16,
     alignItems: 'center',
     marginTop: 8,
   },
-  saveButtonDisabled: { opacity: 0.5 },
-  saveButtonText: { color: '#000', fontSize: 15, fontWeight: '700' },
-  testButton: {
+  primaryButtonText: { color: '#000', fontSize: 15, fontWeight: '700' },
+  secondaryButton: {
     backgroundColor: '#1a1a1a',
     borderRadius: 14,
     paddingVertical: 14,
@@ -270,12 +171,27 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#2a2a2a',
   },
-  testButtonText: { color: '#888', fontSize: 14 },
-  stopButton: {
+  secondaryButtonText: { color: '#888', fontSize: 14 },
+  tertiaryButton: {
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: 'center',
     marginTop: 6,
   },
-  stopButtonText: { color: '#444', fontSize: 14 },
+  tertiaryButtonText: { color: '#444', fontSize: 14 },
+  buttonDisabled: { opacity: 0.5 },
+  appInfo: {
+    alignItems: 'center',
+    marginTop: 40,
+  },
+  appName: {
+    color: 'rgba(255,255,255,0.2)',
+    fontSize: 13,
+    letterSpacing: 2,
+  },
+  appVersion: {
+    color: 'rgba(255,255,255,0.15)',
+    fontSize: 11,
+    marginTop: 4,
+  },
 });
