@@ -11,20 +11,23 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function LoginScreen() {
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, lastDebug } = useAuth();
   const [loading, setLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
     try {
       await signInWithGoogle();
-      // 성공하면 AuthContext가 세션 업데이트 → App.tsx가 자동 라우팅
     } catch (err) {
       const msg = err instanceof Error ? err.message : '로그인 중 오류가 발생했어요.';
-      Alert.alert('로그인 실패', msg);
+      Alert.alert('로그인 실패', `${msg}\n\n--- 진단 정보 ---\n${lastDebug}`);
     } finally {
       setLoading(false);
     }
+  };
+
+  const showDebug = () => {
+    Alert.alert('진단 정보', lastDebug || '(아직 시도 안 함)');
   };
 
   return (
@@ -63,6 +66,10 @@ export default function LoginScreen() {
           <Text style={styles.privacy}>
             로그인하시면 이용약관 및{'\n'}개인정보처리방침에 동의하게 돼요
           </Text>
+
+          <TouchableOpacity onPress={showDebug} style={styles.debugBtn}>
+            <Text style={styles.debugText}>진단 정보 보기</Text>
+          </TouchableOpacity>
         </View>
       </View>
     </LinearGradient>
@@ -134,5 +141,14 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 18,
     lineHeight: 16,
+  },
+  debugBtn: {
+    marginTop: 18,
+    paddingVertical: 6,
+  },
+  debugText: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.3)',
+    textDecorationLine: 'underline',
   },
 });

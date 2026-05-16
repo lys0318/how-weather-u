@@ -6,7 +6,7 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 
-// 백그라운드 태스크 정의 (이전 버전 호환용 — 더 이상 사용 안 함)
+// 백그라운드 태스크 정의 (구버전 호환용)
 import { unregisterBackgroundTask } from './src/tasks/backgroundTask';
 unregisterBackgroundTask();
 
@@ -21,17 +21,17 @@ Notifications.setNotificationHandler({
   }),
 });
 
-import OnboardingScreen from './src/screens/OnboardingScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import LoginScreen from './src/screens/LoginScreen';
+import PermissionSetupScreen from './src/screens/PermissionSetupScreen';
 import { getHasOnboarded } from './src/utils/storage';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 
 export type RootStackParamList = {
-  Onboarding: undefined;
   Login: undefined;
+  PermissionSetup: undefined;
   Main: undefined;
 };
 
@@ -77,21 +77,24 @@ function AppNavigator() {
     getHasOnboarded().then((value) => setHasOnboarded(value));
   }, []);
 
-  // 온보딩 여부 or 세션 복원 중
   if (hasOnboarded === null || authLoading) {
     return <LoadingScreen />;
   }
 
+  // 라우팅 결정:
+  // 1) 로그인 안 됨 → Login
+  // 2) 로그인됐는데 권한 설정 안 함 → PermissionSetup
+  // 3) 둘 다 OK → Main
   return (
     <NavigationContainer>
       <StatusBar style="light" />
       <Stack.Navigator screenOptions={{ headerShown: false }}>
-        {!hasOnboarded ? (
-          <Stack.Screen name="Onboarding">
-            {() => <OnboardingScreen onComplete={() => setHasOnboarded(true)} />}
-          </Stack.Screen>
-        ) : !session ? (
+        {!session ? (
           <Stack.Screen name="Login" component={LoginScreen} />
+        ) : !hasOnboarded ? (
+          <Stack.Screen name="PermissionSetup">
+            {() => <PermissionSetupScreen onDone={() => setHasOnboarded(true)} />}
+          </Stack.Screen>
         ) : (
           <Stack.Screen name="Main" component={MainTabs} />
         )}
