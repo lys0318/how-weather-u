@@ -29,15 +29,26 @@ async function createSessionFromUrl(url: string): Promise<Session | null> {
   const { params, errorCode } = QueryParams.getQueryParams(url);
   if (errorCode) throw new Error(`OAuth 에러: ${errorCode}`);
 
-  const { access_token, refresh_token } = params;
-  if (!access_token || !refresh_token) return null;
+  const { access_token, refresh_token, code } = params;
 
-  const { data, error } = await supabase.auth.setSession({
-    access_token,
-    refresh_token,
-  });
-  if (error) throw error;
-  return data.session;
+  // PKCE 플로우: ?code=xxx → exchange for session (Supabase v2 default)
+  if (code) {
+    const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    if (error) throw error;
+    return data.session;
+  }
+
+  // Implicit 플로우: #access_token=xxx → set session directly
+  if (access_token && refresh_token) {
+    const { data, error } = await supabase.auth.setSession({
+      access_token,
+      refresh_token,
+    });
+    if (error) throw error;
+    return data.session;
+  }
+
+  return null;
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -58,15 +69,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     const linkingSub = Linking.addEventListener('url', ({ url }) => {
       setLastDebug((d) => d + `\n[link] ${url.slice(0, 100)}`);
-      if (url.includes('access_token') || url.includes('error')) {
-        createSessionFromUrl(url).catch((err) => {
-          setLastDebug((d) => d + `\n[link-err] ${err.message}`);
-        });
+      if (url.includes('access_token') || url.includes('code=') || url.includes('error')) {
+        createSessionFromUrl(url)
+          .then((sess) => setLastDebug((d) => d + `\n[link-session] ${!!sess}`))
+          .catch((err) => setLastDebug((d) => d + `\n[link-err] ${err.message}`));
       }
     });
 
     Linking.getInitialURL().then((url) => {
-      if (url && (url.includes('access_token') || url.includes('error'))) {
+      if (url && (url.includes('access_token') || url.includes('code=') || url.includes('error'))) {
+        setLastDebug((d) => d + `\n[init-url] ${url.slice(0, 80)}`);
         createSessionFromUrl(url).catch(() => {});
       }
     });
