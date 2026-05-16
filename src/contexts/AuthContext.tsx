@@ -78,10 +78,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const signInWithGoogle = useCallback(async () => {
-    // Expo-AuthSession이 정확한 redirect URI 생성 (scheme + path)
+    // 가장 안정적인 redirect URI 형태 (path 없이 scheme만)
     const redirectUrl = AuthSession.makeRedirectUri({
       scheme: 'howweateryou',
-      path: 'auth/callback',
     });
 
     setLastDebug(`[start] redirect=${redirectUrl}`);
@@ -103,8 +102,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     if (result.type === 'success' && result.url) {
       const sess = await createSessionFromUrl(result.url);
       setLastDebug((d) => d + `\n[session-set] ${!!sess}`);
-    } else if (result.type === 'cancel' || result.type === 'dismiss') {
+    } else if (result.type === 'cancel') {
       return;
+    } else if (result.type === 'dismiss') {
+      // 브라우저가 콜백 매칭 없이 닫힌 경우 — 가장 흔한 원인: Google 테스트 사용자 미등록
+      throw new Error(
+        '로그인이 완료되지 않았어요.\n\n' +
+        '구글 로그인 화면에서 "Access blocked" 또는 ' +
+        '"확인되지 않은 앱" 경고가 떴나요?\n\n' +
+        '해결: https://console.cloud.google.com/auth/audience\n' +
+        '→ 테스트 사용자에 본인 이메일을 추가하고 다시 시도해주세요.'
+      );
     } else {
       throw new Error(`로그인 실패: ${result.type}`);
     }
