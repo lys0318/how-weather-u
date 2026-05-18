@@ -115,6 +115,14 @@ export default function HomeScreen() {
 
   const gradientColors = getGradient(weather?.condition ?? null, hour);
 
+  // 가장 최근 응답에서 used/limit 추출 (합산 카운트)
+  const latestUsage = [message, activity, food]
+    .filter((x): x is NonNullable<typeof x> => !!x && typeof x.used === 'number')
+    .sort((a, b) => b.generatedAt.getTime() - a.generatedAt.getTime())[0];
+  const usageText = latestUsage?.limit
+    ? `오늘 ${latestUsage.used}/${latestUsage.limit}회 사용`
+    : '메시지+활동+음식 합쳐 하루 5번까지';
+
   // 앱 열 때 예약 알림 부족하면 자동 보충
   useEffect(() => {
     (async () => {
@@ -271,7 +279,6 @@ export default function HomeScreen() {
               ) : (
                 <Text style={styles.generateBtnText}>
                   {message ? '새 메시지 받기' : '오늘의 메시지 받기'}
-                  {message?.limit ? `  (${message.used}/${message.limit})` : ''}
                 </Text>
               )}
             </TouchableOpacity>
@@ -286,7 +293,6 @@ export default function HomeScreen() {
               ) : (
                 <Text style={styles.activityBtnText}>
                   {activity ? '🌈 다른 활동 추천받기' : '🌈 오늘 날씨엔 뭘 하면 좋을까?'}
-                  {activity?.limit ? `  (${activity.used}/${activity.limit})` : ''}
                 </Text>
               )}
             </TouchableOpacity>
@@ -301,14 +307,11 @@ export default function HomeScreen() {
               ) : (
                 <Text style={styles.activityBtnText}>
                   {food ? '🍱 다른 음식 추천받기' : '🍱 오늘 같은 날씨엔 뭘 먹을까?'}
-                  {food?.limit ? `  (${food.used}/${food.limit})` : ''}
                 </Text>
               )}
             </TouchableOpacity>
 
-            <Text style={styles.limitNotice}>
-              각 기능은 하루 5번까지 무료예요
-            </Text>
+            <Text style={styles.limitNotice}>{usageText}</Text>
           </View>
         )}
 

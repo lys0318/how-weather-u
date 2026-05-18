@@ -12,11 +12,8 @@ export const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 });
 
 export type Feature = 'message' | 'activity' | 'food';
-export const DAILY_LIMIT: Record<Feature, number> = {
-  message: 5,
-  activity: 5,
-  food: 5,
-};
+// 메시지/활동/음식 합산 하루 5회
+export const DAILY_LIMIT_TOTAL = 5;
 
 /**
  * Authorization 헤더에서 JWT 추출해 사용자 검증
@@ -49,15 +46,14 @@ function kstMidnightUtc(): Date {
 }
 
 /**
- * 사용자의 오늘(KST 자정 기준) 해당 기능 사용 횟수 카운트
+ * 사용자의 오늘(KST 자정 기준) 전체 사용 횟수 카운트 (메시지+활동+음식 합산)
  */
-export async function getUsedTodayCount(userId: string, feature: Feature): Promise<number> {
+export async function getUsedTodayCount(userId: string): Promise<number> {
   const since = kstMidnightUtc().toISOString();
   const { count, error } = await supabaseAdmin
     .from('usage_log')
     .select('*', { count: 'exact', head: true })
     .eq('user_id', userId)
-    .eq('feature', feature)
     .gte('used_at', since);
   if (error) throw error;
   return count ?? 0;
@@ -74,15 +70,15 @@ export async function logUsage(userId: string, feature: Feature): Promise<void> 
 }
 
 /**
- * 제한 체크 + 기록 (atomic하지는 않지만 짧은 시간 race condition은 무시 가능)
+ * 제한 체크 + 기록 (모든 기능 합산 하루 5회)
  * @returns { ok, used, limit }  ok=false면 한도 초과
  */
 export async function checkAndLog(
   userId: string,
   feature: Feature,
 ): Promise<{ ok: boolean; used: number; limit: number }> {
-  const limit = DAILY_LIMIT[feature];
-  const used = await getUsedTodayCount(userId, feature);
+  const limit = DAILY_LIMIT_TOTAL;
+  const used = await getUsedTodayCount(userId);
   if (used >= limit) {
     return { ok: false, used, limit };
   }
