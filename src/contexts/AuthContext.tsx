@@ -151,7 +151,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     if (winner.source === 'link') {
       log(`[winner=link]`);
-      WebBrowser.dismissAuthSession();
+      // dismissAuthSession은 iOS 전용 — Android에서 호출하면 throw
+      // Android는 deep link 시 브라우저가 자동으로 닫히므로 명시적 호출 불필요
+      try { WebBrowser.dismissAuthSession(); } catch {}
       const sess = await createSessionFromUrl(winner.url);
       log(`[link-result-session] ${!!sess}`);
       return;
