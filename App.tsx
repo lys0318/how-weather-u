@@ -10,6 +10,10 @@ import * as Notifications from 'expo-notifications';
 import { unregisterBackgroundTask } from './src/tasks/backgroundTask';
 unregisterBackgroundTask();
 
+// AdMob 초기화 (네이티브 모듈 없는 빌드에선 graceful skip)
+import { initAds } from './src/services/ads';
+initAds();
+
 // 포그라운드 알림 표시 설정
 Notifications.setNotificationHandler({
   handleNotification: async () => ({

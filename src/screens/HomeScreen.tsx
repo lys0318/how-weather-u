@@ -28,6 +28,7 @@ import {
 import { saveMessage, getIntervalHours, getDndRange } from '../utils/storage';
 import WeatherAnimation from '../components/WeatherAnimation';
 import { refreshNotificationsIfNeeded } from '../services/notification';
+import { showInterstitialThenRun } from '../services/ads';
 
 const { height } = Dimensions.get('window');
 
@@ -135,15 +136,24 @@ export default function HomeScreen() {
 
   const handlePickPreference = (pref: Preference) => {
     setPickerOpen(false);
-    if (weather) generate(weather, pref);
+    if (!weather) return;
+    showInterstitialThenRun(() => {
+      generate(weather, pref);
+    });
   };
 
   const handleGenerateActivity = () => {
-    if (weather) generateActivity(weather);
+    if (!weather) return;
+    showInterstitialThenRun(() => {
+      generateActivity(weather);
+    });
   };
 
   const handleGenerateFood = () => {
-    if (weather) generateFood(weather);
+    if (!weather) return;
+    showInterstitialThenRun(() => {
+      generateFood(weather);
+    });
   };
 
   const handleShare = async () => {
@@ -261,6 +271,7 @@ export default function HomeScreen() {
               ) : (
                 <Text style={styles.generateBtnText}>
                   {message ? '새 메시지 받기' : '오늘의 메시지 받기'}
+                  {message?.limit ? `  (${message.used}/${message.limit})` : ''}
                 </Text>
               )}
             </TouchableOpacity>
@@ -275,6 +286,7 @@ export default function HomeScreen() {
               ) : (
                 <Text style={styles.activityBtnText}>
                   {activity ? '🌈 다른 활동 추천받기' : '🌈 오늘 날씨엔 뭘 하면 좋을까?'}
+                  {activity?.limit ? `  (${activity.used}/${activity.limit})` : ''}
                 </Text>
               )}
             </TouchableOpacity>
@@ -289,9 +301,14 @@ export default function HomeScreen() {
               ) : (
                 <Text style={styles.activityBtnText}>
                   {food ? '🍱 다른 음식 추천받기' : '🍱 오늘 같은 날씨엔 뭘 먹을까?'}
+                  {food?.limit ? `  (${food.used}/${food.limit})` : ''}
                 </Text>
               )}
             </TouchableOpacity>
+
+            <Text style={styles.limitNotice}>
+              각 기능은 하루 5번까지 무료예요
+            </Text>
           </View>
         )}
 
@@ -447,6 +464,12 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '600',
     letterSpacing: 0.3,
+  },
+  limitNotice: {
+    color: 'rgba(255,255,255,0.35)',
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 6,
   },
   errorArea: { alignItems: 'center', marginTop: 40, gap: 12 },
   errorText: { color: 'rgba(255,100,100,0.8)', fontSize: 13, textAlign: 'center' },

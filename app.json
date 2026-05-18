@@ -40,8 +40,15 @@
         {
           "action": "VIEW",
           "autoVerify": false,
-          "data": [{ "scheme": "howweateryou" }],
-          "category": ["BROWSABLE", "DEFAULT"]
+          "data": [
+            {
+              "scheme": "howweateryou"
+            }
+          ],
+          "category": [
+            "BROWSABLE",
+            "DEFAULT"
+          ]
         }
       ],
       "permissions": [
@@ -87,7 +94,13 @@
         "expo-background-fetch",
         {}
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-8051681065734198~5789260751"
+        }
+      ]
     ],
     "extra": {
       "eas": {

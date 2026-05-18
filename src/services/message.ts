@@ -19,11 +19,13 @@ export interface GeneratedMessage {
   text: string;
   generatedAt: Date;
   context: MessageContext;
+  used?: number;
+  limit?: number;
 }
 
 export async function generateMessage(ctx: MessageContext): Promise<GeneratedMessage> {
   const meta = CONDITION_META[ctx.condition];
-  const { text } = await callFunction<{ text: string }>('generate-message', {
+  const res = await callFunction('generate-message', {
     conditionKo: meta.ko,
     conditionEmoji: meta.emoji,
     timeOfDayKo: TIME_OF_DAY_KO[ctx.timeOfDay],
@@ -32,8 +34,10 @@ export async function generateMessage(ctx: MessageContext): Promise<GeneratedMes
   });
 
   return {
-    text,
+    text: res.text,
     generatedAt: new Date(),
     context: ctx,
+    used: res.used,
+    limit: res.limit,
   };
 }

@@ -1,12 +1,28 @@
 // Supabase Edge Function 호출 공통 헬퍼
-// 로그인된 경우 사용자 JWT 사용, 아니면 anon key (백워드 호환)
 
 import { supabase } from '../lib/supabase';
 
 const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL;
 const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY;
 
-export async function callFunction<T = { text: string }>(
+export class LimitExceededError extends Error {
+  used: number;
+  limit: number;
+  constructor(message: string, used: number, limit: number) {
+    super(message);
+    this.name = 'LimitExceededError';
+    this.used = used;
+    this.limit = limit;
+  }
+}
+
+export interface BackendResponse {
+  text: string;
+  used?: number;
+  limit?: number;
+}
+
+export async function callFunction<T extends BackendResponse = BackendResponse>(
   functionName: string,
   payload: Record<string, unknown>,
 ): Promise<T> {
@@ -14,7 +30,6 @@ export async function callFunction<T = { text: string }>(
     throw new Error('Supabase 환경변수가 설정되지 않았습니다.');
   }
 
-  // 현재 세션의 access token 가져오기 (로그인 안 되어 있으면 anon key)
   const { data: { session } } = await supabase.auth.getSession();
   const authToken = session?.access_token ?? SUPABASE_ANON_KEY;
 
@@ -29,12 +44,19 @@ export async function callFunction<T = { text: string }>(
   });
 
   if (!res.ok) {
-    let errMsg = `요청 실패 (${res.status})`;
-    try {
-      const errData = await res.json();
-      if (errData?.error) errMsg = errData.error;
-    } catch {}
-    throw new Error(errMsg);
+    let errBody: any = {};
+    try { errBody = await res.json(); } catch {}
+
+    // 한도 초과
+    if (res.status === 429 && errBody?.code === 'LIMIT_EXCEEDED') {
+      throw new LimitExceededError(
+        errBody.error ?? '오늘의 한도를 모두 사용했어요.',
+        errBody.used ?? 0,
+        errBody.limit ?? 5,
+      );
+    }
+
+    throw new Error(errBody?.error ?? `요청 실패 (${res.status})`);
   }
 
   return (await res.json()) as T;

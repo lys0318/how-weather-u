@@ -3,6 +3,7 @@
 
 import { corsHeaders } from '../_shared/cors.ts';
 import { callClaude } from '../_shared/claude.ts';
+import { requireUser, checkAndLog, limitExceededResponse } from '../_shared/limit.ts';
 
 const SYSTEM_PROMPT = `당신은 날씨와 시간대에 맞춰 메시지를 써주는 작가입니다.
 
@@ -32,6 +33,15 @@ Deno.serve(async (req) => {
   }
 
   try {
+    // 1. 사용자 인증
+    const user = await requireUser(req);
+
+    // 2. 일일 제한 체크 + 기록
+    const usage = await checkAndLog(user.id, 'message');
+    if (!usage.ok) {
+      return limitExceededResponse(usage.used, usage.limit, corsHeaders);
+    }
+
     const body = (await req.json()) as RequestBody;
 
     // 입력 검증
@@ -64,7 +74,7 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ text }),
+      JSON.stringify({ text, used: usage.used, limit: usage.limit }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (err) {

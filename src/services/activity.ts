@@ -4,11 +4,13 @@ import { callFunction } from './backend';
 export interface ActivityRecommendation {
   text: string;
   generatedAt: Date;
+  used?: number;
+  limit?: number;
 }
 
 export async function generateActivity(weather: WeatherInfo): Promise<ActivityRecommendation> {
   const hour = new Date().getHours();
-  const { text } = await callFunction<{ text: string }>('generate-activity', {
+  const res = await callFunction('generate-activity', {
     conditionKo: CONDITION_META[weather.condition].ko,
     timeOfDayKo: TIME_OF_DAY_KO[getTimeOfDay(hour)],
     hour,
@@ -17,5 +19,5 @@ export async function generateActivity(weather: WeatherInfo): Promise<ActivityRe
     tempMax: weather.tempMax,
   });
 
-  return { text, generatedAt: new Date() };
+  return { text: res.text, generatedAt: new Date(), used: res.used, limit: res.limit };
 }

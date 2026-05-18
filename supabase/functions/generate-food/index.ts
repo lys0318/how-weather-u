@@ -2,6 +2,7 @@
 
 import { corsHeaders } from '../_shared/cors.ts';
 import { callClaude } from '../_shared/claude.ts';
+import { requireUser, checkAndLog, limitExceededResponse } from '../_shared/limit.ts';
 
 const SYSTEM_PROMPT = `당신은 한국의 날씨에 어울리는 음식을 추천해주는 친한 친구입니다.
 
@@ -36,6 +37,12 @@ Deno.serve(async (req) => {
   }
 
   try {
+    const user = await requireUser(req);
+    const usage = await checkAndLog(user.id, 'food');
+    if (!usage.ok) {
+      return limitExceededResponse(usage.used, usage.limit, corsHeaders);
+    }
+
     const body = (await req.json()) as RequestBody;
 
     if (!body.conditionKo || body.temp === undefined) {
@@ -71,7 +78,7 @@ Deno.serve(async (req) => {
     });
 
     return new Response(
-      JSON.stringify({ text }),
+      JSON.stringify({ text, used: usage.used, limit: usage.limit }),
       { headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
     );
   } catch (err) {
