@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>하우웨더유 (How Weather You)</title>
+<style>
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background: linear-gradient(180deg, #0a1228 0%, #1a2350 35%, #5a3870 65%, #c36c80 90%, #f0b89e 100%);
+    color: #fff;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Pretendard', 'Apple SD Gothic Neo', sans-serif;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 100vh;
+  }
+  .card { text-align: center; padding: 48px 32px; max-width: 480px; }
+  h1 { font-size: 36px; margin: 0 0 8px; font-weight: 700; }
+  .sub { color: rgba(255,255,255,0.55); letter-spacing: 1px; font-size: 13px; margin-bottom: 32px; }
+  .desc { font-size: 15px; line-height: 1.7; margin-bottom: 32px; color: rgba(255,255,255,0.82); font-weight: 300; }
+  a {
+    display: inline-block;
+    color: #0a1228;
+    background: #fff;
+    text-decoration: none;
+    padding: 14px 28px;
+    border-radius: 14px;
+    font-weight: 600;
+    font-size: 14px;
+  }
+  .links { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .links a.secondary {
+    background: rgba(255,255,255,0.1);
+    color: #fff;
+    border: 1px solid rgba(255,255,255,0.15);
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <h1>하우웨더유</h1>
+  <div class="sub">How Weather You</div>
+  <div class="desc">
+    오늘의 날씨가 당신에게 건네는 한마디.<br>
+    AI가 날씨와 시간에 맞춰 위로·응원·조언을 들려드려요.
+  </div>
+  <div class="links">
+    <a href="./privacy-policy.html" class="secondary">개인정보처리방침</a>
+  </div>
+</div>
+</body>
+</html>
