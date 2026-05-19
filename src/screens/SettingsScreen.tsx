@@ -20,7 +20,8 @@ import { useAuth } from '../contexts/AuthContext';
 export default function SettingsScreen() {
   const [testSending, setTestSending] = useState(false);
   const [resetting, setResetting] = useState(false);
-  const { user, signOut } = useAuth();
+  const { user, signOut, deleteAccount } = useAuth();
+  const [deleting, setDeleting] = useState(false);
 
   const userName =
     user?.user_metadata?.full_name ||
@@ -40,6 +41,50 @@ export default function SettingsScreen() {
           style: 'destructive',
           onPress: async () => {
             await signOut();
+          },
+        },
+      ],
+    );
+  };
+
+  // 계정 탈퇴: 두 단계 확인 후 즉시 영구 삭제
+  const handleDeleteAccount = () => {
+    Alert.alert(
+      '계정 탈퇴',
+      '계정을 정말 탈퇴하시겠어요?\n\n' +
+        '• 계정 정보, 사용 기록, 북마크가 모두 영구 삭제돼요\n' +
+        '• 삭제된 데이터는 복구할 수 없어요\n' +
+        '• 동일 구글 계정으로 다시 가입은 가능해요',
+      [
+        { text: '취소', style: 'cancel' },
+        {
+          text: '계속',
+          style: 'destructive',
+          onPress: () => {
+            // 두 번째 확인
+            Alert.alert(
+              '마지막 확인',
+              '정말 탈퇴를 진행할까요? 이 작업은 되돌릴 수 없어요.',
+              [
+                { text: '아니요', style: 'cancel' },
+                {
+                  text: '네, 탈퇴할게요',
+                  style: 'destructive',
+                  onPress: async () => {
+                    setDeleting(true);
+                    try {
+                      await deleteAccount();
+                      // 성공 시 자동으로 로그인 화면으로 라우팅됨 (세션 클리어)
+                    } catch (e) {
+                      const msg = e instanceof Error ? e.message : String(e);
+                      Alert.alert('탈퇴 실패', `오류가 발생했어요: ${msg}`);
+                    } finally {
+                      setDeleting(false);
+                    }
+                  },
+                },
+              ],
+            );
           },
         },
       ],
@@ -168,6 +213,16 @@ export default function SettingsScreen() {
         <Text style={styles.logoutButtonText}>로그아웃</Text>
       </TouchableOpacity>
 
+      <TouchableOpacity
+        style={[styles.deleteAccountButton, deleting && styles.buttonDisabled]}
+        onPress={handleDeleteAccount}
+        disabled={deleting}
+      >
+        <Text style={styles.deleteAccountText}>
+          {deleting ? '탈퇴 처리 중...' : '계정 탈퇴'}
+        </Text>
+      </TouchableOpacity>
+
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
@@ -272,6 +327,16 @@ const styles = StyleSheet.create({
     color: '#cc6666',
     fontSize: 14,
     fontWeight: '500',
+  },
+  deleteAccountButton: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 2,
+  },
+  deleteAccountText: {
+    color: '#666',
+    fontSize: 13,
+    textDecorationLine: 'underline',
   },
   appInfo: {
     alignItems: 'center',

@@ -4,7 +4,9 @@ import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import * as AuthSession from 'expo-auth-session';
 import * as QueryParams from 'expo-auth-session/build/QueryParams';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
+import { cancelAllNotifications } from '../services/notification';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -14,6 +16,7 @@ interface AuthContextValue {
   loading: boolean;
   signInWithGoogle: () => Promise<void>;
   signOut: () => Promise<void>;
+  deleteAccount: () => Promise<void>;
   getDebug: () => string;
 }
 
@@ -180,6 +183,44 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   }, []);
 
+  /**
+   * 계정 영구 탈퇴
+   * 1) 서버: Edge Function 호출 → auth.users 삭제 (usage_log 등 cascade)
+   * 2) 로컬: AsyncStorage 비우기 + 예약 알림 모두 취소
+   * 3) 클라이언트 세션 정리 (signOut)
+   */
+  const deleteAccount = useCallback(async () => {
+    const SUPABASE_URL = process.env.EXPO_PUBLIC_SUPABASE_URL!;
+    const SUPABASE_ANON_KEY = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
+    const { data: { session: sess } } = await supabase.auth.getSession();
+    if (!sess) throw new Error('로그인된 사용자가 없습니다.');
+
+    const res = await fetch(`${SUPABASE_URL}/functions/v1/delete-account`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${sess.access_token}`,
+        apikey: SUPABASE_ANON_KEY,
+      },
+      body: JSON.stringify({}),
+    });
+    if (!res.ok) {
+      let errMsg = `탈퇴 실패 (${res.status})`;
+      try {
+        const errData = await res.json();
+        if (errData?.error) errMsg = errData.error;
+      } catch {}
+      throw new Error(errMsg);
+    }
+
+    // 로컬 데이터 정리
+    try { await cancelAllNotifications(); } catch {}
+    try { await AsyncStorage.clear(); } catch {}
+
+    // 서버 세션도 만료시키고 클라이언트 상태 클리어
+    await supabase.auth.signOut();
+  }, []);
+
   const getDebug = useCallback(() => debugRef.current, []);
 
   return (
@@ -190,6 +231,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         signInWithGoogle,
         signOut,
+        deleteAccount,
         getDebug,
       }}
     >
