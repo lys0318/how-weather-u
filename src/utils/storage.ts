@@ -128,10 +128,28 @@ export async function saveMessage(msg: GeneratedMessage, emoji: string): Promise
 
 export async function toggleBookmark(id: string): Promise<void> {
   const messages = await getMessages();
+  const target = messages.find((m) => m.id === id);
+  if (!target) return;
+
+  const newState = !target.isBookmarked;
   const updated = messages.map((m) =>
-    m.id === id ? { ...m, isBookmarked: !m.isBookmarked } : m
+    m.id === id ? { ...m, isBookmarked: newState } : m
   );
+  // 로컬 즉시 반영 (낙관적 업데이트)
   await AsyncStorage.setItem(KEYS.MESSAGES, JSON.stringify(updated));
+
+  // 클라우드 동기화 (실패해도 로컬은 유지됨)
+  try {
+    // 순환 import 방지 위해 동적 require
+    const { uploadBookmark, deleteCloudBookmark } = await import('../services/bookmarks');
+    if (newState) {
+      await uploadBookmark({ ...target, isBookmarked: true });
+    } else {
+      await deleteCloudBookmark(target.id);
+    }
+  } catch (e) {
+    console.warn('[bookmark cloud sync] failed:', e);
+  }
 }
 
 export async function getBookmarks(): Promise<StoredMessage[]> {

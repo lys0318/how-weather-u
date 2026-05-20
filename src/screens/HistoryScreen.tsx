@@ -11,18 +11,41 @@ import {
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { getMessages, toggleBookmark, StoredMessage } from '../utils/storage';
+import { fetchCloudBookmarks, cloudToStoredMessage } from '../services/bookmarks';
 
 type Tab = 'all' | 'bookmark';
 
 export default function HistoryScreen() {
   const [tab, setTab] = useState<Tab>('all');
   const [messages, setMessages] = useState<StoredMessage[]>([]);
+  const [cloudBookmarks, setCloudBookmarks] = useState<StoredMessage[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
 
   const loadMessages = useCallback(async () => {
-    const all = await getMessages();
-    setMessages(all);
+    const [local, cloud] = await Promise.all([
+      getMessages(),
+      fetchCloudBookmarks(),
+    ]);
+
+    // 클라우드 북마크 → StoredMessage 형식 + Set으로 변환 (matching용)
+    const cloudLocalIds = new Set(cloud.map((b) => b.local_id));
+
+    // 로컬 메시지의 isBookmarked를 클라우드 기준으로 보정
+    // (다른 기기에서 북마크한 경우 반영)
+    const reconciledLocal = local.map((m) => ({
+      ...m,
+      isBookmarked: cloudLocalIds.has(m.id) || m.isBookmarked,
+    }));
+
+    // 클라우드에만 있고 로컬엔 없는 북마크 (만료된 기기 변경 등)
+    const localIds = new Set(local.map((m) => m.id));
+    const cloudOnly = cloud
+      .filter((b) => !localIds.has(b.local_id))
+      .map(cloudToStoredMessage);
+
+    setMessages(reconciledLocal);
+    setCloudBookmarks([...reconciledLocal.filter((m) => m.isBookmarked), ...cloudOnly]);
     setLoading(false);
   }, []);
 
@@ -42,9 +65,23 @@ export default function HistoryScreen() {
 
   const handleBookmarkToggle = async (id: string) => {
     await toggleBookmark(id);
+    // 토글 결과를 양쪽 상태에 반영
     setMessages((prev) =>
       prev.map((m) => (m.id === id ? { ...m, isBookmarked: !m.isBookmarked } : m))
     );
+    setCloudBookmarks((prev) => {
+      const target = prev.find((m) => m.id === id);
+      if (target) {
+        // 북마크 해제 → 리스트에서 제거
+        return prev.filter((m) => m.id !== id);
+      }
+      // 새로 북마크 → 전체 메시지에서 찾아서 추가
+      const fromMessages = messages.find((m) => m.id === id);
+      if (fromMessages) {
+        return [{ ...fromMessages, isBookmarked: true }, ...prev];
+      }
+      return prev;
+    });
   };
 
   const handleShare = async (msg: StoredMessage) => {
@@ -54,7 +91,7 @@ export default function HistoryScreen() {
     });
   };
 
-  const displayed = tab === 'all' ? messages : messages.filter((m) => m.isBookmarked);
+  const displayed = tab === 'all' ? messages : cloudBookmarks;
 
   if (loading) {
     return (
@@ -69,12 +106,16 @@ export default function HistoryScreen() {
       {/* 헤더 */}
       <View style={styles.header}>
         <Text style={styles.heading}>메시지 기록</Text>
-        <Text style={styles.count}>{messages.length}개</Text>
+        <Text style={styles.count}>
+          {tab === 'all' ? `${messages.length}개` : `★ ${cloudBookmarks.length}개`}
+        </Text>
       </View>
 
-      {/* 7일 보존 안내 */}
+      {/* 보존 안내 */}
       <Text style={styles.retentionNotice}>
-        메시지는 7일간 보관되고 자동으로 삭제돼요 · 북마크는 영구 보관 ★
+        {tab === 'all'
+          ? '메시지는 7일간 보관되고 자동으로 삭제돼요'
+          : '북마크는 클라우드에 영구 보관돼요 ☁️★'}
       </Text>
 
       {/* 탭 */}

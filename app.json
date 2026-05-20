@@ -94,13 +94,7 @@
         "expo-background-fetch",
         {}
       ],
-      "expo-web-browser",
-      [
-        "react-native-google-mobile-ads",
-        {
-          "androidAppId": "ca-app-pub-8051681065734198~5789260751"
-        }
-      ]
+      "expo-web-browser"
     ],
     "extra": {
       "eas": {

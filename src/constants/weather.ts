@@ -29,8 +29,11 @@ export interface WeatherInfo {
   conditionKo: string;
   emoji: string;
   temp: number;
+  feelsLike: number;     // 체감 온도
   tempMin: number;
   tempMax: number;
+  humidity: number;      // 습도 (%)
+  windSpeed: number;     // 풍속 (m/s)
   city: string;
   description: string;
 }

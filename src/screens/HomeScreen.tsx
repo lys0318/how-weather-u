@@ -10,6 +10,7 @@ import {
   Dimensions,
   Modal,
   Pressable,
+  AppState,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '../hooks/useWeather';
@@ -97,14 +98,114 @@ const PREF_OPTIONS: { key: Preference; desc: string }[] = [
   { key: 'advice',  desc: '날씨에 맞춰 지금 해볼만한 행동 추천' },
 ];
 
+// ── 로딩 중 보여줄 재밌는 문구들 ─────────────────────────────
+const LOADING_MESSAGES = [
+  '오늘 날씨를 살펴보고 있어요...',
+  '감성을 길어 올리는 중...',
+  '단어 하나하나 골라 담는 중...',
+  '하늘에 귀를 기울이는 중...',
+  '당신에게 어울리는 한마디를 찾는 중...',
+  '오늘에 딱 맞는 표현을 짜는 중...',
+];
+
+// ── 친절한 에러 메시지 변환 ────────────────────────────────
+function prettifyError(raw: string | null): string | null {
+  if (!raw) return null;
+  if (raw.includes('한도') || raw.includes('LIMIT')) {
+    return '🌙 오늘의 5회를 모두 사용하셨어요.\n내일 다시 만나요!';
+  }
+  if (raw.includes('Network') || raw.includes('네트워크') || raw.includes('fetch')) {
+    return '📡 인터넷 연결을 확인해주세요';
+  }
+  if (raw.includes('401') || raw.includes('인증')) {
+    return '🔐 로그인이 만료됐어요. 다시 로그인해주세요';
+  }
+  if (raw.includes('429')) {
+    return '⏳ 너무 빠르게 요청하셨어요. 잠시 후 다시 시도해주세요';
+  }
+  if (raw.includes('500') || raw.includes('Claude') || raw.includes('서버')) {
+    return '😢 잠시 서버가 바빠요. 잠시 후 다시 시도해주세요';
+  }
+  return raw;
+}
+
+// ── 사용 횟수 점 시각화 ────────────────────────────────────
+function UsageDots({ used, limit, color }: { used: number; limit: number; color: string }) {
+  return (
+    <View style={dotStyles.row}>
+      {Array.from({ length: limit }).map((_, i) => (
+        <View
+          key={i}
+          style={[
+            dotStyles.dot,
+            { backgroundColor: i < used ? color : 'transparent', borderColor: color },
+          ]}
+        />
+      ))}
+    </View>
+  );
+}
+
+const dotStyles = StyleSheet.create({
+  row: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 8,
+  },
+  dot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    borderWidth: 1.2,
+  },
+});
+
 export default function HomeScreen() {
   const { weather, loading: weatherLoading, error: weatherError, refetch } = useWeather();
   const { message, loading: messageLoading, error: messageError, generate } = useMessage();
   const { activity, loading: activityLoading, error: activityError, generate: generateActivity } = useActivity();
   const { food, loading: foodLoading, error: foodError, generate: generateFood } = useFood();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
+  const [now, setNow] = useState<Date>(() => new Date());
 
-  const now = new Date();
+  // ── 시간 자동 동기화 ────────────────────────────────────
+  // 1) 분이 바뀔 때마다 갱신
+  // 2) 앱이 백그라운드 → 포그라운드 복귀 시 즉시 갱신
+  useEffect(() => {
+    // 다음 분 경계에 맞춰 첫 갱신을 정렬 (UX 자연스러움)
+    const msUntilNextMinute = 60_000 - (new Date().getSeconds() * 1000 + new Date().getMilliseconds());
+    let intervalId: ReturnType<typeof setInterval> | null = null;
+    const firstTimer = setTimeout(() => {
+      setNow(new Date());
+      intervalId = setInterval(() => setNow(new Date()), 60_000);
+    }, msUntilNextMinute);
+
+    // 포그라운드 복귀 시 즉시 갱신
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setNow(new Date());
+    });
+
+    return () => {
+      clearTimeout(firstTimer);
+      if (intervalId) clearInterval(intervalId);
+      sub.remove();
+    };
+  }, []);
+
+  // 로딩 중일 때 문구 2.5초마다 회전
+  const anyLoading = messageLoading || activityLoading || foodLoading;
+  useEffect(() => {
+    if (!anyLoading) return;
+    setLoadingMsgIdx(Math.floor(Math.random() * LOADING_MESSAGES.length));
+    const id = setInterval(() => {
+      setLoadingMsgIdx((i) => (i + 1) % LOADING_MESSAGES.length);
+    }, 2500);
+    return () => clearInterval(id);
+  }, [anyLoading]);
+  const loadingMsg = LOADING_MESSAGES[loadingMsgIdx];
+
   const hour = now.getHours();
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const month = now.getMonth() + 1;
@@ -216,6 +317,32 @@ export default function HomeScreen() {
             </Text>
             <Text style={[styles.weatherCondition, { color: tc.secondary }]}>{weather.conditionKo}</Text>
             <Text style={[styles.weatherCity, { color: tc.muted }]}>{weather.city}</Text>
+
+            {/* 추가 날씨 정보: 체감 / 습도 / 풍속 */}
+            <View style={styles.weatherDetailsRow}>
+              <View style={styles.weatherDetailItem}>
+                <Text style={[styles.weatherDetailLabel, { color: tc.muted }]}>체감</Text>
+                <Text style={[styles.weatherDetailValue, { color: tc.secondary }]}>{weather.feelsLike}°</Text>
+              </View>
+              <View style={styles.weatherDetailDivider} />
+              <View style={styles.weatherDetailItem}>
+                <Text style={[styles.weatherDetailLabel, { color: tc.muted }]}>습도</Text>
+                <Text style={[styles.weatherDetailValue, { color: tc.secondary }]}>{weather.humidity}%</Text>
+              </View>
+              <View style={styles.weatherDetailDivider} />
+              <View style={styles.weatherDetailItem}>
+                <Text style={[styles.weatherDetailLabel, { color: tc.muted }]}>바람</Text>
+                <Text style={[styles.weatherDetailValue, { color: tc.secondary }]}>{weather.windSpeed}m/s</Text>
+              </View>
+            </View>
+          </View>
+        )}
+
+        {/* 로딩 중 문구 — 생성 중 어떤 거든 */}
+        {anyLoading && (
+          <View style={styles.loadingCard}>
+            <ActivityIndicator color="rgba(255,255,255,0.6)" size="small" />
+            <Text style={styles.loadingCardText}>{loadingMsg}</Text>
           </View>
         )}
 
@@ -233,8 +360,8 @@ export default function HomeScreen() {
         )}
 
         {messageError && (
-          <View style={styles.messageErrorBox}>
-            <Text style={styles.errorText}>{messageError}</Text>
+          <View style={styles.errorCard}>
+            <Text style={styles.errorTextBig}>{prettifyError(messageError)}</Text>
           </View>
         )}
 
@@ -247,8 +374,8 @@ export default function HomeScreen() {
         )}
 
         {activityError && (
-          <View style={styles.messageErrorBox}>
-            <Text style={styles.errorText}>{activityError}</Text>
+          <View style={styles.errorCard}>
+            <Text style={styles.errorTextBig}>{prettifyError(activityError)}</Text>
           </View>
         )}
 
@@ -261,8 +388,8 @@ export default function HomeScreen() {
         )}
 
         {foodError && (
-          <View style={styles.messageErrorBox}>
-            <Text style={styles.errorText}>{foodError}</Text>
+          <View style={styles.errorCard}>
+            <Text style={styles.errorTextBig}>{prettifyError(foodError)}</Text>
           </View>
         )}
 
@@ -311,7 +438,15 @@ export default function HomeScreen() {
               )}
             </TouchableOpacity>
 
-            <Text style={styles.limitNotice}>{usageText}</Text>
+            {/* 사용 횟수 점 시각화 */}
+            <View style={styles.usageContainer}>
+              <UsageDots
+                used={latestUsage?.used ?? 0}
+                limit={latestUsage?.limit ?? 5}
+                color={tc.muted}
+              />
+              <Text style={styles.limitNotice}>{usageText}</Text>
+            </View>
           </View>
         )}
 
@@ -473,6 +608,77 @@ const styles = StyleSheet.create({
     fontSize: 11,
     textAlign: 'center',
     marginTop: 6,
+  },
+  usageContainer: {
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  // 추가 날씨 정보
+  weatherDetailsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 18,
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 12,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  weatherDetailItem: {
+    alignItems: 'center',
+    flex: 1,
+    gap: 2,
+  },
+  weatherDetailLabel: {
+    fontSize: 10,
+    letterSpacing: 1,
+  },
+  weatherDetailValue: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  weatherDetailDivider: {
+    width: 1,
+    height: 20,
+    backgroundColor: 'rgba(255,255,255,0.1)',
+  },
+  // 로딩 카드
+  loadingCard: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.05)',
+    borderRadius: 16,
+    paddingVertical: 18,
+    paddingHorizontal: 22,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 14,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.06)',
+  },
+  loadingCardText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 13,
+    flex: 1,
+    fontWeight: '300',
+  },
+  // 에러 카드
+  errorCard: {
+    width: '100%',
+    backgroundColor: 'rgba(255,80,80,0.08)',
+    borderRadius: 16,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: 'rgba(255,80,80,0.18)',
+  },
+  errorTextBig: {
+    color: 'rgba(255,180,180,0.95)',
+    fontSize: 14,
+    lineHeight: 21,
+    textAlign: 'center',
   },
   errorArea: { alignItems: 'center', marginTop: 40, gap: 12 },
   errorText: { color: 'rgba(255,100,100,0.8)', fontSize: 13, textAlign: 'center' },

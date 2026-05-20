@@ -2,11 +2,42 @@
 // - 네이티브 모듈이 없는 빌드(예: 구버전 APK)에서도 graceful degrade
 //   → 광고 못 보이면 그냥 바로 callback 실행
 // - 광고를 미리 로드해두고, 호출 시 즉시 표시 → 다음 광고 다시 로드
+// - 하루 첫 호출은 광고를 보여주지 않음 (선물 같은 느낌)
 
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { __DEV__ } from './_env';
 
+const FREE_DAILY_KEY = 'lastAdFreeDate';
+
+function kstTodayString(): string {
+  // KST 자정 기준 yyyy-mm-dd
+  const now = new Date();
+  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
+  const y = kst.getUTCFullYear();
+  const m = String(kst.getUTCMonth() + 1).padStart(2, '0');
+  const d = String(kst.getUTCDate()).padStart(2, '0');
+  return `${y}-${m}-${d}`;
+}
+
+/**
+ * 오늘 처음 호출인지 확인 + 호출 시 즉시 기록
+ * @returns true면 광고 skip 대상 (오늘 첫 호출)
+ */
+async function isFirstCallOfDay(): Promise<boolean> {
+  try {
+    const today = kstTodayString();
+    const last = await AsyncStorage.getItem(FREE_DAILY_KEY);
+    if (last === today) return false; // 오늘 이미 한 번 사용
+    await AsyncStorage.setItem(FREE_DAILY_KEY, today);
+    return true; // 오늘 첫 호출
+  } catch {
+    return false;
+  }
+}
+
 // 네이티브 모듈을 안전하게 require — 없으면 null로 두고 모든 호출을 skip
-let admob: typeof import('react-native-google-mobile-ads') | null = null;
+// 패키지가 설치 안 됐을 수도 있으므로 any 타입으로 처리
+let admob: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   admob = require('react-native-google-mobile-ads');
@@ -67,8 +98,16 @@ export async function initAds(): Promise<void> {
 /**
  * 전면 광고를 띄우고, 닫히면 callback 실행
  * - 광고 로드 안 됐거나 모듈 없으면 즉시 callback 실행 (UX 끊김 방지)
+ * - 오늘의 첫 호출은 광고 없이 바로 실행 (하루 1회 선물)
  */
-export function showInterstitialThenRun(callback: () => void): void {
+export async function showInterstitialThenRun(callback: () => void): Promise<void> {
+  // 오늘 첫 호출이면 광고 skip
+  const isFirst = await isFirstCallOfDay();
+  if (isFirst) {
+    callback();
+    return;
+  }
+
   if (!admob || !nativeReady || !interstitial || !interstitialReady) {
     // 광고 못 띄움 → 그냥 실행
     callback();
