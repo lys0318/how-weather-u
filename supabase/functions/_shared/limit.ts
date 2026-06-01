@@ -12,8 +12,8 @@ export const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 });
 
 export type Feature = 'message' | 'activity' | 'food';
-// 메시지/활동/음식 합산 하루 5회
-export const DAILY_LIMIT_TOTAL = 5;
+// 메시지/활동/음식 합산 하루 3회 (Claude API 비용 절감)
+export const DAILY_LIMIT_TOTAL = 3;
 
 /**
  * Authorization 헤더에서 JWT 추출해 사용자 검증
@@ -60,6 +60,44 @@ export async function getUsedTodayCount(userId: string): Promise<number> {
 }
 
 /**
+ * 사용자의 오늘 보상형 광고 시청 횟수
+ * - 테이블이 아직 마이그레이션 안 됐을 수도 있으니 방어적으로 0 반환
+ */
+export async function getAdRewardsToday(userId: string): Promise<number> {
+  try {
+    const since = kstMidnightUtc().toISOString();
+    const { count, error } = await supabaseAdmin
+      .from('ad_rewards')
+      .select('*', { count: 'exact', head: true })
+      .eq('user_id', userId)
+      .gte('earned_at', since);
+    if (error) return 0; // 테이블 없거나 권한 문제 시 — 보너스 0
+    return count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * 오늘의 실효 한도 = 기본 한도 + 광고 시청 보너스
+ */
+export async function getEffectiveLimit(userId: string): Promise<number> {
+  const bonus = await getAdRewardsToday(userId);
+  return DAILY_LIMIT_TOTAL + bonus;
+}
+
+/**
+ * 광고 시청 보상 기록 추가
+ * - 테이블 없으면 에러 throw (클라이언트에 알려야 함)
+ */
+export async function grantAdReward(userId: string, adUnitId?: string): Promise<void> {
+  const { error } = await supabaseAdmin
+    .from('ad_rewards')
+    .insert({ user_id: userId, ad_unit_id: adUnitId ?? null });
+  if (error) throw error;
+}
+
+/**
  * 사용 기록 추가
  */
 export async function logUsage(userId: string, feature: Feature): Promise<void> {
@@ -70,14 +108,15 @@ export async function logUsage(userId: string, feature: Feature): Promise<void> 
 }
 
 /**
- * 제한 체크 + 기록 (모든 기능 합산 하루 5회)
+ * 제한 체크 + 기록 (모든 기능 합산 하루 3회)
  * @returns { ok, used, limit }  ok=false면 한도 초과
  */
 export async function checkAndLog(
   userId: string,
   feature: Feature,
 ): Promise<{ ok: boolean; used: number; limit: number }> {
-  const limit = DAILY_LIMIT_TOTAL;
+  // 실효 한도 = 기본 + 광고 보너스
+  const limit = await getEffectiveLimit(userId);
   const used = await getUsedTodayCount(userId);
   if (used >= limit) {
     return { ok: false, used, limit };
