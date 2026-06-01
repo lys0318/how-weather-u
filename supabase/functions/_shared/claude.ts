@@ -2,12 +2,16 @@
 // 사용 모델 / 캐싱 등을 일관되게 처리
 
 const CLAUDE_API_URL = 'https://api.anthropic.com/v1/messages';
+// 기본 모델: 메시지(품질 중요)는 Sonnet 사용
 export const MODEL = 'claude-sonnet-4-6';
+// 활동/음식 등 경량 추천용 — 비용 약 1/12
+export const MODEL_HAIKU = 'claude-haiku-4-5';
 
 export interface ClaudeCallParams {
   systemPrompt: string;
   userPrompt: string;
   maxTokens?: number;
+  model?: string;
 }
 
 export interface ClaudeResponse {
@@ -29,7 +33,7 @@ export async function callClaude(params: ClaudeCallParams): Promise<ClaudeRespon
       'anthropic-beta': 'prompt-caching-2024-07-31',
     },
     body: JSON.stringify({
-      model: MODEL,
+      model: params.model ?? MODEL,
       max_tokens: params.maxTokens ?? 250,
       system: [
         {
