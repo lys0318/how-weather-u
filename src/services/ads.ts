@@ -47,8 +47,8 @@ const USE_TEST_ADS = true;
 
 // 실제 광고 단위 ID (USE_TEST_ADS=false일 때만 사용)
 const REAL_INTERSTITIAL_ID = 'ca-app-pub-8051681065734198/8755169596';
-// 보상형 — 출시 전 AdMob 콘솔에서 만들어서 진짜 ID로 교체 필요
-const REAL_REWARDED_ID = ''; // TODO: AdMob 콘솔에서 발급 후 입력
+// 보상형 — AdMob 콘솔에서 발급 ("충전 보상형")
+const REAL_REWARDED_ID = 'ca-app-pub-8051681065734198/3369583147';
 
 let interstitial: any = null;
 let interstitialReady = false;
