@@ -1,9 +1,11 @@
 import * as Location from 'expo-location';
 import {
   WeatherInfo,
+  ForecastSlot,
   getConditionFromId,
   CONDITION_META,
 } from '../constants/weather';
+import { fetchKmaWeather, isInKorea } from './kma';
 
 const API_KEY = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
 const BASE_URL = 'https://api.openweathermap.org/data/2.5';
@@ -25,13 +27,39 @@ export async function requestLocationPermission(): Promise<boolean> {
 }
 
 export async function getCurrentCoords(): Promise<{ lat: number; lon: number }> {
+  // High 정확도(GPS): 약 10m 오차. Balanced(100m)보다 정확하지만 배터리 약간 더 씀.
+  // 날씨 앱 특성상 시/동을 정확히 구분해야 해서 High 사용.
   const location = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.Balanced,
+    accuracy: Location.Accuracy.High,
   });
   return {
     lat: location.coords.latitude,
     lon: location.coords.longitude,
   };
+}
+
+/**
+ * 좌표 → 한국 행정구역 문자열 (예: "안양시 박달동")
+ * - expo-location의 reverseGeocodeAsync 사용 (OS 기본 geocoder, 인터넷 필요)
+ * - 한국 주소가 안 나오면 빈 문자열 반환 → 호출자가 fallback 처리
+ */
+export async function reverseGeocodeKo(lat: number, lon: number): Promise<string> {
+  try {
+    const results = await Location.reverseGeocodeAsync({ latitude: lat, longitude: lon });
+    if (!results || results.length === 0) return '';
+    const r = results[0];
+    // 한국 주소 우선 처리
+    // - city: "수원시", subregion: "수원시", region: "경기도"
+    // - district: "팔달구", street: "세류동", name: "세류동 123"
+    // 시/구/동 조합으로 표시
+    const city = r.city || r.subregion || '';
+    // 동(neighborhood) 정보는 district 또는 street에 들어오는 경우가 있음
+    const dong = r.district || r.street || r.name || '';
+    if (city && dong && city !== dong) return `${city} ${dong}`;
+    return city || dong || '';
+  } catch {
+    return '';
+  }
 }
 
 export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
@@ -47,7 +75,25 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
 
   const { lat, lon } = await getCurrentCoords();
 
-  // 현재 날씨 + 48시간 예보 (16개 × 3시간 간격)
+  // 행정구역(시/동) 먼저 조회 — 어느 소스를 쓰든 도시명 표시에 사용
+  const koPlace = await reverseGeocodeKo(lat, lon);
+
+  // ── 1순위: 한국이면 기상청(KMA) — 가장 정확 ──────────────
+  if (isInKorea(lat, lon)) {
+    try {
+      const kma = await fetchKmaWeather(lat, lon);
+      if (kma) {
+        const result: WeatherInfo = { ...kma, city: koPlace || kma.city || '내 위치' };
+        weatherCache = { data: result, fetchedAt: Date.now() };
+        return result;
+      }
+    } catch {
+      // 기상청 실패 → OpenWeather로 폴백
+    }
+  }
+
+  // ── 2순위: OpenWeather (해외 또는 기상청 실패 시) ─────────
+  // 현재 날씨 + 48시간 예보 동시 요청
   const [res, forecastRes] = await Promise.all([
     fetch(`${BASE_URL}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=kr`),
     fetch(`${BASE_URL}/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&cnt=16`),
@@ -71,6 +117,8 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
   //   가장 가까운 24시간 데이터로 fallback
   let tempMin = Math.round(data.main.temp);
   let tempMax = Math.round(data.main.temp);
+  // 향후 12시간 예보 슬롯 (3시간 간격 × 4개)
+  let forecastSummary: ForecastSlot[] = [];
 
   if (forecastRes.ok) {
     try {
@@ -78,8 +126,24 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
       type ForecastItem = {
         dt: number;
         main: { temp: number; temp_min: number; temp_max: number };
+        weather: { id: number }[];
+        pop?: number;
       };
       const list = forecastData.list as ForecastItem[];
+
+      // ── 향후 12시간 (4슬롯) 예보 요약 ─────────────────
+      forecastSummary = list.slice(0, 4).map((it) => {
+        const dt = new Date(it.dt * 1000);
+        // KST 시각으로 변환 (UTC+9)
+        const kstHour = (dt.getUTCHours() + 9) % 24;
+        const cond = getConditionFromId(it.weather[0]?.id ?? 800);
+        return {
+          hour: kstHour,
+          conditionKo: CONDITION_META[cond].ko,
+          temp: Math.round(it.main.temp),
+          pop: it.pop ?? 0,
+        };
+      });
 
       // KST 기준 "오늘 끝(자정)" 계산
       const nowKst = new Date(Date.now() + 9 * 60 * 60 * 1000);
@@ -123,8 +187,11 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
     tempMax,
     humidity: Math.round(data.main.humidity ?? 0),
     windSpeed: Math.round((data.wind?.speed ?? 0) * 10) / 10,
-    city: data.name,
+    // 한국 행정구역(시/동)이 잡히면 그걸 우선 사용 (예: "안양시 박달동")
+    // 못 잡으면 OpenWeather가 준 city 이름 fallback (예: "Anyang")
+    city: koPlace || data.name,
     description: data.weather[0].description,
+    forecast: forecastSummary.length > 0 ? forecastSummary : undefined,
   };
 
   weatherCache = { data: result, fetchedAt: Date.now() };

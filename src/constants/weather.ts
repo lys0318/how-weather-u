@@ -24,6 +24,13 @@ export const PREFERENCE_EMOJI: Record<Preference, string> = {
   advice:  '💡',
 };
 
+export interface ForecastSlot {
+  hour: number;           // KST 0~23
+  conditionKo: string;    // "비", "맑음" 등
+  temp: number;
+  pop: number;            // 강수 확률 0~1
+}
+
 export interface WeatherInfo {
   condition: WeatherCondition;
   conditionKo: string;
@@ -36,6 +43,9 @@ export interface WeatherInfo {
   windSpeed: number;     // 풍속 (m/s)
   city: string;
   description: string;
+  // 향후 ~12시간 예보 요약 (활동/음식 추천에 사용)
+  // 3시간 간격으로 최대 4개 슬롯
+  forecast?: ForecastSlot[];
 }
 
 // OpenWeatherMap weather ID → 앱 내부 condition 매핑
