@@ -11,7 +11,20 @@ const KEYS = {
   DO_NOT_DISTURB_END: 'dndEnd',     // 방해금지 종료 시각 (0~23)
   MESSAGES: 'messages',
   BOOKMARKS: 'bookmarks',
+  NOTIFICATIONS_ENABLED: 'notificationsEnabled', // 사용자가 명시적으로 알림 끈 상태인지
 } as const;
+
+// ─── 알림 활성화 (사용자 의도) ───────────────────────────
+// 사용자가 "알림 끄기" 눌러서 명시적으로 끈 상태인지 추적.
+// 기본값 true: 첫 사용 시 알림 동작.
+// false면 자동 재예약 로직이 건너뜀.
+export async function getNotificationsEnabled(): Promise<boolean> {
+  const v = await AsyncStorage.getItem(KEYS.NOTIFICATIONS_ENABLED);
+  return v !== 'false';
+}
+export async function setNotificationsEnabled(value: boolean): Promise<void> {
+  await AsyncStorage.setItem(KEYS.NOTIFICATIONS_ENABLED, value ? 'true' : 'false');
+}
 
 // ─── 온보딩 ────────────────────────────────────────────
 export async function getHasOnboarded(): Promise<boolean> {
@@ -75,6 +88,8 @@ export async function setDndRange(enabled: boolean, start: number, end: number):
 }
 
 // ─── 메시지 히스토리 ────────────────────────────────────
+export type EntryKind = 'message' | 'activity' | 'food';
+
 export interface StoredMessage {
   id: string;
   text: string;
@@ -82,6 +97,7 @@ export interface StoredMessage {
   weatherCondition: string;
   weatherEmoji: string;
   isBookmarked: boolean;
+  kind?: EntryKind; // 없으면 'message'로 간주 (구버전 호환)
 }
 
 // 메시지 자동 보존 기간: 7일 (북마크된 메시지는 무기한 보존)
@@ -117,10 +133,35 @@ export async function saveMessage(msg: GeneratedMessage, emoji: string): Promise
     weatherCondition: msg.context.condition,
     weatherEmoji: emoji,
     isBookmarked: false,
+    kind: 'message',
   };
 
   const existing = await getMessages();
   // 최대 100개 유지
+  const updated = [stored, ...existing].slice(0, 100);
+  await AsyncStorage.setItem(KEYS.MESSAGES, JSON.stringify(updated));
+  return stored;
+}
+
+/**
+ * 활동/음식 추천 텍스트를 히스토리에 저장
+ */
+export async function saveEntry(
+  text: string,
+  emoji: string,
+  weatherCondition: string,
+  kind: EntryKind,
+): Promise<StoredMessage> {
+  const stored: StoredMessage = {
+    id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    text,
+    generatedAt: new Date().toISOString(),
+    weatherCondition,
+    weatherEmoji: emoji,
+    isBookmarked: false,
+    kind,
+  };
+  const existing = await getMessages();
   const updated = [stored, ...existing].slice(0, 100);
   await AsyncStorage.setItem(KEYS.MESSAGES, JSON.stringify(updated));
   return stored;

@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -8,10 +8,15 @@ import {
   Share,
   ActivityIndicator,
   RefreshControl,
+  Alert,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { getMessages, toggleBookmark, StoredMessage } from '../utils/storage';
 import { fetchCloudBookmarks, cloudToStoredMessage } from '../services/bookmarks';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import { ShareableCard } from '../components/ShareableCard';
+import { TIME_OF_DAY_KO, DAY_OF_WEEK_KO, getTimeOfDay, WeatherCondition, CONDITION_META } from '../constants/weather';
 
 type Tab = 'all' | 'bookmark';
 
@@ -84,11 +89,52 @@ export default function HistoryScreen() {
     });
   };
 
+  // 공유용 카드 ref + 현재 공유 중인 메시지
+  const cardRef = useRef<View>(null);
+  const [shareMsg, setShareMsg] = useState<StoredMessage | null>(null);
+
   const handleShare = async (msg: StoredMessage) => {
-    const date = formatDate(msg.generatedAt);
-    await Share.share({
-      message: `${msg.weatherEmoji} ${date}\n\n${msg.text}\n\n— 하우웨더유 (How Weather You)`,
-    });
+    try {
+      // 카드 데이터 세팅 → 다음 프레임에 렌더링
+      setShareMsg(msg);
+      await new Promise((resolve) => setTimeout(resolve, 80)); // 렌더 대기
+
+      if (!cardRef.current) throw new Error('카드 ref 비어있음');
+      const uri = await captureRef(cardRef, {
+        format: 'png',
+        quality: 0.95,
+        result: 'tmpfile',
+      });
+
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        const date = formatDate(msg.generatedAt);
+        await Share.share({
+          message: `${msg.weatherEmoji} ${date}\n\n${msg.text}\n\n— 하우웨더유 (How Weather You)`,
+        });
+        return;
+      }
+      await Sharing.shareAsync(uri, {
+        mimeType: 'image/png',
+        dialogTitle: '하우웨더유 메시지 공유',
+        UTI: 'public.png',
+      });
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : '공유 실패';
+      Alert.alert('공유 실패', `${errMsg}\n\n텍스트로 공유할게요.`);
+      const date = formatDate(msg.generatedAt);
+      await Share.share({
+        message: `${msg.weatherEmoji} ${date}\n\n${msg.text}\n\n— 하우웨더유 (How Weather You)`,
+      }).catch(() => {});
+    }
+  };
+
+  // 공유 카드용 라벨 헬퍼
+  const buildDateLabel = (iso: string): string => {
+    const d = new Date(iso);
+    const days = ['일', '월', '화', '수', '목', '금', '토'];
+    const tod = TIME_OF_DAY_KO[getTimeOfDay(d.getHours())];
+    return `${d.getMonth() + 1}월 ${d.getDate()}일 ${days[d.getDay()]}요일 ${tod}`;
   };
 
   const displayed = tab === 'all' ? messages : cloudBookmarks;
@@ -161,6 +207,17 @@ export default function HistoryScreen() {
           )}
         />
       )}
+
+      {/* 공유용 카드 (캡처용 invisible 렌더링) */}
+      {shareMsg && (
+        <ShareableCard
+          ref={cardRef}
+          text={shareMsg.text}
+          weatherEmoji={shareMsg.weatherEmoji}
+          conditionKo={CONDITION_META[shareMsg.weatherCondition as WeatherCondition]?.ko}
+          dateLabel={buildDateLabel(shareMsg.generatedAt)}
+        />
+      )}
     </View>
   );
 }
@@ -196,6 +253,13 @@ function MessageCard({ message, showDateHeader, onBookmarkToggle, onShare }: Car
         <View style={styles.cardTop}>
           <View style={styles.cardMeta}>
             <Text style={styles.weatherEmoji}>{message.weatherEmoji}</Text>
+            {message.kind && message.kind !== 'message' && (
+              <View style={styles.kindTag}>
+                <Text style={styles.kindTagText}>
+                  {message.kind === 'activity' ? '🏃 활동' : '🍱 음식'}
+                </Text>
+              </View>
+            )}
             <Text style={styles.time}>{formatTime(message.generatedAt)}</Text>
           </View>
           <View style={styles.cardActions}>
@@ -366,6 +430,17 @@ const styles = StyleSheet.create({
   },
   weatherEmoji: {
     fontSize: 20,
+  },
+  kindTag: {
+    backgroundColor: '#2a2a2a',
+    borderRadius: 8,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+  },
+  kindTagText: {
+    fontSize: 11,
+    color: '#aaa',
+    fontWeight: '600',
   },
   time: {
     fontSize: 12,

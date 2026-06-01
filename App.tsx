@@ -5,14 +5,23 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
+import { Ionicons } from '@expo/vector-icons';
 
 // 백그라운드 태스크 정의 (구버전 호환용)
 import { unregisterBackgroundTask } from './src/tasks/backgroundTask';
 unregisterBackgroundTask();
 
+// Sentry 에러 모니터링 (DSN 없으면 skip)
+import { initSentry } from './src/lib/sentry';
+initSentry();
+
 // AdMob 초기화 (네이티브 모듈 없는 빌드에선 graceful skip)
 import { initAds } from './src/services/ads';
 initAds();
+
+// 인앱 업데이트 체크 (새 버전 있으면 강제 업데이트)
+import { checkForUpdate } from './src/services/inAppUpdate';
+checkForUpdate();
 
 // 포그라운드 알림 표시 설정
 Notifications.setNotificationHandler({
@@ -58,9 +67,36 @@ function MainTabs() {
         tabBarInactiveTintColor: '#666666',
       }}
     >
-      <Tab.Screen name="Home" component={HomeScreen} options={{ title: '홈' }} />
-      <Tab.Screen name="History" component={HistoryScreen} options={{ title: '히스토리' }} />
-      <Tab.Screen name="Settings" component={SettingsScreen} options={{ title: '설정' }} />
+      <Tab.Screen
+        name="Home"
+        component={HomeScreen}
+        options={{
+          title: '홈',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="home" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="History"
+        component={HistoryScreen}
+        options={{
+          title: '히스토리',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="time" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Settings"
+        component={SettingsScreen}
+        options={{
+          title: '설정',
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="settings" size={size} color={color} />
+          ),
+        }}
+      />
     </Tab.Navigator>
   );
 }

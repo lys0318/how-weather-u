@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,8 @@ import {
   Modal,
   Pressable,
   AppState,
+  Alert,
+  RefreshControl,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useWeather } from '../hooks/useWeather';
@@ -26,10 +28,14 @@ import {
   PREFERENCE_KO,
   PREFERENCE_EMOJI,
 } from '../constants/weather';
-import { saveMessage, getIntervalHours, getDndRange } from '../utils/storage';
+import { saveMessage, saveEntry, getIntervalHours, getDndRange } from '../utils/storage';
 import WeatherAnimation from '../components/WeatherAnimation';
 import { refreshNotificationsIfNeeded } from '../services/notification';
-import { showInterstitialThenRun } from '../services/ads';
+import { showInterstitialThenRun, showRewardedAndGrant, isRewardedAvailable } from '../services/ads';
+import { fetchTodayUsage, UsageInfo } from '../services/usage';
+import { captureRef } from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import { ShareableCard } from '../components/ShareableCard';
 
 const { height } = Dimensions.get('window');
 
@@ -109,10 +115,14 @@ const LOADING_MESSAGES = [
 ];
 
 // ── 친절한 에러 메시지 변환 ────────────────────────────────
+function isLimitError(raw: string | null): boolean {
+  if (!raw) return false;
+  return raw.includes('한도') || raw.includes('LIMIT');
+}
 function prettifyError(raw: string | null): string | null {
   if (!raw) return null;
-  if (raw.includes('한도') || raw.includes('LIMIT')) {
-    return '🌙 오늘의 5회를 모두 사용하셨어요.\n내일 다시 만나요!';
+  if (isLimitError(raw)) {
+    return '🌙 오늘의 한도를 모두 사용하셨어요.\n광고 보고 더 받아보거나, 내일 다시 만나요!';
   }
   if (raw.includes('Network') || raw.includes('네트워크') || raw.includes('fetch')) {
     return '📡 인터넷 연결을 확인해주세요';
@@ -169,6 +179,7 @@ export default function HomeScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [now, setNow] = useState<Date>(() => new Date());
+  const [serverUsage, setServerUsage] = useState<UsageInfo | null>(null);
 
   // ── 시간 자동 동기화 ────────────────────────────────────
   // 1) 분이 바뀔 때마다 갱신
@@ -182,9 +193,12 @@ export default function HomeScreen() {
       intervalId = setInterval(() => setNow(new Date()), 60_000);
     }, msUntilNextMinute);
 
-    // 포그라운드 복귀 시 즉시 갱신
+    // 포그라운드 복귀 시 즉시 갱신 + 사용량 재조회
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') setNow(new Date());
+      if (state === 'active') {
+        setNow(new Date());
+        fetchTodayUsage().then((u) => { if (u) setServerUsage(u); });
+      }
     });
 
     return () => {
@@ -192,6 +206,11 @@ export default function HomeScreen() {
       if (intervalId) clearInterval(intervalId);
       sub.remove();
     };
+  }, []);
+
+  // 마운트 시 오늘 사용량 즉시 조회 (메시지 생성 안 해도 잔여 횟수 표시)
+  useEffect(() => {
+    fetchTodayUsage().then((u) => { if (u) setServerUsage(u); });
   }, []);
 
   // 로딩 중일 때 문구 2.5초마다 회전
@@ -220,9 +239,13 @@ export default function HomeScreen() {
   const latestUsage = [message, activity, food]
     .filter((x): x is NonNullable<typeof x> => !!x && typeof x.used === 'number')
     .sort((a, b) => b.generatedAt.getTime() - a.generatedAt.getTime())[0];
-  const usageText = latestUsage?.limit
-    ? `오늘 ${latestUsage.used}/${latestUsage.limit}회 사용`
-    : '메시지+활동+음식 합쳐 하루 5번까지';
+  // 우선순위: 방금 생성한 응답 > 서버 조회 > fallback 안내
+  const displayUsage = latestUsage?.limit
+    ? { used: latestUsage.used as number, limit: latestUsage.limit as number }
+    : serverUsage;
+  const usageText = displayUsage
+    ? `오늘 ${displayUsage.used}/${displayUsage.limit}회 사용`
+    : '메시지+활동+음식 합쳐 하루 3번까지';
 
   // 앱 열 때 예약 알림 부족하면 자동 보충
   useEffect(() => {
@@ -241,35 +264,199 @@ export default function HomeScreen() {
     }
   }, [message]);
 
+  // 활동 추천 저장
+  useEffect(() => {
+    if (activity && weather) {
+      saveEntry(activity.text, weather.emoji, weather.condition, 'activity').catch(() => {});
+    }
+  }, [activity]);
+
+  // 음식 추천 저장
+  useEffect(() => {
+    if (food && weather) {
+      saveEntry(food.text, weather.emoji, weather.condition, 'food').catch(() => {});
+    }
+  }, [food]);
+
   const openPicker = () => setPickerOpen(true);
+
+  const cardRef = useRef<View>(null);
+  const [sharing, setSharing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [watchingAd, setWatchingAd] = useState(false);
+  // 한도 초과 시 광고 본 뒤 자동 실행할 생성 동작 보관
+  const pendingGenRef = useRef<(() => void) | null>(null);
+  // "충전하기" 버튼으로 미리 광고 본 경우 → 다음 생성 1회는 전면 광고 생략
+  const skipNextInterstitialRef = useRef(false);
+
+  /**
+   * 생성 트리거 — 광고 정책 분기
+   * - 한도 이내: 전면 광고 → 생성 (메시지 첫 회는 무료)
+   * - 한도 초과: 전면 광고 건너뛰고 바로 보상형 광고 → 다 보면 자동 생성
+   */
+  const triggerGenerate = useCallback(
+    async (fn: () => void, isMessage: boolean) => {
+      pendingGenRef.current = fn;
+      const overLimit = !!displayUsage && displayUsage.used >= displayUsage.limit;
+
+      if (overLimit) {
+        // 보상형 광고 → 충전 → 자동 생성 (재클릭 불필요)
+        if (watchingAd) return;
+        setWatchingAd(true);
+        try {
+          const result = await showRewardedAndGrant();
+          if (result) {
+            setServerUsage(result);
+            fn(); // 광고 끝나면 바로 생성
+          } else {
+            Alert.alert(
+              '광고를 불러올 수 없어요',
+              '잠시 후 다시 시도해주세요. (광고를 끝까지 봐야 이용할 수 있어요)',
+            );
+          }
+        } finally {
+          setWatchingAd(false);
+        }
+      } else if (skipNextInterstitialRef.current) {
+        // 직전에 "충전하기"로 이미 광고를 봤으면 전면 광고 생략하고 바로 생성
+        skipNextInterstitialRef.current = false;
+        fn();
+      } else {
+        // 한도 이내 → 전면 광고 후 생성
+        showInterstitialThenRun(fn, isMessage);
+      }
+    },
+    [displayUsage, watchingAd],
+  );
 
   const handlePickPreference = (pref: Preference) => {
     setPickerOpen(false);
     if (!weather) return;
-    showInterstitialThenRun(() => {
-      generate(weather, pref);
-    });
+    triggerGenerate(() => generate(weather, pref), true);
   };
 
   const handleGenerateActivity = () => {
     if (!weather) return;
-    showInterstitialThenRun(() => {
-      generateActivity(weather);
-    });
+    triggerGenerate(() => generateActivity(weather), false);
   };
 
   const handleGenerateFood = () => {
     if (!weather) return;
-    showInterstitialThenRun(() => {
-      generateFood(weather);
-    });
+    triggerGenerate(() => generateFood(weather), false);
   };
+
+  // 맨 아래 "광고 보고 1회 충전하기" 전용 — 충전만 하고 자유롭게 생성하도록 (자동 생성 X)
+  const handleChargeOnly = useCallback(async () => {
+    if (watchingAd) return;
+    setWatchingAd(true);
+    try {
+      const result = await showRewardedAndGrant();
+      if (result) {
+        setServerUsage(result);
+        // 방금 광고를 봤으니, 다음 생성 1회는 전면 광고 생략
+        skipNextInterstitialRef.current = true;
+        Alert.alert(
+          '충전 완료 🎁',
+          `+1회 충전됐어요!\n원하는 메시지·활동·음식을 자유롭게 생성해보세요.`,
+        );
+      } else {
+        Alert.alert(
+          '광고를 불러올 수 없어요',
+          '잠시 후 다시 시도해주세요. (광고를 끝까지 봐야 충전돼요)',
+        );
+      }
+    } finally {
+      setWatchingAd(false);
+    }
+  }, [watchingAd]);
+
+  // (에러 카드) 광고 보고 추가 이용 → 직전 시도한 생성 자동 실행
+  const handleWatchAdForCredit = useCallback(async () => {
+    if (watchingAd) return;
+    setWatchingAd(true);
+    try {
+      const result = await showRewardedAndGrant();
+      if (result) {
+        setServerUsage(result);
+        // 직전에 시도한 생성 동작이 있으면 자동 실행 (버튼 재클릭 불필요)
+        if (pendingGenRef.current) {
+          pendingGenRef.current();
+        } else {
+          Alert.alert(
+            '충전 완료 🎁',
+            `+1회 충전됐어요!\n오늘 ${result.used}/${result.limit}회 사용 가능`,
+          );
+        }
+      } else {
+        Alert.alert(
+          '광고를 불러올 수 없어요',
+          '잠시 후 다시 시도해주세요. (광고를 끝까지 봐야 충전돼요)',
+        );
+      }
+    } finally {
+      setWatchingAd(false);
+    }
+  }, [watchingAd]);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+    try {
+      // 날씨 새로 가져오기 (캐시 무시)
+      await refetch();
+      // 시간 갱신 (그라디언트/인사말 즉시 반영)
+      setNow(new Date());
+      // 오늘 사용량 재조회
+      fetchTodayUsage().then((u) => { if (u) setServerUsage(u); });
+      // 예약 알림 보충 시도 (실패해도 무시)
+      try {
+        const [iv, dnd] = await Promise.all([getIntervalHours(), getDndRange()]);
+        await refreshNotificationsIfNeeded(iv, dnd.enabled, dnd.start, dnd.end);
+      } catch {}
+    } finally {
+      setRefreshing(false);
+    }
+  }, [refetch]);
 
   const handleShare = async () => {
     if (!message || !weather) return;
-    await Share.share({
-      message: `${weather.emoji} ${month}월 ${day}일 ${dayOfWeek} ${timeOfDay}\n\n${message.text}\n\n— 하우웨더유 (How Weather You)`,
-    });
+    setSharing(true);
+    try {
+      // 다음 프레임까지 대기 (카드가 완전히 렌더링되도록)
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
+
+      // 카드 캡처
+      if (!cardRef.current) throw new Error('카드 ref가 비어있어요');
+      const uri = await captureRef(cardRef, {
+        format: 'png',
+        quality: 0.95,
+        result: 'tmpfile',
+      });
+      if (!uri) throw new Error('캡처 결과가 비어있어요');
+
+      // 공유
+      const canShare = await Sharing.isAvailableAsync();
+      if (!canShare) {
+        await Share.share({
+          message: `${weather.emoji} ${month}월 ${day}일 ${dayOfWeek} ${timeOfDay}\n\n${message.text}\n\n— 하우웨더유 (How Weather You)`,
+        });
+        return;
+      }
+
+      await Sharing.shareAsync(uri, {
+        mimeType: 'image/png',
+        dialogTitle: '하우웨더유 메시지 공유',
+        UTI: 'public.png',
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? `${e.message}\n${e.stack?.slice(0, 200) ?? ''}` : String(e);
+      console.error('[share] failed:', e);
+      Alert.alert('공유 실패', `${msg}\n\n텍스트로 공유할게요.`);
+      await Share.share({
+        message: `${weather.emoji} ${month}월 ${day}일 ${dayOfWeek} ${timeOfDay}\n\n${message.text}\n\n— 하우웨더유 (How Weather You)`,
+      }).catch(() => {});
+    } finally {
+      setSharing(false);
+    }
   };
 
   return (
@@ -280,6 +467,15 @@ export default function HomeScreen() {
         style={styles.scroll}
         contentContainerStyle={styles.container}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor="rgba(255,255,255,0.6)"
+            colors={['rgba(255,255,255,0.8)']}
+            progressBackgroundColor="rgba(255,255,255,0.1)"
+          />
+        }
       >
         {/* 날짜/시간 */}
         <View style={styles.topBar}>
@@ -353,15 +549,49 @@ export default function HomeScreen() {
               {PREFERENCE_EMOJI[message.context.preference]} {PREFERENCE_KO[message.context.preference]} 메시지
             </Text>
             <Text style={styles.messageText}>{message.text}</Text>
-            <TouchableOpacity onPress={handleShare} style={styles.shareBtn}>
-              <Text style={styles.shareBtnText}>공유하기 ↑</Text>
+            <TouchableOpacity
+              onPress={handleShare}
+              style={styles.shareBtn}
+              disabled={sharing}
+            >
+              {sharing ? (
+                <ActivityIndicator color="rgba(255,255,255,0.6)" size="small" />
+              ) : (
+                <Text style={styles.shareBtnText}>공유하기 ↑</Text>
+              )}
             </TouchableOpacity>
           </View>
+        )}
+
+        {/* 공유용 카드 — opacity 0 으로 안 보이지만 렌더링됨 (캡처용) */}
+        {message && weather && (
+          <ShareableCard
+            ref={cardRef}
+            text={message.text}
+            weatherEmoji={weather.emoji}
+            conditionKo={weather.conditionKo}
+            dateLabel={`${month}월 ${day}일 ${dayOfWeek} ${timeOfDay}`}
+            toneLabel={`${PREFERENCE_EMOJI[message.context.preference]} ${PREFERENCE_KO[message.context.preference]} 메시지`}
+            condition={weather.condition}
+          />
         )}
 
         {messageError && (
           <View style={styles.errorCard}>
             <Text style={styles.errorTextBig}>{prettifyError(messageError)}</Text>
+            {isLimitError(messageError) && (
+              <TouchableOpacity
+                style={[styles.rewardAdBtn, { marginTop: 16 }, watchingAd && styles.generateBtnDisabled]}
+                onPress={handleWatchAdForCredit}
+                disabled={watchingAd}
+              >
+                {watchingAd ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <Text style={styles.rewardAdBtnText}>🎁 광고 보고 추가로 더 이용하기</Text>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -376,6 +606,19 @@ export default function HomeScreen() {
         {activityError && (
           <View style={styles.errorCard}>
             <Text style={styles.errorTextBig}>{prettifyError(activityError)}</Text>
+            {isLimitError(activityError) && (
+              <TouchableOpacity
+                style={[styles.rewardAdBtn, { marginTop: 16 }, watchingAd && styles.generateBtnDisabled]}
+                onPress={handleWatchAdForCredit}
+                disabled={watchingAd}
+              >
+                {watchingAd ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <Text style={styles.rewardAdBtnText}>🎁 광고 보고 추가로 더 이용하기</Text>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -390,6 +633,19 @@ export default function HomeScreen() {
         {foodError && (
           <View style={styles.errorCard}>
             <Text style={styles.errorTextBig}>{prettifyError(foodError)}</Text>
+            {isLimitError(foodError) && (
+              <TouchableOpacity
+                style={[styles.rewardAdBtn, { marginTop: 16 }, watchingAd && styles.generateBtnDisabled]}
+                onPress={handleWatchAdForCredit}
+                disabled={watchingAd}
+              >
+                {watchingAd ? (
+                  <ActivityIndicator color="#ffffff" size="small" />
+                ) : (
+                  <Text style={styles.rewardAdBtnText}>🎁 광고 보고 추가로 더 이용하기</Text>
+                )}
+              </TouchableOpacity>
+            )}
           </View>
         )}
 
@@ -441,11 +697,28 @@ export default function HomeScreen() {
             {/* 사용 횟수 점 시각화 */}
             <View style={styles.usageContainer}>
               <UsageDots
-                used={latestUsage?.used ?? 0}
-                limit={latestUsage?.limit ?? 5}
+                used={displayUsage?.used ?? 0}
+                limit={displayUsage?.limit ?? 3}
                 color={tc.muted}
               />
               <Text style={styles.limitNotice}>{usageText}</Text>
+
+              {/* 한도 도달 시 — 광고 보고 충전 (충전만, 이후 자유롭게 생성) */}
+              {displayUsage && displayUsage.used >= displayUsage.limit && (
+                <TouchableOpacity
+                  style={[styles.rewardAdBtn, watchingAd && styles.generateBtnDisabled]}
+                  onPress={handleChargeOnly}
+                  disabled={watchingAd}
+                >
+                  {watchingAd ? (
+                    <ActivityIndicator color="#ffffff" size="small" />
+                  ) : (
+                    <Text style={styles.rewardAdBtnText}>
+                      🎁 광고 보고 1회 충전하기
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              )}
             </View>
           </View>
         )}
@@ -612,6 +885,20 @@ const styles = StyleSheet.create({
   usageContainer: {
     alignItems: 'center',
     marginTop: 8,
+  },
+  rewardAdBtn: {
+    marginTop: 14,
+    backgroundColor: 'rgba(255,255,255,0.12)',
+    borderRadius: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 22,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.25)',
+  },
+  rewardAdBtnText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
   // 추가 날씨 정보
   weatherDetailsRow: {

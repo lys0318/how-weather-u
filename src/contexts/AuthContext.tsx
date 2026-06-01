@@ -7,6 +7,7 @@ import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { cancelAllNotifications } from '../services/notification';
+import { setUserContext } from '../lib/sentry';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -77,6 +78,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const { data: sub } = supabase.auth.onAuthStateChange((event, newSession) => {
       log(`[evt] ${event} session=${!!newSession}`);
       setSession(newSession);
+      // Sentry에도 사용자 컨텍스트 전달 (에러 발생 시 어떤 사용자인지 보임)
+      setUserContext(newSession?.user?.id ?? null, newSession?.user?.email);
     });
 
     const linkingSub = Linking.addEventListener('url', ({ url }) => {

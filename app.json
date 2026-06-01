@@ -3,7 +3,7 @@
     "name": "하우웨더유",
     "slug": "howweateryou",
     "scheme": "howweateryou",
-    "version": "1.0.0",
+    "version": "1.0.11",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -31,7 +31,7 @@
     },
     "android": {
       "package": "com.howweatheryou.app",
-      "versionCode": 1,
+      "versionCode": 12,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f0f0f"
@@ -94,7 +94,14 @@
         "expo-background-fetch",
         {}
       ],
-      "expo-web-browser"
+      "expo-web-browser",
+      "@sentry/react-native",
+      [
+        "react-native-google-mobile-ads",
+        {
+          "androidAppId": "ca-app-pub-3940256099942544~3347511713"
+        }
+      ]
     ],
     "extra": {
       "eas": {

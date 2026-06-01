@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+import { getNotificationsEnabled } from '../utils/storage';
 
 export async function requestNotificationPermission(): Promise<boolean> {
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -93,6 +94,16 @@ function isInDnd(hour: number, start: number, end: number): boolean {
 }
 
 /**
+ * 동시 호출 방지 락 (module-level).
+ * HomeScreen 마운트 + SettingsScreen 마운트 + Pull-to-refresh 등이
+ * 동시에 scheduleUpcomingNotifications를 호출할 때,
+ * 두 loop이 cancelAll → 새로 schedule 하는 사이의 race로
+ * 같은 시각 근처에 알림이 2~3개씩 중복 예약되는 버그가 있었음.
+ * 락으로 단일 실행 보장.
+ */
+let schedulingLock: Promise<void> | null = null;
+
+/**
  * 앱이 종료된 상태에서도 알림이 오도록
  * OS AlarmManager 기반 Date 트리거 알림 48개 예약
  * → expo-background-fetch 보다 훨씬 안정적
@@ -103,47 +114,63 @@ export async function scheduleUpcomingNotifications(
   dndStart: number,
   dndEnd: number,
 ): Promise<void> {
-  // 기존 예약 알림 전부 취소
-  await Notifications.cancelAllScheduledNotificationsAsync();
+  // 이미 다른 호출이 진행 중이면 그 결과를 기다린 뒤 종료
+  // (이 호출은 중복 작업이므로 새로 schedule 하지 않음)
+  if (schedulingLock) {
+    try { await schedulingLock; } catch {}
+    return;
+  }
 
-  let nextTime = new Date();
-  let scheduled = 0;
-  let attempts = 0;
-  const MAX = 48; // 최대 예약 개수
-  const MAX_ATTEMPTS = 200; // 무한루프 방지
+  schedulingLock = (async () => {
+    // 기존 예약 알림 전부 취소
+    await Notifications.cancelAllScheduledNotificationsAsync();
 
-  while (scheduled < MAX && attempts < MAX_ATTEMPTS) {
-    attempts++;
-    nextTime = new Date(nextTime.getTime() + intervalHours * 60 * 60 * 1000);
-    const hour = nextTime.getHours();
+    let nextTime = new Date();
+    let scheduled = 0;
+    let attempts = 0;
+    const MAX = 48; // 최대 예약 개수
+    const MAX_ATTEMPTS = 200; // 무한루프 방지
 
-    // DND 시간대면 건너뜀
-    if (dndEnabled && isInDnd(hour, dndStart, dndEnd)) continue;
+    while (scheduled < MAX && attempts < MAX_ATTEMPTS) {
+      attempts++;
+      nextTime = new Date(nextTime.getTime() + intervalHours * 60 * 60 * 1000);
+      const hour = nextTime.getHours();
 
-    try {
-      const { title, body } = getNotificationContent(hour);
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title,
-          body,
-          sound: false,
-        },
-        // expo-notifications 0.32.x 정식 트리거 포맷
-        trigger: {
-          type: Notifications.SchedulableTriggerInputTypes.DATE,
-          date: nextTime,
-        },
-      });
-      scheduled++;
-    } catch (err) {
-      // 개별 알림 실패는 무시하고 다음으로
-      console.warn('[scheduleUpcomingNotifications] skip:', err);
+      // DND 시간대면 건너뜀
+      if (dndEnabled && isInDnd(hour, dndStart, dndEnd)) continue;
+
+      try {
+        const { title, body } = getNotificationContent(hour);
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title,
+            body,
+            sound: false,
+          },
+          // expo-notifications 0.32.x 정식 트리거 포맷
+          trigger: {
+            type: Notifications.SchedulableTriggerInputTypes.DATE,
+            date: nextTime,
+          },
+        });
+        scheduled++;
+      } catch (err) {
+        // 개별 알림 실패는 무시하고 다음으로
+        console.warn('[scheduleUpcomingNotifications] skip:', err);
+      }
     }
+  })();
+
+  try {
+    await schedulingLock;
+  } finally {
+    schedulingLock = null;
   }
 }
 
 /**
  * 남은 예약 알림이 적으면 자동으로 재예약 (앱 실행 시 호출)
+ * — 사용자가 명시적으로 알림을 끈 상태(notificationsEnabled=false)면 건너뜀
  */
 export async function refreshNotificationsIfNeeded(
   intervalHours: 1 | 2 | 3,
@@ -151,9 +178,13 @@ export async function refreshNotificationsIfNeeded(
   dndStart: number,
   dndEnd: number,
 ): Promise<void> {
+  // 사용자가 명시적으로 끈 상태면 손대지 않음
+  const enabled = await getNotificationsEnabled();
+  if (!enabled) return;
+
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-  // 5개 미만으로 남으면 && 이전에 설정한 적 있을 때만 재예약
-  if (scheduled.length > 0 && scheduled.length < 5) {
+  // 5개 미만으로 남으면 자동 보충 (첫 사용 시 0개여도 셋업)
+  if (scheduled.length < 5) {
     await scheduleUpcomingNotifications(intervalHours, dndEnabled, dndStart, dndEnd);
   }
 }

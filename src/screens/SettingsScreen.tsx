@@ -7,21 +7,30 @@ import {
   ScrollView,
   Alert,
   Linking,
+  Switch,
 } from 'react-native';
-import { getIntervalHours, getDndRange } from '../utils/storage';
+import {
+  getIntervalHours,
+  getDndRange,
+  setNotificationsEnabled,
+  getNotificationsEnabled,
+} from '../utils/storage';
 import {
   requestNotificationPermission,
   sendTestNotification,
   scheduleUpcomingNotifications,
   cancelAllNotifications,
+  refreshNotificationsIfNeeded,
 } from '../services/notification';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function SettingsScreen() {
   const [testSending, setTestSending] = useState(false);
-  const [resetting, setResetting] = useState(false);
   const { user, signOut, deleteAccount } = useAuth();
   const [deleting, setDeleting] = useState(false);
+  // 알림 활성화 상태 (Switch에 바인딩)
+  const [notifEnabled, setNotifEnabled] = useState<boolean>(true);
+  const [notifToggling, setNotifToggling] = useState(false);
 
   const userName =
     user?.user_metadata?.full_name ||
@@ -91,42 +100,57 @@ export default function SettingsScreen() {
     );
   };
 
-  // 첫 진입 시, 알림이 한 번도 예약된 적이 없으면 기본값으로 자동 예약
+  // 진입 시 알림 자동 보충 + Switch 초기 상태 로드
   useEffect(() => {
     (async () => {
       try {
-        const iv = await getIntervalHours();
-        const dnd = await getDndRange();
-        // 백그라운드에서 한 번만 자동 보충 시도 (실패해도 무시)
-        await scheduleUpcomingNotifications(iv, dnd.enabled, dnd.start, dnd.end);
+        const [iv, dnd, enabled] = await Promise.all([
+          getIntervalHours(),
+          getDndRange(),
+          getNotificationsEnabled(),
+        ]);
+        setNotifEnabled(enabled);
+        await refreshNotificationsIfNeeded(iv, dnd.enabled, dnd.start, dnd.end);
       } catch {}
     })();
   }, []);
 
-  const handleResetNotifications = async () => {
-    setResetting(true);
+  /**
+   * 알림 ON/OFF 토글
+   * - ON: 권한 요청 → 플래그 true → 48개 예약
+   * - OFF: 플래그 false → 모든 예약 취소
+   */
+  const handleToggleNotifications = async (newValue: boolean) => {
+    if (notifToggling) return;
+    setNotifToggling(true);
     try {
-      const granted = await requestNotificationPermission();
-      if (!granted) {
-        Alert.alert(
-          '알림 권한 필요',
-          '알림 권한이 없어요.',
-          [
+      if (newValue) {
+        // 켜기
+        const granted = await requestNotificationPermission();
+        if (!granted) {
+          Alert.alert('알림 권한 필요', '알림 권한이 없어요.', [
             { text: '설정 앱 열기', onPress: () => Linking.openSettings() },
             { text: '취소', style: 'cancel' },
-          ],
-        );
-        return;
+          ]);
+          // Switch는 자동 복귀 (상태 안 바꿈)
+          return;
+        }
+        await setNotificationsEnabled(true);
+        const iv = await getIntervalHours();
+        const dnd = await getDndRange();
+        await scheduleUpcomingNotifications(iv, dnd.enabled, dnd.start, dnd.end);
+        setNotifEnabled(true);
+      } else {
+        // 끄기
+        await setNotificationsEnabled(false);
+        await cancelAllNotifications();
+        setNotifEnabled(false);
       }
-      const iv = await getIntervalHours();
-      const dnd = await getDndRange();
-      await scheduleUpcomingNotifications(iv, dnd.enabled, dnd.start, dnd.end);
-      Alert.alert('완료', '알림을 새로 등록했어요.');
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      Alert.alert('오류', `알림 등록 실패: ${msg}`);
+      Alert.alert('오류', `알림 설정 변경 실패: ${msg}`);
     } finally {
-      setResetting(false);
+      setNotifToggling(false);
     }
   };
 
@@ -147,9 +171,21 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleStop = async () => {
-    await cancelAllNotifications();
-    Alert.alert('알림 중지', '예약된 알림을 모두 취소했습니다.');
+  // 피드백 / 버그 신고 (Google Forms)
+  const FEEDBACK_URL =
+    'https://docs.google.com/forms/d/e/1FAIpQLSd6BzHAmmq7897H8AYbajAAz17YRVNs9KbIhTCZK-vTllMBLw/viewform?usp=dialog';
+  const handleFeedback = async () => {
+    try {
+      const supported = await Linking.canOpenURL(FEEDBACK_URL);
+      if (!supported) {
+        Alert.alert('오류', '브라우저를 열 수 없어요.');
+        return;
+      }
+      await Linking.openURL(FEEDBACK_URL);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert('오류', `피드백 페이지 열기 실패: ${msg}`);
+    }
   };
 
   return (
@@ -182,17 +218,29 @@ export default function SettingsScreen() {
         </Text>
       </View>
 
-      {/* 액션 버튼들 */}
-      <TouchableOpacity
-        style={[styles.primaryButton, resetting && styles.buttonDisabled]}
-        onPress={handleResetNotifications}
-        disabled={resetting}
-      >
-        <Text style={styles.primaryButtonText}>
-          {resetting ? '등록 중...' : '알림 다시 등록하기'}
-        </Text>
-      </TouchableOpacity>
+      {/* 알림 ON/OFF 토글 */}
+      <View style={styles.notifToggleCard}>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.notifToggleTitle}>푸시 알림</Text>
+          <Text
+            style={[
+              styles.notifToggleStatus,
+              { color: notifEnabled ? '#7ec9ff' : '#888' },
+            ]}
+          >
+            {notifEnabled ? '알림이 활성화됨' : '알림이 해제됨'}
+          </Text>
+        </View>
+        <Switch
+          value={notifEnabled}
+          onValueChange={handleToggleNotifications}
+          disabled={notifToggling}
+          trackColor={{ false: '#2a2a2a', true: '#3a7fb8' }}
+          thumbColor={notifEnabled ? '#ffffff' : '#777'}
+        />
+      </View>
 
+      {/* 테스트 알림 */}
       <TouchableOpacity
         style={[styles.secondaryButton, testSending && styles.buttonDisabled]}
         onPress={handleTestNotification}
@@ -203,9 +251,15 @@ export default function SettingsScreen() {
         </Text>
       </TouchableOpacity>
 
-      <TouchableOpacity style={styles.tertiaryButton} onPress={handleStop}>
-        <Text style={styles.tertiaryButtonText}>알림 끄기</Text>
+      <View style={styles.divider} />
+
+      {/* 피드백 / 버그 신고 */}
+      <TouchableOpacity style={styles.feedbackButton} onPress={handleFeedback}>
+        <Text style={styles.feedbackButtonText}>💬 버그 신고 / 개선 의견 보내기</Text>
       </TouchableOpacity>
+      <Text style={styles.feedbackHint}>
+        의견 주시면 빠르게 반영할게요!
+      </Text>
 
       <View style={styles.divider} />
 
@@ -226,7 +280,7 @@ export default function SettingsScreen() {
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
-        <Text style={styles.appVersion}>v1.0.0</Text>
+        <Text style={styles.appVersion}>v1.0.11</Text>
       </View>
     </ScrollView>
   );
@@ -318,6 +372,44 @@ const styles = StyleSheet.create({
     height: 1,
     backgroundColor: '#1a1a1a',
     marginVertical: 18,
+  },
+  notifToggleCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1a1a1a',
+    borderRadius: 14,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
+    marginBottom: 10,
+    gap: 12,
+  },
+  notifToggleTitle: {
+    color: '#ffffff',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+  notifToggleStatus: {
+    fontSize: 12,
+    marginTop: 4,
+  },
+  feedbackButton: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 14,
+    paddingVertical: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#2a2a2a',
+  },
+  feedbackButtonText: {
+    color: '#d4a8e8',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  feedbackHint: {
+    color: '#555',
+    fontSize: 11,
+    textAlign: 'center',
+    marginTop: 8,
   },
   logoutButton: {
     paddingVertical: 14,
