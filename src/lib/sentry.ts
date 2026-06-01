@@ -57,12 +57,14 @@ export function captureException(err: unknown, context?: Record<string, unknown>
 
 /**
  * 사용자 컨텍스트 설정 (로그인 후 호출)
+ * - 개인정보 최소화: 이메일은 보내지 않고 익명 user id만 사용
+ *   (에러를 사용자 단위로 묶기엔 id로 충분)
  */
-export function setUserContext(userId: string | null, email?: string | null): void {
+export function setUserContext(userId: string | null, _email?: string | null): void {
   if (!Sentry || !initialized) return;
   try {
     if (userId) {
-      Sentry.setUser({ id: userId, email: email ?? undefined });
+      Sentry.setUser({ id: userId });
     } else {
       Sentry.setUser(null);
     }
