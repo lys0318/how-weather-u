@@ -12,6 +12,7 @@ export interface ClaudeCallParams {
   userPrompt: string;
   maxTokens?: number;
   model?: string;
+  temperature?: number; // 0~1, 높을수록 다양/창의적 (추천 다양화용)
 }
 
 export interface ClaudeResponse {
@@ -35,6 +36,7 @@ export async function callClaude(params: ClaudeCallParams): Promise<ClaudeRespon
     body: JSON.stringify({
       model: params.model ?? MODEL,
       max_tokens: params.maxTokens ?? 250,
+      temperature: params.temperature ?? 1,
       system: [
         {
           type: 'text',

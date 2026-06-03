@@ -70,18 +70,30 @@ Deno.serve(async (req) => {
       forecastBlock = `\n향후 12시간 예보 (3시간 간격):\n${lines.join('\n')}`;
     }
 
+    // 다양성 변주 — 매 호출마다 랜덤 활동 결을 살짝 제시해 반복 방지
+    const ACTIVITY_POOL = [
+      '가벼운 운동·산책', '집에서 하는 취미', '카페·휴식', '문화생활(영화·전시·음악)',
+      '독서·글쓰기', '요리·베이킹', '친구·가족과 함께하는 일', '자기계발·공부',
+      '정리·청소', '사진 찍기·기록', '명상·스트레칭', '새로운 곳 탐방',
+    ];
+    const pick = ACTIVITY_POOL[Math.floor(Math.random() * ACTIVITY_POOL.length)];
+
     const userPrompt = `현재 상황:
 - 시간대: ${body.timeOfDayKo} (${body.hour}시)
 - 날씨: ${body.conditionKo}
 - 현재 기온: ${body.temp}°C
 - 오늘 최저/최고: ${body.tempMin}°C / ${body.tempMax}°C${forecastBlock}
 
-이 상황에 딱 어울리는 활동을 하나 추천해주세요. 향후 예보가 있으면 꼭 반영해서, 비가 곧 올 예정이면 야외활동을 미루거나 비 오기 전 짧은 산책을 추천하는 식으로 시간 흐름까지 고려하세요.`;
+이 상황에 딱 어울리는 활동을 하나 추천해주세요.
+- 향후 예보가 있으면 꼭 반영하세요 (비가 곧 올 예정이면 야외활동을 미루거나 비 오기 전 짧은 산책 등 시간 흐름 고려).
+- 이번엔 가능하면 '${pick}' 쪽에서 떠올려보세요. 단, 지금 날씨/시간과 안 맞으면 다른 결로 자유롭게 바꿔도 좋아요.
+- 매번 똑같은 추천(독서·산책만 반복 등)은 피하고 신선하게요.`;
 
     const { text } = await callClaude({
       systemPrompt: SYSTEM_PROMPT,
       userPrompt,
       maxTokens: 250,
+      temperature: 1,
     });
 
     return new Response(
