@@ -10,27 +10,29 @@ import {
   Switch,
 } from 'react-native';
 import {
-  getIntervalHours,
-  getDndRange,
   setNotificationsEnabled,
   getNotificationsEnabled,
+  getNotifSlots,
+  setNotifSlots,
+  NotifSlot,
 } from '../utils/storage';
 import {
   requestNotificationPermission,
-  sendTestNotification,
-  scheduleUpcomingNotifications,
+  scheduleSlotNotifications,
   cancelAllNotifications,
   refreshNotificationsIfNeeded,
+  SLOT_CONFIG,
 } from '../services/notification';
 import { useAuth } from '../contexts/AuthContext';
 
 export default function SettingsScreen() {
-  const [testSending, setTestSending] = useState(false);
   const { user, signOut, deleteAccount } = useAuth();
   const [deleting, setDeleting] = useState(false);
-  // 알림 활성화 상태 (Switch에 바인딩)
-  const [notifEnabled, setNotifEnabled] = useState<boolean>(true);
+  // 알림 활성화 상태 (Switch에 바인딩) — 디폴트 OFF
+  const [notifEnabled, setNotifEnabled] = useState<boolean>(false);
   const [notifToggling, setNotifToggling] = useState(false);
+  // 선택된 시간대 (아침/점심/저녁)
+  const [slots, setSlots] = useState<NotifSlot[]>(['morning', 'lunch', 'evening']);
 
   const userName =
     user?.user_metadata?.full_name ||
@@ -100,24 +102,24 @@ export default function SettingsScreen() {
     );
   };
 
-  // 진입 시 알림 자동 보충 + Switch 초기 상태 로드
+  // 진입 시 알림 자동 보충 + Switch/슬롯 초기 상태 로드
   useEffect(() => {
     (async () => {
       try {
-        const [iv, dnd, enabled] = await Promise.all([
-          getIntervalHours(),
-          getDndRange(),
+        const [enabled, savedSlots] = await Promise.all([
           getNotificationsEnabled(),
+          getNotifSlots(),
         ]);
         setNotifEnabled(enabled);
-        await refreshNotificationsIfNeeded(iv, dnd.enabled, dnd.start, dnd.end);
+        setSlots(savedSlots);
+        await refreshNotificationsIfNeeded();
       } catch {}
     })();
   }, []);
 
   /**
    * 알림 ON/OFF 토글
-   * - ON: 권한 요청 → 플래그 true → 48개 예약
+   * - ON: 권한 요청 → 플래그 true → 현재 선택된 슬롯 예약
    * - OFF: 플래그 false → 모든 예약 취소
    */
   const handleToggleNotifications = async (newValue: boolean) => {
@@ -125,23 +127,25 @@ export default function SettingsScreen() {
     setNotifToggling(true);
     try {
       if (newValue) {
-        // 켜기
         const granted = await requestNotificationPermission();
         if (!granted) {
           Alert.alert('알림 권한 필요', '알림 권한이 없어요.', [
             { text: '설정 앱 열기', onPress: () => Linking.openSettings() },
             { text: '취소', style: 'cancel' },
           ]);
-          // Switch는 자동 복귀 (상태 안 바꿈)
           return;
         }
         await setNotificationsEnabled(true);
-        const iv = await getIntervalHours();
-        const dnd = await getDndRange();
-        await scheduleUpcomingNotifications(iv, dnd.enabled, dnd.start, dnd.end);
+        const current = await getNotifSlots();
+        // 비어있으면 기본값 셋 다로 채워줌
+        const targetSlots = current.length > 0 ? current : (['morning', 'lunch', 'evening'] as NotifSlot[]);
+        if (current.length === 0) {
+          await setNotifSlots(targetSlots);
+          setSlots(targetSlots);
+        }
+        await scheduleSlotNotifications(targetSlots);
         setNotifEnabled(true);
       } else {
-        // 끄기
         await setNotificationsEnabled(false);
         await cancelAllNotifications();
         setNotifEnabled(false);
@@ -154,20 +158,18 @@ export default function SettingsScreen() {
     }
   };
 
-  const handleTestNotification = async () => {
-    setTestSending(true);
-    try {
-      const granted = await requestNotificationPermission();
-      if (!granted) {
-        Alert.alert('알림 권한 필요', '알림 권한을 먼저 허용해주세요.');
-        return;
-      }
-      await sendTestNotification();
-      Alert.alert('전송 완료', '잠시 후 테스트 알림이 도착해요.');
-    } catch {
-      Alert.alert('오류', '테스트 알림 전송에 실패했습니다.');
-    } finally {
-      setTestSending(false);
+  /**
+   * 시간대(아침/점심/저녁) 토글
+   */
+  const toggleSlot = async (slot: NotifSlot) => {
+    const next = slots.includes(slot)
+      ? slots.filter((s) => s !== slot)
+      : [...slots, slot];
+    setSlots(next);
+    await setNotifSlots(next);
+    // 알림 켜져있을 때만 재예약
+    if (notifEnabled) {
+      await scheduleSlotNotifications(next);
     }
   };
 
@@ -209,12 +211,12 @@ export default function SettingsScreen() {
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>알림</Text>
         <Text style={styles.desc}>
-          하우웨더유는 하루 중 적절한 시간대에 메시지를 받으러 오라고{'\n'}
-          살짝 알려드려요.
+          푸시 알림을 켜면 원하는 시간대에{'\n'}
+          메시지를 받으러 오라고 살짝 알려드려요.
         </Text>
         <Text style={styles.subDesc}>
-          • 아침, 점심, 오후, 저녁마다 한 번씩{'\n'}
-          • 새벽 1시 ~ 오전 6시는 방해하지 않아요
+          • 아침 08:00 / 점심 12:30 / 저녁 19:00{'\n'}
+          • 원하는 시간대만 선택해서 받을 수 있어요
         </Text>
       </View>
 
@@ -240,16 +242,40 @@ export default function SettingsScreen() {
         />
       </View>
 
-      {/* 테스트 알림 */}
-      <TouchableOpacity
-        style={[styles.secondaryButton, testSending && styles.buttonDisabled]}
-        onPress={handleTestNotification}
-        disabled={testSending}
-      >
-        <Text style={styles.secondaryButtonText}>
-          {testSending ? '전송 중...' : '🔔 테스트 알림 받기'}
-        </Text>
-      </TouchableOpacity>
+      {/* 시간대 선택 (알림 켜져있을 때만 활성) */}
+      {notifEnabled && (
+        <View style={styles.slotsCard}>
+          <Text style={styles.slotsTitle}>받을 시간대를 골라주세요</Text>
+          <Text style={styles.slotsSub}>선택한 시간대에만 알림이 와요</Text>
+          <View style={styles.slotsRow}>
+            {(['morning', 'lunch', 'evening'] as NotifSlot[]).map((s) => {
+              const active = slots.includes(s);
+              const cfg = SLOT_CONFIG[s];
+              const timeLabel = `${cfg.hour.toString().padStart(2, '0')}:${cfg.minute
+                .toString()
+                .padStart(2, '0')}`;
+              return (
+                <TouchableOpacity
+                  key={s}
+                  style={[styles.slotChip, active && styles.slotChipActive]}
+                  onPress={() => toggleSlot(s)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={[styles.slotChipLabel, active && styles.slotChipLabelActive]}>
+                    {cfg.label}
+                  </Text>
+                  <Text style={[styles.slotChipTime, active && styles.slotChipTimeActive]}>
+                    {timeLabel}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+          {slots.length === 0 && (
+            <Text style={styles.slotsWarn}>한 개 이상 선택해주세요</Text>
+          )}
+        </View>
+      )}
 
       <View style={styles.divider} />
 
@@ -280,7 +306,7 @@ export default function SettingsScreen() {
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
-        <Text style={styles.appVersion}>v1.0.11</Text>
+        <Text style={styles.appVersion}>v1.0.15</Text>
       </View>
     </ScrollView>
   );
@@ -387,6 +413,62 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 15,
     fontWeight: '600',
+  },
+  slotsCard: {
+    backgroundColor: '#1a1a1a',
+    borderRadius: 14,
+    padding: 18,
+    marginBottom: 10,
+  },
+  slotsTitle: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  slotsSub: {
+    color: '#888',
+    fontSize: 12,
+    marginBottom: 14,
+  },
+  slotsRow: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  slotChip: {
+    flex: 1,
+    paddingVertical: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: '#2a2a2a',
+    backgroundColor: '#111',
+    alignItems: 'center',
+  },
+  slotChipActive: {
+    borderColor: '#3a7fb8',
+    backgroundColor: 'rgba(58, 127, 184, 0.18)',
+  },
+  slotChipLabel: {
+    color: '#888',
+    fontSize: 14,
+    fontWeight: '600',
+    marginBottom: 4,
+  },
+  slotChipLabelActive: {
+    color: '#ffffff',
+  },
+  slotChipTime: {
+    color: '#555',
+    fontSize: 11,
+  },
+  slotChipTimeActive: {
+    color: '#7ec9ff',
+  },
+  slotsWarn: {
+    color: '#cc6666',
+    fontSize: 12,
+    marginTop: 10,
+    textAlign: 'center',
   },
   notifToggleStatus: {
     fontSize: 12,

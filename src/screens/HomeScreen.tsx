@@ -28,7 +28,7 @@ import {
   PREFERENCE_KO,
   PREFERENCE_EMOJI,
 } from '../constants/weather';
-import { saveMessage, saveEntry, getIntervalHours, getDndRange } from '../utils/storage';
+import { saveMessage, saveEntry } from '../utils/storage';
 import WeatherAnimation from '../components/WeatherAnimation';
 import { refreshNotificationsIfNeeded } from '../services/notification';
 import { showInterstitialThenRun, showRewardedAndGrant, isRewardedAvailable } from '../services/ads';
@@ -251,8 +251,7 @@ export default function HomeScreen() {
   useEffect(() => {
     (async () => {
       try {
-        const [iv, dnd] = await Promise.all([getIntervalHours(), getDndRange()]);
-        await refreshNotificationsIfNeeded(iv, dnd.enabled, dnd.start, dnd.end);
+        await refreshNotificationsIfNeeded();
       } catch {}
     })();
   }, []);
@@ -409,8 +408,7 @@ export default function HomeScreen() {
       fetchTodayUsage().then((u) => { if (u) setServerUsage(u); });
       // 예약 알림 보충 시도 (실패해도 무시)
       try {
-        const [iv, dnd] = await Promise.all([getIntervalHours(), getDndRange()]);
-        await refreshNotificationsIfNeeded(iv, dnd.enabled, dnd.start, dnd.end);
+        await refreshNotificationsIfNeeded();
       } catch {}
     } finally {
       setRefreshing(false);

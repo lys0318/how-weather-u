@@ -3,7 +3,7 @@
     "name": "하우웨더유",
     "slug": "howweateryou",
     "scheme": "howweateryou",
-    "version": "1.0.11",
+    "version": "1.0.15",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "dark",
@@ -31,7 +31,7 @@
     },
     "android": {
       "package": "com.howweatheryou.app",
-      "versionCode": 12,
+      "versionCode": 16,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#0f0f0f"

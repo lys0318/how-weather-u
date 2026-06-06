@@ -1,6 +1,34 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { getNotificationsEnabled } from '../utils/storage';
+import { getNotificationsEnabled, getNotifSlots, NotifSlot } from '../utils/storage';
+
+// 시간대별 발송 시각 + 문구 (매일 반복)
+export const SLOT_CONFIG: Record<
+  NotifSlot,
+  { label: string; hour: number; minute: number; title: string; body: string }
+> = {
+  morning: {
+    label: '아침',
+    hour: 8,
+    minute: 0,
+    title: '아침이에요 ☀️',
+    body: '오늘의 날씨에 맞는 한마디, 받아보고 시작해요!',
+  },
+  lunch: {
+    label: '점심',
+    hour: 12,
+    minute: 30,
+    title: '점심 시간이에요 🍱',
+    body: '잠깐 쉬어가며 메시지 한 줄 어떠세요?',
+  },
+  evening: {
+    label: '저녁',
+    hour: 19,
+    minute: 0,
+    title: '오늘 하루도 수고했어요 🌙',
+    body: '제가 위로해드릴게요. 따뜻한 메시지 받아보세요.',
+  },
+};
 
 export async function requestNotificationPermission(): Promise<boolean> {
   const { status: existingStatus } = await Notifications.getPermissionsAsync();
@@ -47,144 +75,63 @@ export async function sendTestNotification(): Promise<void> {
   });
 }
 
-// ── 시간대별 알림 메시지 (메시지 생성 유도형) ─────────────────
-function getNotificationContent(hour: number): { title: string; body: string } {
-  if (hour >= 5 && hour < 9) {
-    return {
-      title: '아침이에요 ☀️',
-      body: '오늘의 메시지를 받아보세요! 응원 한마디 어떠세요?',
-    };
-  }
-  if (hour >= 9 && hour < 12) {
-    return {
-      title: '오전 한 잔 어떠세요? ☕',
-      body: '날씨에 맞는 메시지를 받아보세요',
-    };
-  }
-  if (hour >= 12 && hour < 14) {
-    return {
-      title: '점심 시간이에요 🍱',
-      body: '잠깐 쉬어가며 메시지 한 줄 어떠세요?',
-    };
-  }
-  if (hour >= 14 && hour < 18) {
-    return {
-      title: '오후엔 조언 한 줄? 💡',
-      body: '오늘 어떻게 보내면 좋을지 추천 받아보세요',
-    };
-  }
-  if (hour >= 18 && hour < 21) {
-    return {
-      title: '수고했어요 🌙',
-      body: '제가 위로해드릴게요. 위로 메시지를 받아보세요!',
-    };
-  }
-  return {
-    title: '오늘 하루도 수고했어요 🌟',
-    body: '잠들기 전 따뜻한 메시지 한 줄 받아보세요',
-  };
-}
-
-// ── DND 체크 헬퍼 ────────────────────────────────────────────
-function isInDnd(hour: number, start: number, end: number): boolean {
-  const h = ((hour % 24) + 24) % 24;
-  return start > end
-    ? h >= start || h < end   // 자정 넘는 경우 (예: 23~06)
-    : h >= start && h < end;
-}
-
 /**
  * 동시 호출 방지 락 (module-level).
- * HomeScreen 마운트 + SettingsScreen 마운트 + Pull-to-refresh 등이
- * 동시에 scheduleUpcomingNotifications를 호출할 때,
- * 두 loop이 cancelAll → 새로 schedule 하는 사이의 race로
- * 같은 시각 근처에 알림이 2~3개씩 중복 예약되는 버그가 있었음.
- * 락으로 단일 실행 보장.
+ * SettingsScreen 토글 + HomeScreen 마운트 + 포커스 등이
+ * 동시에 scheduleSlotNotifications를 호출할 때 중복 예약 방지.
  */
 let schedulingLock: Promise<void> | null = null;
 
 /**
- * 앱이 종료된 상태에서도 알림이 오도록
- * OS AlarmManager 기반 Date 트리거 알림 48개 예약
- * → expo-background-fetch 보다 훨씬 안정적
+ * 선택된 시간대(slots)에 매일 반복되는 알림 예약.
+ * - DAILY 트리거를 사용해 매일 자동 반복 (앱 종료 상태에서도 OS가 띄움)
+ * - 호출 전 기존 예약은 모두 취소
  */
-export async function scheduleUpcomingNotifications(
-  intervalHours: 1 | 2 | 3,
-  dndEnabled: boolean,
-  dndStart: number,
-  dndEnd: number,
-): Promise<void> {
-  // 이미 다른 호출이 진행 중이면 그 결과를 기다린 뒤 종료
-  // (이 호출은 중복 작업이므로 새로 schedule 하지 않음)
+export async function scheduleSlotNotifications(slots: NotifSlot[]): Promise<void> {
   if (schedulingLock) {
     try { await schedulingLock; } catch {}
     return;
   }
 
   schedulingLock = (async () => {
-    // 기존 예약 알림 전부 취소
     await Notifications.cancelAllScheduledNotificationsAsync();
+    if (slots.length === 0) return;
 
-    let nextTime = new Date();
-    let scheduled = 0;
-    let attempts = 0;
-    const MAX = 48; // 최대 예약 개수
-    const MAX_ATTEMPTS = 200; // 무한루프 방지
-
-    while (scheduled < MAX && attempts < MAX_ATTEMPTS) {
-      attempts++;
-      nextTime = new Date(nextTime.getTime() + intervalHours * 60 * 60 * 1000);
-      const hour = nextTime.getHours();
-
-      // DND 시간대면 건너뜀
-      if (dndEnabled && isInDnd(hour, dndStart, dndEnd)) continue;
-
+    for (const slot of slots) {
+      const cfg = SLOT_CONFIG[slot];
+      if (!cfg) continue;
       try {
-        const { title, body } = getNotificationContent(hour);
         await Notifications.scheduleNotificationAsync({
-          content: {
-            title,
-            body,
-            sound: false,
-          },
-          // expo-notifications 0.32.x 정식 트리거 포맷
+          content: { title: cfg.title, body: cfg.body, sound: false },
           trigger: {
-            type: Notifications.SchedulableTriggerInputTypes.DATE,
-            date: nextTime,
+            type: Notifications.SchedulableTriggerInputTypes.DAILY,
+            hour: cfg.hour,
+            minute: cfg.minute,
           },
         });
-        scheduled++;
       } catch (err) {
-        // 개별 알림 실패는 무시하고 다음으로
-        console.warn('[scheduleUpcomingNotifications] skip:', err);
+        console.warn('[scheduleSlotNotifications] skip', slot, err);
       }
     }
   })();
 
-  try {
-    await schedulingLock;
-  } finally {
-    schedulingLock = null;
-  }
+  try { await schedulingLock; } finally { schedulingLock = null; }
 }
 
 /**
- * 남은 예약 알림이 적으면 자동으로 재예약 (앱 실행 시 호출)
- * — 사용자가 명시적으로 알림을 끈 상태(notificationsEnabled=false)면 건너뜀
+ * 앱 실행/포커스 시 호출. 알림이 켜져 있고 슬롯이 있는데
+ * 실제 예약된 게 없거나 부족하면 자동으로 재예약.
+ * (사용자가 끈 상태면 건너뜀)
  */
-export async function refreshNotificationsIfNeeded(
-  intervalHours: 1 | 2 | 3,
-  dndEnabled: boolean,
-  dndStart: number,
-  dndEnd: number,
-): Promise<void> {
-  // 사용자가 명시적으로 끈 상태면 손대지 않음
+export async function refreshNotificationsIfNeeded(): Promise<void> {
   const enabled = await getNotificationsEnabled();
   if (!enabled) return;
 
+  const slots = await getNotifSlots();
+  if (slots.length === 0) return;
+
   const scheduled = await Notifications.getAllScheduledNotificationsAsync();
-  // 5개 미만으로 남으면 자동 보충 (첫 사용 시 0개여도 셋업)
-  if (scheduled.length < 5) {
-    await scheduleUpcomingNotifications(intervalHours, dndEnabled, dndStart, dndEnd);
+  if (scheduled.length < slots.length) {
+    await scheduleSlotNotifications(slots);
   }
 }

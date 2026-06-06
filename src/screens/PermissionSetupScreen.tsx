@@ -10,15 +10,8 @@ import {
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
 import { requestLocationPermission } from '../services/weather';
-import {
-  requestNotificationPermission,
-  scheduleUpcomingNotifications,
-} from '../services/notification';
-import {
-  setHasOnboarded,
-  getDndRange,
-  getIntervalHours,
-} from '../utils/storage';
+import { requestNotificationPermission } from '../services/notification';
+import { setHasOnboarded } from '../utils/storage';
 
 interface Props {
   onDone: () => void;
@@ -42,18 +35,11 @@ export default function PermissionSetupScreen({ onDone }: Props) {
       const locOk = await requestLocationPermission();
       setLocStatus(locOk ? 'granted' : 'denied');
 
-      // 2. 알림 권한
+      // 2. 알림 권한 (권한만 받아두고 자동 예약은 안 함 — 사용자가 설정에서 직접 켜야 함)
       const notifOk = await requestNotificationPermission();
       setNotifStatus(notifOk ? 'granted' : 'denied');
 
-      // 3. 알림 권한이 있으면 기본 스케줄 등록
-      if (notifOk) {
-        const iv = await getIntervalHours();
-        const dnd = await getDndRange();
-        await scheduleUpcomingNotifications(iv, dnd.enabled, dnd.start, dnd.end);
-      }
-
-      // 4. 둘 다 거부해도 그냥 진행 (앱은 권한 없이도 일부 사용 가능)
+      // 3. 둘 다 거부해도 그냥 진행 (앱은 권한 없이도 일부 사용 가능)
       await setHasOnboarded(true);
       onDone();
     } catch (e) {

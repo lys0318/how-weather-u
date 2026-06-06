@@ -11,19 +11,37 @@ const KEYS = {
   DO_NOT_DISTURB_END: 'dndEnd',     // 방해금지 종료 시각 (0~23)
   MESSAGES: 'messages',
   BOOKMARKS: 'bookmarks',
-  NOTIFICATIONS_ENABLED: 'notificationsEnabled', // 사용자가 명시적으로 알림 끈 상태인지
+  NOTIFICATIONS_ENABLED: 'notificationsEnabled', // 푸시 알림 켬/끔
+  NOTIF_SLOTS: 'notifSlots',                     // 받을 시간대 (아침/점심/저녁)
 } as const;
 
 // ─── 알림 활성화 (사용자 의도) ───────────────────────────
-// 사용자가 "알림 끄기" 눌러서 명시적으로 끈 상태인지 추적.
-// 기본값 true: 첫 사용 시 알림 동작.
-// false면 자동 재예약 로직이 건너뜀.
+// 기본값 false: 사용자가 설정에서 직접 켜야 알림이 옴.
 export async function getNotificationsEnabled(): Promise<boolean> {
   const v = await AsyncStorage.getItem(KEYS.NOTIFICATIONS_ENABLED);
-  return v !== 'false';
+  return v === 'true';
 }
 export async function setNotificationsEnabled(value: boolean): Promise<void> {
   await AsyncStorage.setItem(KEYS.NOTIFICATIONS_ENABLED, value ? 'true' : 'false');
+}
+
+// ─── 알림 시간대 선택 (아침/점심/저녁) ───────────────────
+export type NotifSlot = 'morning' | 'lunch' | 'evening';
+const DEFAULT_SLOTS: NotifSlot[] = ['morning', 'lunch', 'evening'];
+
+export async function getNotifSlots(): Promise<NotifSlot[]> {
+  const v = await AsyncStorage.getItem(KEYS.NOTIF_SLOTS);
+  if (!v) return DEFAULT_SLOTS; // 처음 켤 때 기본은 셋 다
+  try {
+    const arr = JSON.parse(v) as NotifSlot[];
+    const valid = arr.filter((s) => s === 'morning' || s === 'lunch' || s === 'evening');
+    return valid;
+  } catch {
+    return DEFAULT_SLOTS;
+  }
+}
+export async function setNotifSlots(slots: NotifSlot[]): Promise<void> {
+  await AsyncStorage.setItem(KEYS.NOTIF_SLOTS, JSON.stringify(slots));
 }
 
 // ─── 온보딩 ────────────────────────────────────────────
