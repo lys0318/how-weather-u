@@ -12,9 +12,10 @@ import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../i18n';
 
 export default function LoginScreen() {
-  const { signInWithGoogle } = useAuth();
+  const { signInWithGoogle, signInAsGuest } = useAuth();
   const { t } = useI18n();
   const [loading, setLoading] = useState(false);
+  const [guestLoading, setGuestLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -25,6 +26,18 @@ export default function LoginScreen() {
       Alert.alert(t('login.failTitle'), msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleGuest = async () => {
+    setGuestLoading(true);
+    try {
+      await signInAsGuest();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('login.guestError');
+      Alert.alert(t('login.guestFailTitle'), msg);
+    } finally {
+      setGuestLoading(false);
     }
   };
 
@@ -59,6 +72,20 @@ export default function LoginScreen() {
           </TouchableOpacity>
 
           <Text style={styles.privacy}>{t('login.agree')}</Text>
+
+          {/* 게스트(로그인 없이) 둘러보기 */}
+          <TouchableOpacity
+            style={[styles.guestButton, guestLoading && styles.disabled]}
+            onPress={handleGuest}
+            disabled={guestLoading || loading}
+          >
+            {guestLoading ? (
+              <ActivityIndicator color="rgba(255,255,255,0.8)" size="small" />
+            ) : (
+              <Text style={styles.guestButtonText}>{t('login.guestStart')}</Text>
+            )}
+          </TouchableOpacity>
+          <Text style={styles.guestNote}>{t('login.guestNote')}</Text>
         </View>
       </View>
     </LinearGradient>
@@ -130,5 +157,24 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginTop: 18,
     lineHeight: 16,
+  },
+  guestButton: {
+    marginTop: 26,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  guestButtonText: {
+    color: 'rgba(255,255,255,0.85)',
+    fontSize: 15,
+    fontWeight: '600',
+    textDecorationLine: 'underline',
+  },
+  guestNote: {
+    fontSize: 11,
+    color: 'rgba(255,255,255,0.4)',
+    textAlign: 'center',
+    marginTop: 8,
   },
 });

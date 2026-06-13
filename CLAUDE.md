@@ -9,10 +9,10 @@
 - **백엔드**: Supabase (Auth + PostgreSQL + Edge Functions) — project ref `uxjpsnkecvztwlcbwwuq`
 - **AI**: Anthropic Claude API (메시지/활동/음식 전부 Sonnet, 프롬프트 캐싱 사용)
 - **날씨**: 한국 = 기상청(KMA) 단기예보 API, 해외 = OpenWeatherMap (자동 폴백)
-- **광고**: react-native-google-mobile-ads v15 (전면 + 보상형, 현재 테스트 광고)
+- **광고**: react-native-google-mobile-ads v15 (전면 + 보상형, 실제 광고 — v20부터)
 - **모니터링**: Sentry
 - **자동 업데이트**: expo-in-app-updates (강제 업데이트)
-- **배포**: Google Play Console (현재 비공개 테스트 14일 카운트 진행 중)
+- **배포**: Google Play Console (비공개 테스트 14일 완료 → 프로덕션 출시 진행)
 
 ## 디렉터리 구조
 
@@ -59,7 +59,7 @@ supabase/functions/    Edge Functions (Deno)
 - **한도 이내**: 생성 시 전면 광고 (메시지 첫 회만 무료)
 - **한도 초과**: 생성 클릭 → 전면 생략, 보상형 광고 → 다 보면 자동 생성
 - **"충전하기" 버튼**: 보상형 광고 → +1 충전만, 다음 생성은 광고 생략(자유 선택)
-- 광고 ID: `ads.ts`의 `USE_TEST_ADS = true` (출시+AdMob 검증 후 false + 실제 ID)
+- 광고 ID: `ads.ts`의 `USE_TEST_ADS = false` (실제 광고). 앱 ID `ca-app-pub-8051681065734198~5789260751` (manifest+app.json). 개발 테스트 시 임시 true로.
 
 ### 날씨
 - `weather.ts.fetchWeather()`가 진입점. 한국(`isInKorea`)이면 기상청, 아니면 OpenWeather

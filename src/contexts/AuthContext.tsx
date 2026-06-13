@@ -15,7 +15,9 @@ interface AuthContextValue {
   session: Session | null;
   user: User | null;
   loading: boolean;
+  isGuest: boolean; // 익명(로그인 없이 둘러보기) 세션 여부
   signInWithGoogle: () => Promise<void>;
+  signInAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
   getDebug: () => string;
@@ -182,6 +184,17 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [log]);
 
+  // 게스트(익명) 로그인 — Supabase Anonymous Auth
+  // ⚠️ Supabase 대시보드에서 Authentication → Anonymous sign-ins 활성화 필요
+  const signInAsGuest = useCallback(async () => {
+    log('[guest] signInAnonymously');
+    const { error } = await supabase.auth.signInAnonymously();
+    if (error) {
+      log(`[guest-err] ${error.message}`);
+      throw error;
+    }
+  }, [log]);
+
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
   }, []);
@@ -232,7 +245,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         session,
         user: session?.user ?? null,
         loading,
+        isGuest: session?.user?.is_anonymous ?? false,
         signInWithGoogle,
+        signInAsGuest,
         signOut,
         deleteAccount,
         getDebug,

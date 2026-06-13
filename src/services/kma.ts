@@ -111,6 +111,20 @@ function vilageBase(): { base_date: string; base_time: string } {
   return { base_date: fmtDate(kst), base_time: pad2(chosen) + '00' };
 }
 
+// 오늘의 TMN(06시)/TMX(15시)을 항상 포함하는 "이른 발표" 기준.
+// 최신 발표는 오후·저녁이 되면 오늘 TMN/TMX가 응답에서 빠지므로(과거 시각),
+// 오늘 0200 발표(자정~02:10엔 전날 2300 발표)를 별도로 조회해 보충한다.
+function earlyVilageBase(): { base_date: string; base_time: string } {
+  const kst = kstNow();
+  const h = kst.getUTCHours();
+  const m = kst.getUTCMinutes();
+  if (h > 2 || (h === 2 && m >= 10)) {
+    return { base_date: fmtDate(kst), base_time: '0200' };
+  }
+  const prev = new Date(kst.getTime() - 24 * 60 * 60 * 1000);
+  return { base_date: fmtDate(prev), base_time: '2300' };
+}
+
 // ── 기상청 카테고리 → 앱 내부 condition ──────────────────────
 function kmaToCondition(pty: string | number, sky: string | number): WeatherCondition {
   const p = Number(pty);
@@ -288,19 +302,42 @@ export async function fetchKmaWeather(
     });
   }
 
-  // ── 최저/최고 기온 ──────────────────────────────────────
-  // 향후 24시간 예보 기온 + 현재 기온 + (있으면) 오늘 TMN/TMX를 모두 모아 범위 계산.
-  // 밤에 앱을 열어 "오늘 남은 예보"가 없을 때도 의미 있는 범위가 나오도록
-  // (오늘 데이터만 쓰면 최저=현재=최고로 같아지는 버그 방지)
-  const pool: number[] = [temp];
-  // 향후 24시간 = 3시간 간격 8슬롯
-  for (const s of upcoming.slice(0, 8)) {
-    if (s.tmp !== undefined) pool.push(s.tmp);
+  // ── 오늘 최저(TMN)/최고(TMX) 보충 ────────────────────────
+  // 최신 발표는 오후·저녁이 되면 오늘 TMN(06시)/TMX(15시)이 응답에서 빠진다.
+  // → 오늘 0200 발표를 추가 조회해 채운다. (둘 중 하나라도 없을 때만)
+  if (isNaN(tmn) || isNaN(tmx)) {
+    const eb = earlyVilageBase();
+    const earlyItems = await callKma('getVilageFcst', {
+      base_date: eb.base_date,
+      base_time: eb.base_time,
+      nx: String(nx),
+      ny: String(ny),
+    });
+    if (earlyItems) {
+      for (const it of earlyItems) {
+        if (it.fcstDate !== todayStr) continue;
+        const v = parseFloat(it.fcstValue ?? '');
+        if (isNaN(v)) continue;
+        if (it.category === 'TMN' && isNaN(tmn)) tmn = v;
+        else if (it.category === 'TMX' && isNaN(tmx)) tmx = v;
+      }
+    }
   }
-  if (!isNaN(tmn)) pool.push(tmn);
-  if (!isNaN(tmx)) pool.push(tmx);
-  const tempMin = Math.round(Math.min(...pool));
-  const tempMax = Math.round(Math.max(...pool));
+
+  // ── 오늘 최저/최고 기온 ─────────────────────────────────
+  // 오늘의 공식 최저(TMN)/최고(TMX)를 기준으로 한다. (하루 종일 고정값)
+  // 단, 실제 관측 현재기온이 예보를 벗어나면(더 덥거나 추우면) 관측값으로 보정.
+  // TMN/TMX를 못 구한 극단적 경우만 "오늘 남은 예보 + 현재"로 폴백(내일 데이터 제외).
+  const todayUpcomingTemps = upcoming
+    .filter((s) => s.date === todayStr && s.tmp !== undefined)
+    .map((s) => s.tmp as number);
+
+  const tempMax = !isNaN(tmx)
+    ? Math.round(Math.max(tmx, temp))
+    : Math.round(Math.max(temp, ...todayUpcomingTemps));
+  const tempMin = !isNaN(tmn)
+    ? Math.round(Math.min(tmn, temp))
+    : Math.round(Math.min(temp, ...todayUpcomingTemps));
 
   return {
     condition,

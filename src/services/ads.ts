@@ -9,7 +9,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { __DEV__ } from './_env';
 import { redeemAdCredit, UsageInfo } from './usage';
 
-const FREE_DAILY_KEY = 'lastAdFreeDate';
+// 종류(메시지/활동/음식)별로 "당일 첫 호출 무광고" 추적
+const FREE_DAILY_PREFIX = 'lastAdFreeDate:'; // + kind (예: lastAdFreeDate:message)
 
 function kstTodayString(): string {
   const now = new Date();
@@ -20,12 +21,14 @@ function kstTodayString(): string {
   return `${y}-${m}-${d}`;
 }
 
-async function isFirstCallOfDay(): Promise<boolean> {
+// 해당 종류의 오늘 첫 호출이면 true (그리고 오늘 날짜로 마킹 → 다음부턴 false)
+async function isFirstCallOfDay(kind: string): Promise<boolean> {
   try {
+    const key = FREE_DAILY_PREFIX + kind;
     const today = kstTodayString();
-    const last = await AsyncStorage.getItem(FREE_DAILY_KEY);
+    const last = await AsyncStorage.getItem(key);
     if (last === today) return false;
-    await AsyncStorage.setItem(FREE_DAILY_KEY, today);
+    await AsyncStorage.setItem(key, today);
     return true;
   } catch {
     return false;
@@ -41,9 +44,10 @@ try {
   admob = null;
 }
 
-// ⚠️ 출시 전까지 true — 항상 Google 테스트 광고 사용
-// AdMob "스토어 추가" 검증 통과 후 false로 바꾸고 실제 ID 입력하면 진짜 광고 게재
-const USE_TEST_ADS = true;
+// 실제 광고 사용 (출시 빌드).
+// ⚠️ 본인 기기에서 실제 광고 클릭 금지 — AdMob 계정 정지 위험.
+// 개발 중 테스트하려면 일시적으로 true (Google 테스트 광고)로 변경.
+const USE_TEST_ADS = false;
 
 // 실제 광고 단위 ID (USE_TEST_ADS=false일 때만 사용)
 const REAL_INTERSTITIAL_ID = 'ca-app-pub-8051681065734198/8755169596';
@@ -126,16 +130,17 @@ export async function initAds(): Promise<void> {
 
 /**
  * 전면 광고 + callback (메시지/활동/음식 생성용)
- * @param allowDailyFreebie true면 "하루 첫 호출 광고 없이 무료" 적용 (메시지 전용)
+ * @param freebieKind 'message'|'activity'|'food' 전달 시, 그 종류의 "당일 첫 호출"은 광고 없이 무료
+ *   (메시지·활동·음식 각각 하루 1회씩 무광고)
  * - 광고 안 떠도 callback은 반드시 실행 (UX 끊김 방지)
  */
 export async function showInterstitialThenRun(
   callback: () => void,
-  allowDailyFreebie = false,
+  freebieKind?: string,
 ): Promise<void> {
-  // 메시지 첫 호출만 무료 (활동/음식은 매번 광고)
-  if (allowDailyFreebie) {
-    const isFirst = await isFirstCallOfDay();
+  // 해당 종류의 당일 첫 호출이면 광고 스킵
+  if (freebieKind) {
+    const isFirst = await isFirstCallOfDay(freebieKind);
     if (isFirst) {
       callback();
       return;

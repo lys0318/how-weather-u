@@ -26,6 +26,7 @@ import {
   CONDITION_META,
 } from '../constants/weather';
 import { useI18n, getCurrentLang, translate } from '../i18n';
+import { useAuth } from '../contexts/AuthContext';
 
 type Tab = 'all' | 'bookmark';
 
@@ -33,6 +34,7 @@ type TFn = (key: string, vars?: Record<string, string | number>) => string;
 
 export default function HistoryScreen() {
   const { t, lang } = useI18n();
+  const { isGuest } = useAuth();
   const [tab, setTab] = useState<Tab>('all');
   const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [cloudBookmarks, setCloudBookmarks] = useState<StoredMessage[]>([]);
@@ -200,7 +202,7 @@ export default function HistoryScreen() {
 
       {/* 메시지 리스트 */}
       {displayed.length === 0 ? (
-        <EmptyState tab={tab} t={t} />
+        <EmptyState tab={tab} t={t} isGuest={isGuest} />
       ) : (
         <FlatList
           data={displayed}
@@ -311,7 +313,17 @@ function MessageCard({ message, showDateHeader, onBookmarkToggle, onShare, t }: 
 }
 
 // ── 빈 상태 ─────────────────────────────────────────────────
-function EmptyState({ tab, t }: { tab: Tab; t: TFn }) {
+function EmptyState({ tab, t, isGuest }: { tab: Tab; t: TFn; isGuest: boolean }) {
+  // 게스트는 저장이 안 되므로 전용 안내
+  if (isGuest) {
+    return (
+      <View style={styles.center}>
+        <Text style={styles.emptyEmoji}>👤</Text>
+        <Text style={styles.emptyTitle}>{t('history.guestEmptyTitle')}</Text>
+        <Text style={styles.emptyDesc}>{t('history.guestEmptyDesc')}</Text>
+      </View>
+    );
+  }
   return (
     <View style={styles.center}>
       <Text style={styles.emptyEmoji}>{tab === 'all' ? '🌤️' : '★'}</Text>

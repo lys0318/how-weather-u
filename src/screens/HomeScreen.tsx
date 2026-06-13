@@ -35,8 +35,9 @@ import {
   uvGrade,
   airQualityGrade,
 } from '../constants/weather';
-import { saveMessage, saveEntry } from '../utils/storage';
-import { useI18n, Lang } from '../i18n';
+import { saveMessage, saveEntry, isGuideDismissedToday, dismissGuideToday } from '../utils/storage';
+import { useI18n } from '../i18n';
+import { useAuth } from '../contexts/AuthContext';
 import WeatherAnimation from '../components/WeatherAnimation';
 import { refreshNotificationsIfNeeded } from '../services/notification';
 import { showInterstitialThenRun, showRewardedAndGrant, isRewardedAvailable } from '../services/ads';
@@ -178,7 +179,9 @@ export default function HomeScreen() {
   const { activity, loading: activityLoading, error: activityError, generate: generateActivity } = useActivity();
   const { food, loading: foodLoading, error: foodError, generate: generateFood } = useFood();
   const { t, lang } = useI18n();
+  const { isGuest } = useAuth();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [now, setNow] = useState<Date>(() => new Date());
   const [serverUsage, setServerUsage] = useState<UsageInfo | null>(null);
@@ -213,6 +216,18 @@ export default function HomeScreen() {
   // 마운트 시 오늘 사용량 즉시 조회 (메시지 생성 안 해도 잔여 횟수 표시)
   useEffect(() => {
     fetchTodayUsage().then((u) => { if (u) setServerUsage(u); });
+  }, []);
+
+  // 진입 시 사용 안내 모달 ('오늘 하루 안 보기' 안 누른 경우만)
+  useEffect(() => {
+    isGuideDismissedToday().then((dismissed) => {
+      if (!dismissed) setGuideOpen(true);
+    }).catch(() => {});
+  }, []);
+
+  const handleDismissGuideToday = useCallback(() => {
+    dismissGuideToday().catch(() => {});
+    setGuideOpen(false);
   }, []);
 
   // 로딩 중일 때 문구 2.5초마다 회전
@@ -269,23 +284,23 @@ export default function HomeScreen() {
     })();
   }, []);
 
-  // 메시지 저장 (생성될 때마다)
+  // 메시지 저장 (생성될 때마다) — 게스트는 저장 안 함
   useEffect(() => {
-    if (message && weather) {
+    if (message && weather && !isGuest) {
       saveMessage(message, weather.emoji).catch(() => {});
     }
   }, [message]);
 
-  // 활동 추천 저장
+  // 활동 추천 저장 — 게스트 제외
   useEffect(() => {
-    if (activity && weather) {
+    if (activity && weather && !isGuest) {
       saveEntry(activity.text, weather.emoji, weather.condition, 'activity').catch(() => {});
     }
   }, [activity]);
 
-  // 음식 추천 저장
+  // 음식 추천 저장 — 게스트 제외
   useEffect(() => {
-    if (food && weather) {
+    if (food && weather && !isGuest) {
       saveEntry(food.text, weather.emoji, weather.condition, 'food').catch(() => {});
     }
   }, [food]);
@@ -303,55 +318,45 @@ export default function HomeScreen() {
 
   /**
    * 생성 트리거 — 광고 정책 분기
-   * - 한도 이내: 전면 광고 → 생성 (메시지 첫 회는 무료)
-   * - 한도 초과: 전면 광고 건너뛰고 바로 보상형 광고 → 다 보면 자동 생성
+   * - 한도 이내: 전면 광고 → 생성 (종류별 당일 첫 회는 무료)
+   * - 한도 초과: 자동 광고 X → 아래 "광고 보고 1회 충전하기" 버튼으로 유도
    */
   const triggerGenerate = useCallback(
-    async (fn: () => void, isMessage: boolean) => {
-      pendingGenRef.current = fn;
+    async (fn: () => void, kind: 'message' | 'activity' | 'food') => {
       const overLimit = !!displayUsage && displayUsage.used >= displayUsage.limit;
 
       if (overLimit) {
-        // 보상형 광고 → 충전 → 자동 생성 (재클릭 불필요)
-        if (watchingAd) return;
-        setWatchingAd(true);
-        try {
-          const result = await showRewardedAndGrant();
-          if (result) {
-            setServerUsage(result);
-            fn(); // 광고 끝나면 바로 생성
-          } else {
-            Alert.alert(t('home.adUnavailableTitle'), t('home.adUnavailableBodyUse'));
-          }
-        } finally {
-          setWatchingAd(false);
-        }
-      } else if (skipNextInterstitialRef.current) {
+        // 자동으로 긴 광고를 띄우지 않고, 하단 충전 버튼으로 안내
+        Alert.alert(t('home.overLimitTitle'), t('home.overLimitBody'));
+        return;
+      }
+
+      if (skipNextInterstitialRef.current) {
         // 직전에 "충전하기"로 이미 광고를 봤으면 전면 광고 생략하고 바로 생성
         skipNextInterstitialRef.current = false;
         fn();
       } else {
-        // 한도 이내 → 전면 광고 후 생성
-        showInterstitialThenRun(fn, isMessage);
+        // 한도 이내 → 전면 광고 후 생성 (종류별 당일 첫 회는 무료)
+        showInterstitialThenRun(fn, kind);
       }
     },
-    [displayUsage, watchingAd],
+    [displayUsage, t],
   );
 
   const handlePickPreference = (pref: Preference) => {
     setPickerOpen(false);
     if (!weather) return;
-    triggerGenerate(() => generate(weather, pref), true);
+    triggerGenerate(() => generate(weather, pref), 'message');
   };
 
   const handleGenerateActivity = () => {
     if (!weather) return;
-    triggerGenerate(() => generateActivity(weather), false);
+    triggerGenerate(() => generateActivity(weather), 'activity');
   };
 
   const handleGenerateFood = () => {
     if (!weather) return;
-    triggerGenerate(() => generateFood(weather), false);
+    triggerGenerate(() => generateFood(weather), 'food');
   };
 
   // 맨 아래 "광고 보고 1회 충전하기" 전용 — 충전만 하고 자유롭게 생성하도록 (자동 생성 X)
@@ -485,6 +490,13 @@ export default function HomeScreen() {
             {timeText}
           </Text>
         </View>
+
+        {/* 게스트 안내 배너 */}
+        {isGuest && (
+          <View style={styles.guestBanner}>
+            <Text style={styles.guestBannerText}>👤 {t('home.guestBanner')}</Text>
+          </View>
+        )}
 
         {/* 날씨 영역 */}
         {weatherLoading && (
@@ -812,6 +824,32 @@ export default function HomeScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      {/* 사용 안내 모달 (진입 시 1회, '오늘 하루 안 보기'로 끔) */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={guideOpen}
+        onRequestClose={() => setGuideOpen(false)}
+      >
+        <Pressable style={styles.modalOverlay} onPress={() => setGuideOpen(false)}>
+          <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
+            <Text style={styles.modalTitle}>{t('guide.title')}</Text>
+            <View style={styles.guideList}>
+              <Text style={styles.guideLine}>• {t('guide.line1')}</Text>
+              <Text style={styles.guideLine}>• {t('guide.line2')}</Text>
+              <Text style={styles.guideLine}>• {t('guide.line3')}</Text>
+              <Text style={styles.guideLine}>• {t('guide.line4')}</Text>
+            </View>
+            <TouchableOpacity style={styles.guideGotIt} onPress={() => setGuideOpen(false)}>
+              <Text style={styles.guideGotItText}>{t('guide.gotIt')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.modalCancel} onPress={handleDismissGuideToday}>
+              <Text style={styles.modalCancelText}>{t('guide.dontShowToday')}</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </LinearGradient>
   );
 }
@@ -835,6 +873,44 @@ const styles = StyleSheet.create({
   },
   dateText: { fontSize: 17, fontWeight: '600' },
   timeText: { fontSize: 14 },
+  // 게스트 배너
+  guestBanner: {
+    width: '100%',
+    backgroundColor: 'rgba(255,255,255,0.08)',
+    borderRadius: 12,
+    paddingVertical: 9,
+    paddingHorizontal: 14,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.12)',
+  },
+  guestBannerText: {
+    color: 'rgba(255,255,255,0.7)',
+    fontSize: 12.5,
+    textAlign: 'center',
+  },
+  // 사용 안내 모달
+  guideList: {
+    gap: 12,
+    marginBottom: 8,
+  },
+  guideLine: {
+    color: 'rgba(255,255,255,0.82)',
+    fontSize: 14.5,
+    lineHeight: 21,
+  },
+  guideGotIt: {
+    marginTop: 18,
+    backgroundColor: 'rgba(255,255,255,0.95)',
+    borderRadius: 14,
+    paddingVertical: 15,
+    alignItems: 'center',
+  },
+  guideGotItText: {
+    color: '#0a1628',
+    fontSize: 15,
+    fontWeight: '700',
+  },
   loadingArea: { alignItems: 'center', marginTop: 60, gap: 16 },
   loadingText: { fontSize: 14 },
   weatherArea: { alignItems: 'center', marginBottom: 40 },

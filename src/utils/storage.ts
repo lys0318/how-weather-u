@@ -13,7 +13,21 @@ const KEYS = {
   BOOKMARKS: 'bookmarks',
   NOTIFICATIONS_ENABLED: 'notificationsEnabled', // 푸시 알림 켬/끔
   NOTIF_SLOTS: 'notifSlots',                     // 받을 시간대 (아침/점심/저녁)
+  GUIDE_DISMISSED: 'guideDismissedDate',         // 사용 안내 '오늘 하루 안 보기' 날짜
 } as const;
+
+// ─── 사용 안내 모달: 오늘 하루 안 보기 ───────────────────────
+function kstTodayStr(): string {
+  const kst = new Date(Date.now() + 9 * 60 * 60 * 1000);
+  return kst.toISOString().slice(0, 10); // YYYY-MM-DD (KST)
+}
+export async function isGuideDismissedToday(): Promise<boolean> {
+  const v = await AsyncStorage.getItem(KEYS.GUIDE_DISMISSED);
+  return v === kstTodayStr();
+}
+export async function dismissGuideToday(): Promise<void> {
+  await AsyncStorage.setItem(KEYS.GUIDE_DISMISSED, kstTodayStr());
+}
 
 // ─── 알림 활성화 (사용자 의도) ───────────────────────────
 // 기본값 false: 사용자가 설정에서 직접 켜야 알림이 옴.

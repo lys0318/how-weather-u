@@ -33,9 +33,23 @@ const SLOT_LABEL_KEY: Record<NotifSlot, string> = {
 };
 
 export default function SettingsScreen() {
-  const { user, signOut, deleteAccount } = useAuth();
+  const { user, signOut, deleteAccount, isGuest, signInWithGoogle } = useAuth();
   const { t, lang, setLang } = useI18n();
   const [deleting, setDeleting] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
+
+  // 게스트 → 구글 로그인 (성공 시 세션 전환 → 자동 라우팅)
+  const handleGuestUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      await signInWithGoogle();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : t('login.genericError');
+      Alert.alert(t('login.failTitle'), msg);
+    } finally {
+      setUpgrading(false);
+    }
+  };
   // 알림 활성화 상태 (Switch에 바인딩) — 디폴트 OFF
   const [notifEnabled, setNotifEnabled] = useState<boolean>(false);
   const [notifToggling, setNotifToggling] = useState(false);
@@ -309,24 +323,44 @@ export default function SettingsScreen() {
 
       <View style={styles.divider} />
 
-      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutButtonText}>{t('settings.logout')}</Text>
-      </TouchableOpacity>
+      {isGuest ? (
+        <>
+          {/* 게스트: 구글 로그인 유도 + 게스트 종료 */}
+          <TouchableOpacity
+            style={[styles.primaryButton, upgrading && styles.buttonDisabled]}
+            onPress={handleGuestUpgrade}
+            disabled={upgrading}
+          >
+            <Text style={styles.primaryButtonText}>{t('settings.guestUpgrade')}</Text>
+          </TouchableOpacity>
+          <Text style={styles.feedbackHint}>{t('settings.guestUpgradeHint')}</Text>
 
-      <TouchableOpacity
-        style={[styles.deleteAccountButton, deleting && styles.buttonDisabled]}
-        onPress={handleDeleteAccount}
-        disabled={deleting}
-      >
-        <Text style={styles.deleteAccountText}>
-          {deleting ? t('settings.deleting') : t('settings.deleteAccount')}
-        </Text>
-      </TouchableOpacity>
+          <TouchableOpacity style={styles.logoutButton} onPress={() => signOut()}>
+            <Text style={styles.logoutButtonText}>{t('settings.exitGuest')}</Text>
+          </TouchableOpacity>
+        </>
+      ) : (
+        <>
+          <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+            <Text style={styles.logoutButtonText}>{t('settings.logout')}</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={[styles.deleteAccountButton, deleting && styles.buttonDisabled]}
+            onPress={handleDeleteAccount}
+            disabled={deleting}
+          >
+            <Text style={styles.deleteAccountText}>
+              {deleting ? t('settings.deleting') : t('settings.deleteAccount')}
+            </Text>
+          </TouchableOpacity>
+        </>
+      )}
 
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
-        <Text style={styles.appVersion}>v1.0.16</Text>
+        <Text style={styles.appVersion}>v1.0.18</Text>
       </View>
     </ScrollView>
   );
