@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { generateMessage, GeneratedMessage, MessageContext } from '../services/message';
 import { WeatherInfo, getTimeOfDay, Preference } from '../constants/weather';
+import { translate } from '../i18n';
 
 interface UseMessageResult {
   message: GeneratedMessage | null;
@@ -30,7 +31,7 @@ export function useMessage(): UseMessageResult {
       const result = await generateMessage(ctx);
       setMessage(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '메시지 생성 중 오류가 발생했습니다.');
+      setError(err instanceof Error ? err.message : translate('common.genError'));
     } finally {
       setLoading(false);
     }

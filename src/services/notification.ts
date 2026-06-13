@@ -1,33 +1,20 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { getNotificationsEnabled, getNotifSlots, NotifSlot } from '../utils/storage';
+import { translate } from '../i18n';
 
-// 시간대별 발송 시각 + 문구 (매일 반복)
-export const SLOT_CONFIG: Record<
-  NotifSlot,
-  { label: string; hour: number; minute: number; title: string; body: string }
-> = {
-  morning: {
-    label: '아침',
-    hour: 8,
-    minute: 0,
-    title: '아침이에요 ☀️',
-    body: '오늘의 날씨에 맞는 한마디, 받아보고 시작해요!',
-  },
-  lunch: {
-    label: '점심',
-    hour: 12,
-    minute: 30,
-    title: '점심 시간이에요 🍱',
-    body: '잠깐 쉬어가며 메시지 한 줄 어떠세요?',
-  },
-  evening: {
-    label: '저녁',
-    hour: 19,
-    minute: 0,
-    title: '오늘 하루도 수고했어요 🌙',
-    body: '제가 위로해드릴게요. 따뜻한 메시지 받아보세요.',
-  },
+// 시간대별 발송 시각 (문구는 현재 언어로 translate)
+export const SLOT_CONFIG: Record<NotifSlot, { hour: number; minute: number }> = {
+  morning: { hour: 8, minute: 0 },
+  lunch: { hour: 12, minute: 30 },
+  evening: { hour: 19, minute: 0 },
+};
+
+// 슬롯별 알림 제목/본문 i18n 키
+const SLOT_TEXT_KEY: Record<NotifSlot, { title: string; body: string }> = {
+  morning: { title: 'notif.morningTitle', body: 'notif.morningBody' },
+  lunch: { title: 'notif.lunchTitle', body: 'notif.lunchBody' },
+  evening: { title: 'notif.eveningTitle', body: 'notif.eveningBody' },
 };
 
 export async function requestNotificationPermission(): Promise<boolean> {
@@ -39,7 +26,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 
   if (Platform.OS === 'android') {
     await Notifications.setNotificationChannelAsync('weather-messages', {
-      name: '날씨 메시지',
+      name: translate('notif.channelName'),
       importance: Notifications.AndroidImportance.DEFAULT,
       vibrationPattern: [0, 250],
       lightColor: '#FFFFFF',
@@ -52,7 +39,7 @@ export async function requestNotificationPermission(): Promise<boolean> {
 export async function sendLocalNotification(message: string, emoji: string): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: `하우웨더유 ${emoji}`,
+      title: `${translate('common.appName')} ${emoji}`,
       body: message,
       sound: false,
     },
@@ -67,8 +54,8 @@ export async function cancelAllNotifications(): Promise<void> {
 export async function sendTestNotification(): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     content: {
-      title: '하우웨더유 🌤️',
-      body: '테스트 알림이에요. 알림이 정상적으로 작동하고 있어요!',
+      title: `${translate('common.appName')} 🌤️`,
+      body: translate('notif.testBody'),
       sound: false,
     },
     trigger: null,
@@ -100,9 +87,10 @@ export async function scheduleSlotNotifications(slots: NotifSlot[]): Promise<voi
     for (const slot of slots) {
       const cfg = SLOT_CONFIG[slot];
       if (!cfg) continue;
+      const txt = SLOT_TEXT_KEY[slot];
       try {
         await Notifications.scheduleNotificationAsync({
-          content: { title: cfg.title, body: cfg.body, sound: false },
+          content: { title: translate(txt.title), body: translate(txt.body), sound: false },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DAILY,
             hour: cfg.hour,

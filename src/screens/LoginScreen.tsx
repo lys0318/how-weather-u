@@ -9,9 +9,11 @@ import {
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
+import { useI18n } from '../i18n';
 
 export default function LoginScreen() {
   const { signInWithGoogle } = useAuth();
+  const { t } = useI18n();
   const [loading, setLoading] = useState(false);
 
   const handleGoogleLogin = async () => {
@@ -19,8 +21,8 @@ export default function LoginScreen() {
     try {
       await signInWithGoogle();
     } catch (err) {
-      const msg = err instanceof Error ? err.message : '로그인 중 오류가 발생했어요.';
-      Alert.alert('로그인 실패', msg);
+      const msg = err instanceof Error ? err.message : t('login.genericError');
+      Alert.alert(t('login.failTitle'), msg);
     } finally {
       setLoading(false);
     }
@@ -36,10 +38,7 @@ export default function LoginScreen() {
         <View style={styles.brand}>
           <Text style={styles.appName}>하우웨더유</Text>
           <Text style={styles.tagline}>How Weather You</Text>
-          <Text style={styles.desc}>
-            오늘의 날씨가{'\n'}
-            당신에게 건네는 한마디
-          </Text>
+          <Text style={styles.desc}>{t('login.tagline')}</Text>
         </View>
 
         {/* 로그인 버튼 */}
@@ -54,14 +53,12 @@ export default function LoginScreen() {
             ) : (
               <>
                 <Text style={styles.googleG}>G</Text>
-                <Text style={styles.googleButtonText}>구글로 시작하기</Text>
+                <Text style={styles.googleButtonText}>{t('login.googleStart')}</Text>
               </>
             )}
           </TouchableOpacity>
 
-          <Text style={styles.privacy}>
-            로그인하시면 이용약관 및{'\n'}개인정보처리방침에 동의하게 돼요
-          </Text>
+          <Text style={styles.privacy}>{t('login.agree')}</Text>
         </View>
       </View>
     </LinearGradient>

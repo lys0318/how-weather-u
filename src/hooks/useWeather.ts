@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { fetchWeather } from '../services/weather';
 import { WeatherInfo } from '../constants/weather';
+import { translate } from '../i18n';
 
 interface UseWeatherResult {
   weather: WeatherInfo | null;
@@ -25,7 +26,7 @@ export function useWeather(): UseWeatherResult {
         if (!cancelled) setWeather(data);
       })
       .catch((err) => {
-        if (!cancelled) setError(err.message ?? '날씨를 불러오지 못했습니다.');
+        if (!cancelled) setError(err.message ?? translate('common.weatherFail'));
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

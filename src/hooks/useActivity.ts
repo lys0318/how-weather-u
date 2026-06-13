@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { generateActivity, ActivityRecommendation } from '../services/activity';
 import { WeatherInfo } from '../constants/weather';
+import { translate } from '../i18n';
 
 interface UseActivityResult {
   activity: ActivityRecommendation | null;
@@ -21,7 +22,7 @@ export function useActivity(): UseActivityResult {
       const result = await generateActivity(weather);
       setActivity(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '활동 추천 중 오류가 발생했습니다.');
+      setError(err instanceof Error ? err.message : translate('common.genError'));
     } finally {
       setLoading(false);
     }

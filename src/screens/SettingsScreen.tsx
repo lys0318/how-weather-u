@@ -24,9 +24,17 @@ import {
   SLOT_CONFIG,
 } from '../services/notification';
 import { useAuth } from '../contexts/AuthContext';
+import { useI18n } from '../i18n';
+
+const SLOT_LABEL_KEY: Record<NotifSlot, string> = {
+  morning: 'settings.slotMorning',
+  lunch: 'settings.slotLunch',
+  evening: 'settings.slotEvening',
+};
 
 export default function SettingsScreen() {
   const { user, signOut, deleteAccount } = useAuth();
+  const { t, lang, setLang } = useI18n();
   const [deleting, setDeleting] = useState(false);
   // 알림 활성화 상태 (Switch에 바인딩) — 디폴트 OFF
   const [notifEnabled, setNotifEnabled] = useState<boolean>(false);
@@ -38,17 +46,17 @@ export default function SettingsScreen() {
     user?.user_metadata?.full_name ||
     user?.user_metadata?.name ||
     user?.email ||
-    '게스트';
+    t('settings.guest');
   const userEmail = user?.email || '';
 
   const handleLogout = () => {
     Alert.alert(
-      '로그아웃',
-      '로그아웃하시겠어요? 다시 로그인하면 같은 계정으로 들어올 수 있어요.',
+      t('settings.logout'),
+      t('settings.logoutBody'),
       [
-        { text: '취소', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: '로그아웃',
+          text: t('settings.logout'),
           style: 'destructive',
           onPress: async () => {
             await signOut();
@@ -61,25 +69,22 @@ export default function SettingsScreen() {
   // 계정 탈퇴: 두 단계 확인 후 즉시 영구 삭제
   const handleDeleteAccount = () => {
     Alert.alert(
-      '계정 탈퇴',
-      '계정을 정말 탈퇴하시겠어요?\n\n' +
-        '• 계정 정보, 사용 기록, 북마크가 모두 영구 삭제돼요\n' +
-        '• 삭제된 데이터는 복구할 수 없어요\n' +
-        '• 동일 구글 계정으로 다시 가입은 가능해요',
+      t('settings.deleteAccount'),
+      t('settings.deleteBody'),
       [
-        { text: '취소', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: '계속',
+          text: t('settings.deleteContinue'),
           style: 'destructive',
           onPress: () => {
             // 두 번째 확인
             Alert.alert(
-              '마지막 확인',
-              '정말 탈퇴를 진행할까요? 이 작업은 되돌릴 수 없어요.',
+              t('settings.deleteFinalTitle'),
+              t('settings.deleteFinalBody'),
               [
-                { text: '아니요', style: 'cancel' },
+                { text: t('settings.deleteNo'), style: 'cancel' },
                 {
-                  text: '네, 탈퇴할게요',
+                  text: t('settings.deleteYes'),
                   style: 'destructive',
                   onPress: async () => {
                     setDeleting(true);
@@ -88,7 +93,7 @@ export default function SettingsScreen() {
                       // 성공 시 자동으로 로그인 화면으로 라우팅됨 (세션 클리어)
                     } catch (e) {
                       const msg = e instanceof Error ? e.message : String(e);
-                      Alert.alert('탈퇴 실패', `오류가 발생했어요: ${msg}`);
+                      Alert.alert(t('settings.deleteFailTitle'), t('settings.deleteFailBody', { msg }));
                     } finally {
                       setDeleting(false);
                     }
@@ -129,9 +134,9 @@ export default function SettingsScreen() {
       if (newValue) {
         const granted = await requestNotificationPermission();
         if (!granted) {
-          Alert.alert('알림 권한 필요', '알림 권한이 없어요.', [
-            { text: '설정 앱 열기', onPress: () => Linking.openSettings() },
-            { text: '취소', style: 'cancel' },
+          Alert.alert(t('settings.permTitle'), t('settings.permBody'), [
+            { text: t('settings.openSettings'), onPress: () => Linking.openSettings() },
+            { text: t('common.cancel'), style: 'cancel' },
           ]);
           return;
         }
@@ -152,7 +157,7 @@ export default function SettingsScreen() {
       }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      Alert.alert('오류', `알림 설정 변경 실패: ${msg}`);
+      Alert.alert(t('settings.errorTitle'), t('settings.notifChangeFail', { msg }));
     } finally {
       setNotifToggling(false);
     }
@@ -180,19 +185,19 @@ export default function SettingsScreen() {
     try {
       const supported = await Linking.canOpenURL(FEEDBACK_URL);
       if (!supported) {
-        Alert.alert('오류', '브라우저를 열 수 없어요.');
+        Alert.alert(t('settings.errorTitle'), t('settings.browserFail'));
         return;
       }
       await Linking.openURL(FEEDBACK_URL);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      Alert.alert('오류', `피드백 페이지 열기 실패: ${msg}`);
+      Alert.alert(t('settings.errorTitle'), t('settings.feedbackOpenFail', { msg }));
     }
   };
 
   return (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
-      <Text style={styles.heading}>설정</Text>
+      <Text style={styles.heading}>{t('settings.heading')}</Text>
 
       {/* 사용자 카드 */}
       <View style={styles.userCard}>
@@ -207,30 +212,47 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* 언어 선택 */}
+      <View style={styles.slotsCard}>
+        <Text style={styles.slotsTitle}>{t('settings.languageTitle')}</Text>
+        <Text style={styles.slotsSub}>{t('settings.languageSub')}</Text>
+        <View style={styles.slotsRow}>
+          {(['ko', 'en'] as const).map((l) => {
+            const active = lang === l;
+            return (
+              <TouchableOpacity
+                key={l}
+                style={[styles.slotChip, active && styles.slotChipActive]}
+                onPress={() => setLang(l)}
+                activeOpacity={0.85}
+              >
+                <Text style={[styles.slotChipLabel, active && styles.slotChipLabelActive]}>
+                  {l === 'ko' ? t('settings.langKo') : t('settings.langEn')}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </View>
+
       {/* 알림 안내 */}
       <View style={styles.section}>
-        <Text style={styles.sectionTitle}>알림</Text>
-        <Text style={styles.desc}>
-          푸시 알림을 켜면 원하는 시간대에{'\n'}
-          메시지를 받으러 오라고 살짝 알려드려요.
-        </Text>
-        <Text style={styles.subDesc}>
-          • 아침 08:00 / 점심 12:30 / 저녁 19:00{'\n'}
-          • 원하는 시간대만 선택해서 받을 수 있어요
-        </Text>
+        <Text style={styles.sectionTitle}>{t('settings.notifTitle')}</Text>
+        <Text style={styles.desc}>{t('settings.notifDesc')}</Text>
+        <Text style={styles.subDesc}>{t('settings.notifSubDesc')}</Text>
       </View>
 
       {/* 알림 ON/OFF 토글 */}
       <View style={styles.notifToggleCard}>
         <View style={{ flex: 1 }}>
-          <Text style={styles.notifToggleTitle}>푸시 알림</Text>
+          <Text style={styles.notifToggleTitle}>{t('settings.pushTitle')}</Text>
           <Text
             style={[
               styles.notifToggleStatus,
               { color: notifEnabled ? '#7ec9ff' : '#888' },
             ]}
           >
-            {notifEnabled ? '알림이 활성화됨' : '알림이 해제됨'}
+            {notifEnabled ? t('settings.pushOn') : t('settings.pushOff')}
           </Text>
         </View>
         <Switch
@@ -245,8 +267,8 @@ export default function SettingsScreen() {
       {/* 시간대 선택 (알림 켜져있을 때만 활성) */}
       {notifEnabled && (
         <View style={styles.slotsCard}>
-          <Text style={styles.slotsTitle}>받을 시간대를 골라주세요</Text>
-          <Text style={styles.slotsSub}>선택한 시간대에만 알림이 와요</Text>
+          <Text style={styles.slotsTitle}>{t('settings.slotsTitle')}</Text>
+          <Text style={styles.slotsSub}>{t('settings.slotsSub')}</Text>
           <View style={styles.slotsRow}>
             {(['morning', 'lunch', 'evening'] as NotifSlot[]).map((s) => {
               const active = slots.includes(s);
@@ -262,7 +284,7 @@ export default function SettingsScreen() {
                   activeOpacity={0.85}
                 >
                   <Text style={[styles.slotChipLabel, active && styles.slotChipLabelActive]}>
-                    {cfg.label}
+                    {t(SLOT_LABEL_KEY[s])}
                   </Text>
                   <Text style={[styles.slotChipTime, active && styles.slotChipTimeActive]}>
                     {timeLabel}
@@ -272,7 +294,7 @@ export default function SettingsScreen() {
             })}
           </View>
           {slots.length === 0 && (
-            <Text style={styles.slotsWarn}>한 개 이상 선택해주세요</Text>
+            <Text style={styles.slotsWarn}>{t('settings.slotsWarn')}</Text>
           )}
         </View>
       )}
@@ -281,16 +303,14 @@ export default function SettingsScreen() {
 
       {/* 피드백 / 버그 신고 */}
       <TouchableOpacity style={styles.feedbackButton} onPress={handleFeedback}>
-        <Text style={styles.feedbackButtonText}>💬 버그 신고 / 개선 의견 보내기</Text>
+        <Text style={styles.feedbackButtonText}>{t('settings.feedbackButton')}</Text>
       </TouchableOpacity>
-      <Text style={styles.feedbackHint}>
-        의견 주시면 빠르게 반영할게요!
-      </Text>
+      <Text style={styles.feedbackHint}>{t('settings.feedbackHint')}</Text>
 
       <View style={styles.divider} />
 
       <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
-        <Text style={styles.logoutButtonText}>로그아웃</Text>
+        <Text style={styles.logoutButtonText}>{t('settings.logout')}</Text>
       </TouchableOpacity>
 
       <TouchableOpacity
@@ -299,14 +319,14 @@ export default function SettingsScreen() {
         disabled={deleting}
       >
         <Text style={styles.deleteAccountText}>
-          {deleting ? '탈퇴 처리 중...' : '계정 탈퇴'}
+          {deleting ? t('settings.deleting') : t('settings.deleteAccount')}
         </Text>
       </TouchableOpacity>
 
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
-        <Text style={styles.appVersion}>v1.0.15</Text>
+        <Text style={styles.appVersion}>v1.0.16</Text>
       </View>
     </ScrollView>
   );

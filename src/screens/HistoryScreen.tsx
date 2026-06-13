@@ -16,11 +16,23 @@ import { fetchCloudBookmarks, cloudToStoredMessage } from '../services/bookmarks
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { ShareableCard } from '../components/ShareableCard';
-import { TIME_OF_DAY_KO, DAY_OF_WEEK_KO, getTimeOfDay, WeatherCondition, CONDITION_META } from '../constants/weather';
+import {
+  TIME_OF_DAY_KO,
+  TIME_OF_DAY_EN,
+  DAY_OF_WEEK_EN_SHORT,
+  MONTH_EN_SHORT,
+  getTimeOfDay,
+  WeatherCondition,
+  CONDITION_META,
+} from '../constants/weather';
+import { useI18n, getCurrentLang, translate } from '../i18n';
 
 type Tab = 'all' | 'bookmark';
 
+type TFn = (key: string, vars?: Record<string, string | number>) => string;
+
 export default function HistoryScreen() {
+  const { t, lang } = useI18n();
   const [tab, setTab] = useState<Tab>('all');
   const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [cloudBookmarks, setCloudBookmarks] = useState<StoredMessage[]>([]);
@@ -110,28 +122,32 @@ export default function HistoryScreen() {
       if (!canShare) {
         const date = formatDate(msg.generatedAt);
         await Share.share({
-          message: `${msg.weatherEmoji} ${date}\n\n${msg.text}\n\n— 하우웨더유 (How Weather You)`,
+          message: `${msg.weatherEmoji} ${date}\n\n${msg.text}\n\n${t('home.shareSignature')}`,
         });
         return;
       }
       await Sharing.shareAsync(uri, {
         mimeType: 'image/png',
-        dialogTitle: '하우웨더유 메시지 공유',
+        dialogTitle: t('home.shareDialogTitle'),
         UTI: 'public.png',
       });
     } catch (e) {
-      const errMsg = e instanceof Error ? e.message : '공유 실패';
-      Alert.alert('공유 실패', `${errMsg}\n\n텍스트로 공유할게요.`);
+      const errMsg = e instanceof Error ? e.message : t('home.shareFailTitle');
+      Alert.alert(t('home.shareFailTitle'), t('home.shareFailBody', { msg: errMsg }));
       const date = formatDate(msg.generatedAt);
       await Share.share({
-        message: `${msg.weatherEmoji} ${date}\n\n${msg.text}\n\n— 하우웨더유 (How Weather You)`,
+        message: `${msg.weatherEmoji} ${date}\n\n${msg.text}\n\n${t('home.shareSignature')}`,
       }).catch(() => {});
     }
   };
 
-  // 공유 카드용 라벨 헬퍼
+  // 공유 카드용 라벨 헬퍼 (현재 언어)
   const buildDateLabel = (iso: string): string => {
     const d = new Date(iso);
+    if (getCurrentLang() === 'en') {
+      const todEn = TIME_OF_DAY_EN[getTimeOfDay(d.getHours())];
+      return `${DAY_OF_WEEK_EN_SHORT[d.getDay()]}, ${MONTH_EN_SHORT[d.getMonth()]} ${d.getDate()} ${todEn}`;
+    }
     const days = ['일', '월', '화', '수', '목', '금', '토'];
     const tod = TIME_OF_DAY_KO[getTimeOfDay(d.getHours())];
     return `${d.getMonth() + 1}월 ${d.getDate()}일 ${days[d.getDay()]}요일 ${tod}`;
@@ -151,17 +167,17 @@ export default function HistoryScreen() {
     <View style={styles.container}>
       {/* 헤더 */}
       <View style={styles.header}>
-        <Text style={styles.heading}>메시지 기록</Text>
+        <Text style={styles.heading}>{t('history.title')}</Text>
         <Text style={styles.count}>
-          {tab === 'all' ? `${messages.length}개` : `★ ${cloudBookmarks.length}개`}
+          {tab === 'all'
+            ? t('history.countAll', { n: messages.length })
+            : t('history.countBmk', { n: cloudBookmarks.length })}
         </Text>
       </View>
 
       {/* 보존 안내 */}
       <Text style={styles.retentionNotice}>
-        {tab === 'all'
-          ? '메시지는 7일간 보관되고 자동으로 삭제돼요'
-          : '북마크는 클라우드에 영구 보관돼요 ☁️★'}
+        {tab === 'all' ? t('history.retentionAll') : t('history.retentionBmk')}
       </Text>
 
       {/* 탭 */}
@@ -170,21 +186,21 @@ export default function HistoryScreen() {
           style={[styles.tab, tab === 'all' && styles.tabActive]}
           onPress={() => setTab('all')}
         >
-          <Text style={[styles.tabText, tab === 'all' && styles.tabTextActive]}>전체</Text>
+          <Text style={[styles.tabText, tab === 'all' && styles.tabTextActive]}>{t('history.tabAll')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={[styles.tab, tab === 'bookmark' && styles.tabActive]}
           onPress={() => setTab('bookmark')}
         >
           <Text style={[styles.tabText, tab === 'bookmark' && styles.tabTextActive]}>
-            ★ 북마크
+            {t('history.tabBookmarks')}
           </Text>
         </TouchableOpacity>
       </View>
 
       {/* 메시지 리스트 */}
       {displayed.length === 0 ? (
-        <EmptyState tab={tab} />
+        <EmptyState tab={tab} t={t} />
       ) : (
         <FlatList
           data={displayed}
@@ -203,6 +219,7 @@ export default function HistoryScreen() {
               showDateHeader={shouldShowDateHeader(displayed, index)}
               onBookmarkToggle={handleBookmarkToggle}
               onShare={handleShare}
+              t={t}
             />
           )}
         />
@@ -214,7 +231,11 @@ export default function HistoryScreen() {
           ref={cardRef}
           text={shareMsg.text}
           weatherEmoji={shareMsg.weatherEmoji}
-          conditionKo={CONDITION_META[shareMsg.weatherCondition as WeatherCondition]?.ko}
+          conditionKo={
+            lang === 'en'
+              ? CONDITION_META[shareMsg.weatherCondition as WeatherCondition]?.en
+              : CONDITION_META[shareMsg.weatherCondition as WeatherCondition]?.ko
+          }
           dateLabel={buildDateLabel(shareMsg.generatedAt)}
         />
       )}
@@ -240,9 +261,10 @@ interface CardProps {
   showDateHeader: boolean;
   onBookmarkToggle: (id: string) => void;
   onShare: (msg: StoredMessage) => void;
+  t: TFn;
 }
 
-function MessageCard({ message, showDateHeader, onBookmarkToggle, onShare }: CardProps) {
+function MessageCard({ message, showDateHeader, onBookmarkToggle, onShare, t }: CardProps) {
   return (
     <>
       {showDateHeader && (
@@ -256,7 +278,7 @@ function MessageCard({ message, showDateHeader, onBookmarkToggle, onShare }: Car
             {message.kind && message.kind !== 'message' && (
               <View style={styles.kindTag}>
                 <Text style={styles.kindTagText}>
-                  {message.kind === 'activity' ? '🏃 활동' : '🍱 음식'}
+                  {message.kind === 'activity' ? t('history.tagActivity') : t('history.tagFood')}
                 </Text>
               </View>
             )}
@@ -289,23 +311,21 @@ function MessageCard({ message, showDateHeader, onBookmarkToggle, onShare }: Car
 }
 
 // ── 빈 상태 ─────────────────────────────────────────────────
-function EmptyState({ tab }: { tab: Tab }) {
+function EmptyState({ tab, t }: { tab: Tab; t: TFn }) {
   return (
     <View style={styles.center}>
       <Text style={styles.emptyEmoji}>{tab === 'all' ? '🌤️' : '★'}</Text>
       <Text style={styles.emptyTitle}>
-        {tab === 'all' ? '아직 받은 메시지가 없어요' : '북마크한 메시지가 없어요'}
+        {tab === 'all' ? t('history.emptyTitleAll') : t('history.emptyTitleBmk')}
       </Text>
       <Text style={styles.emptyDesc}>
-        {tab === 'all'
-          ? '홈에서 메시지를 생성하거나\n알림을 설정해보세요'
-          : '마음에 드는 메시지에 ☆을 눌러\n저장해두세요'}
+        {tab === 'all' ? t('history.emptyDescAll') : t('history.emptyDescBmk')}
       </Text>
     </View>
   );
 }
 
-// ── 날짜 포맷 헬퍼 ───────────────────────────────────────────
+// ── 날짜 포맷 헬퍼 (현재 언어) ───────────────────────────────
 function formatDateHeader(iso: string): string {
   const d = new Date(iso);
   const now = new Date();
@@ -314,9 +334,12 @@ function formatDateHeader(iso: string): string {
     toDateStr(d.toISOString()) ===
     toDateStr(new Date(now.getTime() - 86400000).toISOString());
 
-  if (isToday) return '오늘';
-  if (isYesterday) return '어제';
+  if (isToday) return translate('history.today');
+  if (isYesterday) return translate('history.yesterday');
 
+  if (getCurrentLang() === 'en') {
+    return `${DAY_OF_WEEK_EN_SHORT[d.getDay()]}, ${MONTH_EN_SHORT[d.getMonth()]} ${d.getDate()}`;
+  }
   const days = ['일', '월', '화', '수', '목', '금', '토'];
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]})`;
 }
@@ -325,13 +348,19 @@ function formatTime(iso: string): string {
   const d = new Date(iso);
   const h = d.getHours();
   const m = String(d.getMinutes()).padStart(2, '0');
-  const ampm = h < 12 ? '오전' : '오후';
   const hour = h % 12 === 0 ? 12 : h % 12;
+  if (getCurrentLang() === 'en') {
+    return `${hour}:${m} ${h < 12 ? 'AM' : 'PM'}`;
+  }
+  const ampm = h < 12 ? '오전' : '오후';
   return `${ampm} ${hour}:${m}`;
 }
 
 function formatDate(iso: string): string {
   const d = new Date(iso);
+  if (getCurrentLang() === 'en') {
+    return `${DAY_OF_WEEK_EN_SHORT[d.getDay()]}, ${MONTH_EN_SHORT[d.getMonth()]} ${d.getDate()} ${formatTime(iso)}`;
+  }
   const days = ['일', '월', '화', '수', '목', '금', '토'];
   return `${d.getMonth() + 1}월 ${d.getDate()}일 (${days[d.getDay()]}) ${formatTime(iso)}`;
 }

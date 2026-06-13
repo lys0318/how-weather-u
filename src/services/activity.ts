@@ -1,5 +1,6 @@
-import { WeatherInfo, CONDITION_META, getTimeOfDay, TIME_OF_DAY_KO } from '../constants/weather';
+import { WeatherInfo, getTimeOfDay } from '../constants/weather';
 import { callFunction } from './backend';
+import { getCurrentLang } from '../i18n';
 
 export interface ActivityRecommendation {
   text: string;
@@ -10,23 +11,27 @@ export interface ActivityRecommendation {
 
 export async function generateActivity(weather: WeatherInfo): Promise<ActivityRecommendation> {
   const hour = new Date().getHours();
-  // 향후 12시간 예보 요약 (Edge Function에 전달해 활동 추천에 반영)
-  // 형식: { hour, conditionKo, temp, popPercent }
+  // 향후 12시간 예보 요약 — condition enum으로 전달 (서버가 언어별 라벨링)
   const forecastPayload = (weather.forecast ?? []).map((f) => ({
     hour: f.hour,
-    conditionKo: f.conditionKo,
+    condition: f.condition,
     temp: f.temp,
     popPercent: Math.round(f.pop * 100),
   }));
 
   const res = await callFunction('generate-activity', {
-    conditionKo: CONDITION_META[weather.condition].ko,
-    timeOfDayKo: TIME_OF_DAY_KO[getTimeOfDay(hour)],
+    condition: weather.condition,
+    timeOfDay: getTimeOfDay(hour),
     hour,
     temp: weather.temp,
     tempMin: weather.tempMin,
     tempMax: weather.tempMax,
     forecast: forecastPayload,
+    uvIndex: weather.uvIndex,
+    pm10: weather.pm10,
+    pm25: weather.pm25,
+    rainfall: weather.rainfall,
+    lang: getCurrentLang(),
   });
 
   return { text: res.text, generatedAt: new Date(), used: res.used, limit: res.limit };

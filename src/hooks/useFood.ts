@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { generateFood, FoodRecommendation } from '../services/food';
 import { WeatherInfo } from '../constants/weather';
+import { translate } from '../i18n';
 
 interface UseFoodResult {
   food: FoodRecommendation | null;
@@ -21,7 +22,7 @@ export function useFood(): UseFoodResult {
       const result = await generateFood(weather);
       setFood(result);
     } catch (err) {
-      setError(err instanceof Error ? err.message : '음식 추천 중 오류가 발생했습니다.');
+      setError(err instanceof Error ? err.message : translate('common.genError'));
     } finally {
       setLoading(false);
     }

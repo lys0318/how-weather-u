@@ -2,11 +2,9 @@ import {
   WeatherCondition,
   TimeOfDay,
   Preference,
-  TIME_OF_DAY_KO,
-  DAY_OF_WEEK_KO,
-  CONDITION_META,
 } from '../constants/weather';
 import { callFunction } from './backend';
+import { getCurrentLang } from '../i18n';
 
 export interface MessageContext {
   condition: WeatherCondition;
@@ -24,13 +22,13 @@ export interface GeneratedMessage {
 }
 
 export async function generateMessage(ctx: MessageContext): Promise<GeneratedMessage> {
-  const meta = CONDITION_META[ctx.condition];
+  // 날씨/시간/요일은 enum·숫자로 전달하고, 라벨링은 서버가 lang에 맞춰 처리
   const res = await callFunction('generate-message', {
-    conditionKo: meta.ko,
-    conditionEmoji: meta.emoji,
-    timeOfDayKo: TIME_OF_DAY_KO[ctx.timeOfDay],
-    dayOfWeekKo: DAY_OF_WEEK_KO[ctx.dayOfWeek],
+    condition: ctx.condition,
+    timeOfDay: ctx.timeOfDay,
+    dayOfWeek: ctx.dayOfWeek,
     preference: ctx.preference,
+    lang: getCurrentLang(),
   });
 
   return {

@@ -22,13 +22,21 @@ import { useFood } from '../hooks/useFood';
 import {
   getTimeOfDay,
   TIME_OF_DAY_KO,
+  TIME_OF_DAY_EN,
   DAY_OF_WEEK_KO,
+  DAY_OF_WEEK_EN_SHORT,
+  MONTH_EN_SHORT,
   WeatherCondition,
   Preference,
   PREFERENCE_KO,
+  PREFERENCE_EN,
   PREFERENCE_EMOJI,
+  CONDITION_META,
+  uvGrade,
+  airQualityGrade,
 } from '../constants/weather';
 import { saveMessage, saveEntry } from '../utils/storage';
+import { useI18n, Lang } from '../i18n';
 import WeatherAnimation from '../components/WeatherAnimation';
 import { refreshNotificationsIfNeeded } from '../services/notification';
 import { showInterstitialThenRun, showRewardedAndGrant, isRewardedAvailable } from '../services/ads';
@@ -98,43 +106,36 @@ function getTextColors(hour: number) {
   };
 }
 
-const PREF_OPTIONS: { key: Preference; desc: string }[] = [
-  { key: 'comfort', desc: '힘든 하루를 따뜻하게 안아주는 한마디' },
-  { key: 'cheer',   desc: '에너지가 솟는 응원과 격려' },
-  { key: 'advice',  desc: '날씨에 맞춰 지금 해볼만한 행동 추천' },
+const PREF_ORDER: Preference[] = ['comfort', 'cheer', 'advice'];
+const PREF_DESC_KEY: Record<Preference, string> = {
+  comfort: 'home.prefComfortDesc',
+  cheer: 'home.prefCheerDesc',
+  advice: 'home.prefAdviceDesc',
+};
+
+// ── 로딩 중 보여줄 재밌는 문구 키 ────────────────────────────
+const LOADING_KEYS = [
+  'home.loading1', 'home.loading2', 'home.loading3',
+  'home.loading4', 'home.loading5', 'home.loading6',
 ];
 
-// ── 로딩 중 보여줄 재밌는 문구들 ─────────────────────────────
-const LOADING_MESSAGES = [
-  '오늘 날씨를 살펴보고 있어요...',
-  '감성을 길어 올리는 중...',
-  '단어 하나하나 골라 담는 중...',
-  '하늘에 귀를 기울이는 중...',
-  '당신에게 어울리는 한마디를 찾는 중...',
-  '오늘에 딱 맞는 표현을 짜는 중...',
-];
+type TFn = (key: string, vars?: Record<string, string | number>) => string;
 
-// ── 친절한 에러 메시지 변환 ────────────────────────────────
+// ── 친절한 에러 메시지 변환 (언어 인지) ───────────────────────
 function isLimitError(raw: string | null): boolean {
   if (!raw) return false;
-  return raw.includes('한도') || raw.includes('LIMIT');
+  return raw.includes('한도') || raw.includes('LIMIT') || raw.includes('limit');
 }
-function prettifyError(raw: string | null): string | null {
+function prettifyError(raw: string | null, t: TFn): string | null {
   if (!raw) return null;
-  if (isLimitError(raw)) {
-    return '🌙 오늘의 한도를 모두 사용하셨어요.\n광고 보고 더 받아보거나, 내일 다시 만나요!';
-  }
+  if (isLimitError(raw)) return t('errors.limit');
   if (raw.includes('Network') || raw.includes('네트워크') || raw.includes('fetch')) {
-    return '📡 인터넷 연결을 확인해주세요';
+    return t('errors.network');
   }
-  if (raw.includes('401') || raw.includes('인증')) {
-    return '🔐 로그인이 만료됐어요. 다시 로그인해주세요';
-  }
-  if (raw.includes('429')) {
-    return '⏳ 너무 빠르게 요청하셨어요. 잠시 후 다시 시도해주세요';
-  }
+  if (raw.includes('401') || raw.includes('인증')) return t('errors.auth');
+  if (raw.includes('429')) return t('errors.tooFast');
   if (raw.includes('500') || raw.includes('Claude') || raw.includes('서버')) {
-    return '😢 잠시 서버가 바빠요. 잠시 후 다시 시도해주세요';
+    return t('errors.server');
   }
   return raw;
 }
@@ -176,6 +177,7 @@ export default function HomeScreen() {
   const { message, loading: messageLoading, error: messageError, generate } = useMessage();
   const { activity, loading: activityLoading, error: activityError, generate: generateActivity } = useActivity();
   const { food, loading: foodLoading, error: foodError, generate: generateFood } = useFood();
+  const { t, lang } = useI18n();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [now, setNow] = useState<Date>(() => new Date());
@@ -217,21 +219,32 @@ export default function HomeScreen() {
   const anyLoading = messageLoading || activityLoading || foodLoading;
   useEffect(() => {
     if (!anyLoading) return;
-    setLoadingMsgIdx(Math.floor(Math.random() * LOADING_MESSAGES.length));
+    setLoadingMsgIdx(Math.floor(Math.random() * LOADING_KEYS.length));
     const id = setInterval(() => {
-      setLoadingMsgIdx((i) => (i + 1) % LOADING_MESSAGES.length);
+      setLoadingMsgIdx((i) => (i + 1) % LOADING_KEYS.length);
     }, 2500);
     return () => clearInterval(id);
   }, [anyLoading]);
-  const loadingMsg = LOADING_MESSAGES[loadingMsgIdx];
+  const loadingMsg = t(LOADING_KEYS[loadingMsgIdx]);
 
+  const isEn = lang === 'en';
   const hour = now.getHours();
   const minutes = String(now.getMinutes()).padStart(2, '0');
   const month = now.getMonth() + 1;
   const day = now.getDate();
-  const timeOfDay = TIME_OF_DAY_KO[getTimeOfDay(hour)];
-  const dayOfWeek = DAY_OF_WEEK_KO[now.getDay()];
+  const dow = now.getDay();
+  const timeOfDay = isEn ? TIME_OF_DAY_EN[getTimeOfDay(hour)] : TIME_OF_DAY_KO[getTimeOfDay(hour)];
+  // 날짜 라벨: ko "6월 13일 토요일" / en "Sat, Jun 13"
+  const dateText = isEn
+    ? `${DAY_OF_WEEK_EN_SHORT[dow]}, ${MONTH_EN_SHORT[month - 1]} ${day}`
+    : `${month}월 ${day}일 ${DAY_OF_WEEK_KO[dow]}`;
+  const timeText = `${timeOfDay} ${hour}:${minutes}`;
   const tc = getTextColors(hour);
+
+  // 공유/카드용 날짜 라벨 (시간대 포함)
+  const dateLabel = isEn ? `${dateText} ${timeOfDay}` : `${dateText} ${timeOfDay}`;
+  const prefLabel = (p: Preference) => (isEn ? PREFERENCE_EN[p] : PREFERENCE_KO[p]);
+  const conditionLabel = (c: WeatherCondition, ko: string) => (isEn ? CONDITION_META[c].en : ko);
 
   const gradientColors = getGradient(weather?.condition ?? null, hour);
 
@@ -244,8 +257,8 @@ export default function HomeScreen() {
     ? { used: latestUsage.used as number, limit: latestUsage.limit as number }
     : serverUsage;
   const usageText = displayUsage
-    ? `오늘 ${displayUsage.used}/${displayUsage.limit}회 사용`
-    : '메시지+활동+음식 합쳐 하루 3번까지';
+    ? t('home.usageUsed', { used: displayUsage.used, limit: displayUsage.limit })
+    : t('home.usageFallback');
 
   // 앱 열 때 예약 알림 부족하면 자동 보충
   useEffect(() => {
@@ -308,10 +321,7 @@ export default function HomeScreen() {
             setServerUsage(result);
             fn(); // 광고 끝나면 바로 생성
           } else {
-            Alert.alert(
-              '광고를 불러올 수 없어요',
-              '잠시 후 다시 시도해주세요. (광고를 끝까지 봐야 이용할 수 있어요)',
-            );
+            Alert.alert(t('home.adUnavailableTitle'), t('home.adUnavailableBodyUse'));
           }
         } finally {
           setWatchingAd(false);
@@ -354,20 +364,14 @@ export default function HomeScreen() {
         setServerUsage(result);
         // 방금 광고를 봤으니, 다음 생성 1회는 전면 광고 생략
         skipNextInterstitialRef.current = true;
-        Alert.alert(
-          '충전 완료 🎁',
-          `+1회 충전됐어요!\n원하는 메시지·활동·음식을 자유롭게 생성해보세요.`,
-        );
+        Alert.alert(t('home.chargeDoneTitle'), t('home.chargeDoneFree'));
       } else {
-        Alert.alert(
-          '광고를 불러올 수 없어요',
-          '잠시 후 다시 시도해주세요. (광고를 끝까지 봐야 충전돼요)',
-        );
+        Alert.alert(t('home.adUnavailableTitle'), t('home.adUnavailableBodyCharge'));
       }
     } finally {
       setWatchingAd(false);
     }
-  }, [watchingAd]);
+  }, [watchingAd, t]);
 
   // (에러 카드) 광고 보고 추가 이용 → 직전 시도한 생성 자동 실행
   const handleWatchAdForCredit = useCallback(async () => {
@@ -382,20 +386,17 @@ export default function HomeScreen() {
           pendingGenRef.current();
         } else {
           Alert.alert(
-            '충전 완료 🎁',
-            `+1회 충전됐어요!\n오늘 ${result.used}/${result.limit}회 사용 가능`,
+            t('home.chargeDoneTitle'),
+            t('home.chargeDoneUsage', { used: result.used, limit: result.limit }),
           );
         }
       } else {
-        Alert.alert(
-          '광고를 불러올 수 없어요',
-          '잠시 후 다시 시도해주세요. (광고를 끝까지 봐야 충전돼요)',
-        );
+        Alert.alert(t('home.adUnavailableTitle'), t('home.adUnavailableBodyCharge'));
       }
     } finally {
       setWatchingAd(false);
     }
-  }, [watchingAd]);
+  }, [watchingAd, t]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
@@ -435,22 +436,22 @@ export default function HomeScreen() {
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
         await Share.share({
-          message: `${weather.emoji} ${month}월 ${day}일 ${dayOfWeek} ${timeOfDay}\n\n${message.text}\n\n— 하우웨더유 (How Weather You)`,
+          message: `${weather.emoji} ${dateLabel}\n\n${message.text}\n\n${t('home.shareSignature')}`,
         });
         return;
       }
 
       await Sharing.shareAsync(uri, {
         mimeType: 'image/png',
-        dialogTitle: '하우웨더유 메시지 공유',
+        dialogTitle: t('home.shareDialogTitle'),
         UTI: 'public.png',
       });
     } catch (e) {
       const msg = e instanceof Error ? `${e.message}\n${e.stack?.slice(0, 200) ?? ''}` : String(e);
       console.error('[share] failed:', e);
-      Alert.alert('공유 실패', `${msg}\n\n텍스트로 공유할게요.`);
+      Alert.alert(t('home.shareFailTitle'), t('home.shareFailBody', { msg }));
       await Share.share({
-        message: `${weather.emoji} ${month}월 ${day}일 ${dayOfWeek} ${timeOfDay}\n\n${message.text}\n\n— 하우웨더유 (How Weather You)`,
+        message: `${weather.emoji} ${dateLabel}\n\n${message.text}\n\n${t('home.shareSignature')}`,
       }).catch(() => {});
     } finally {
       setSharing(false);
@@ -478,10 +479,10 @@ export default function HomeScreen() {
         {/* 날짜/시간 */}
         <View style={styles.topBar}>
           <Text style={[styles.dateText, { color: tc.primary }]}>
-            {month}월 {day}일 {dayOfWeek}
+            {dateText}
           </Text>
           <Text style={[styles.timeText, { color: tc.muted }]}>
-            {timeOfDay} {hour}:{minutes}
+            {timeText}
           </Text>
         </View>
 
@@ -489,7 +490,7 @@ export default function HomeScreen() {
         {weatherLoading && (
           <View style={styles.loadingArea}>
             <ActivityIndicator color="rgba(255,255,255,0.5)" size="large" />
-            <Text style={[styles.loadingText, { color: tc.muted }]}>날씨 불러오는 중...</Text>
+            <Text style={[styles.loadingText, { color: tc.muted }]}>{t('home.weatherLoading')}</Text>
           </View>
         )}
 
@@ -497,7 +498,7 @@ export default function HomeScreen() {
           <View style={styles.errorArea}>
             <Text style={styles.errorText}>{weatherError}</Text>
             <TouchableOpacity onPress={refetch} style={styles.retryBtn}>
-              <Text style={[styles.retryText, { color: tc.secondary }]}>다시 시도</Text>
+              <Text style={[styles.retryText, { color: tc.secondary }]}>{t('common.retry')}</Text>
             </TouchableOpacity>
           </View>
         )}
@@ -507,28 +508,68 @@ export default function HomeScreen() {
             <Text style={styles.weatherEmoji}>{weather.emoji}</Text>
             <Text style={[styles.weatherTemp, { color: tc.primary }]}>{weather.temp}°</Text>
             <Text style={[styles.weatherTempRange, { color: tc.muted }]}>
-              최저 {weather.tempMin}° / 최고 {weather.tempMax}°
+              {t('weather.tempRange', { min: weather.tempMin, max: weather.tempMax })}
             </Text>
-            <Text style={[styles.weatherCondition, { color: tc.secondary }]}>{weather.conditionKo}</Text>
-            <Text style={[styles.weatherCity, { color: tc.muted }]}>{weather.city}</Text>
+            <Text style={[styles.weatherCondition, { color: tc.secondary }]}>
+              {conditionLabel(weather.condition, weather.conditionKo)}
+            </Text>
+            <Text style={[styles.weatherCity, { color: tc.muted }]}>
+              {weather.city && weather.city !== '내 위치' ? weather.city : t('weather.myLocation')}
+            </Text>
 
             {/* 추가 날씨 정보: 체감 / 습도 / 풍속 */}
             <View style={styles.weatherDetailsRow}>
               <View style={styles.weatherDetailItem}>
-                <Text style={[styles.weatherDetailLabel, { color: tc.muted }]}>체감</Text>
+                <Text style={[styles.weatherDetailLabel, { color: tc.muted }]}>{t('weather.feelsLike')}</Text>
                 <Text style={[styles.weatherDetailValue, { color: tc.secondary }]}>{weather.feelsLike}°</Text>
               </View>
               <View style={styles.weatherDetailDivider} />
               <View style={styles.weatherDetailItem}>
-                <Text style={[styles.weatherDetailLabel, { color: tc.muted }]}>습도</Text>
+                <Text style={[styles.weatherDetailLabel, { color: tc.muted }]}>{t('weather.humidity')}</Text>
                 <Text style={[styles.weatherDetailValue, { color: tc.secondary }]}>{weather.humidity}%</Text>
               </View>
               <View style={styles.weatherDetailDivider} />
               <View style={styles.weatherDetailItem}>
-                <Text style={[styles.weatherDetailLabel, { color: tc.muted }]}>바람</Text>
+                <Text style={[styles.weatherDetailLabel, { color: tc.muted }]}>{t('weather.wind')}</Text>
                 <Text style={[styles.weatherDetailValue, { color: tc.secondary }]}>{weather.windSpeed}m/s</Text>
               </View>
             </View>
+
+            {/* 추가 지표: 자외선 / 미세먼지 / 강수량 (값 있을 때만) */}
+            {(weather.uvIndex !== undefined ||
+              weather.pm10 !== undefined ||
+              weather.pm25 !== undefined ||
+              weather.rainfall !== undefined) && (
+              <View style={[styles.weatherDetailsRow, { marginTop: 10 }]}>
+                <View style={styles.weatherDetailItem}>
+                  <Text style={[styles.weatherDetailLabel, { color: tc.muted }]}>{t('weather.uv')}</Text>
+                  <Text style={[styles.weatherDetailValue, { color: tc.secondary }]}>
+                    {weather.uvIndex !== undefined
+                      ? `${Math.round(weather.uvIndex)} · ${isEn ? uvGrade(weather.uvIndex).en : uvGrade(weather.uvIndex).ko}`
+                      : '—'}
+                  </Text>
+                </View>
+                <View style={styles.weatherDetailDivider} />
+                <View style={styles.weatherDetailItem}>
+                  <Text style={[styles.weatherDetailLabel, { color: tc.muted }]}>{t('weather.dust')}</Text>
+                  <Text style={[styles.weatherDetailValue, { color: tc.secondary }]}>
+                    {(() => {
+                      const g = airQualityGrade(weather.pm10, weather.pm25);
+                      return g ? (isEn ? g.en : g.ko) : '—';
+                    })()}
+                  </Text>
+                </View>
+                <View style={styles.weatherDetailDivider} />
+                <View style={styles.weatherDetailItem}>
+                  <Text style={[styles.weatherDetailLabel, { color: tc.muted }]}>{t('weather.rain')}</Text>
+                  <Text style={[styles.weatherDetailValue, { color: tc.secondary }]}>
+                    {weather.rainfall && weather.rainfall > 0
+                      ? `${weather.rainfall}mm`
+                      : t('weather.noRain')}
+                  </Text>
+                </View>
+              </View>
+            )}
           </View>
         )}
 
@@ -544,7 +585,10 @@ export default function HomeScreen() {
         {message && (
           <View style={styles.messageCard}>
             <Text style={styles.cardLabel}>
-              {PREFERENCE_EMOJI[message.context.preference]} {PREFERENCE_KO[message.context.preference]} 메시지
+              {t('home.messageLabel', {
+                emoji: PREFERENCE_EMOJI[message.context.preference],
+                tone: prefLabel(message.context.preference),
+              })}
             </Text>
             <Text style={styles.messageText}>{message.text}</Text>
             <TouchableOpacity
@@ -555,7 +599,7 @@ export default function HomeScreen() {
               {sharing ? (
                 <ActivityIndicator color="rgba(255,255,255,0.6)" size="small" />
               ) : (
-                <Text style={styles.shareBtnText}>공유하기 ↑</Text>
+                <Text style={styles.shareBtnText}>{t('home.shareUp')}</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -567,16 +611,19 @@ export default function HomeScreen() {
             ref={cardRef}
             text={message.text}
             weatherEmoji={weather.emoji}
-            conditionKo={weather.conditionKo}
-            dateLabel={`${month}월 ${day}일 ${dayOfWeek} ${timeOfDay}`}
-            toneLabel={`${PREFERENCE_EMOJI[message.context.preference]} ${PREFERENCE_KO[message.context.preference]} 메시지`}
+            conditionKo={conditionLabel(weather.condition, weather.conditionKo)}
+            dateLabel={dateLabel}
+            toneLabel={t('home.messageLabel', {
+              emoji: PREFERENCE_EMOJI[message.context.preference],
+              tone: prefLabel(message.context.preference),
+            })}
             condition={weather.condition}
           />
         )}
 
         {messageError && (
           <View style={styles.errorCard}>
-            <Text style={styles.errorTextBig}>{prettifyError(messageError)}</Text>
+            <Text style={styles.errorTextBig}>{prettifyError(messageError, t)}</Text>
             {isLimitError(messageError) && (
               <TouchableOpacity
                 style={[styles.rewardAdBtn, { marginTop: 16 }, watchingAd && styles.generateBtnDisabled]}
@@ -586,7 +633,7 @@ export default function HomeScreen() {
                 {watchingAd ? (
                   <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
-                  <Text style={styles.rewardAdBtnText}>🎁 광고 보고 추가로 더 이용하기</Text>
+                  <Text style={styles.rewardAdBtnText}>{t('home.watchAdMore')}</Text>
                 )}
               </TouchableOpacity>
             )}
@@ -596,14 +643,14 @@ export default function HomeScreen() {
         {/* 활동 추천 카드 */}
         {activity && (
           <View style={styles.activityCard}>
-            <Text style={styles.cardLabel}>오늘의 활동 추천</Text>
+            <Text style={styles.cardLabel}>{t('home.activityLabel')}</Text>
             <Text style={styles.activityText}>{activity.text}</Text>
           </View>
         )}
 
         {activityError && (
           <View style={styles.errorCard}>
-            <Text style={styles.errorTextBig}>{prettifyError(activityError)}</Text>
+            <Text style={styles.errorTextBig}>{prettifyError(activityError, t)}</Text>
             {isLimitError(activityError) && (
               <TouchableOpacity
                 style={[styles.rewardAdBtn, { marginTop: 16 }, watchingAd && styles.generateBtnDisabled]}
@@ -613,7 +660,7 @@ export default function HomeScreen() {
                 {watchingAd ? (
                   <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
-                  <Text style={styles.rewardAdBtnText}>🎁 광고 보고 추가로 더 이용하기</Text>
+                  <Text style={styles.rewardAdBtnText}>{t('home.watchAdMore')}</Text>
                 )}
               </TouchableOpacity>
             )}
@@ -623,14 +670,14 @@ export default function HomeScreen() {
         {/* 음식 추천 카드 */}
         {food && (
           <View style={styles.activityCard}>
-            <Text style={styles.cardLabel}>오늘의 음식 추천</Text>
+            <Text style={styles.cardLabel}>{t('home.foodLabel')}</Text>
             <Text style={styles.activityText}>{food.text}</Text>
           </View>
         )}
 
         {foodError && (
           <View style={styles.errorCard}>
-            <Text style={styles.errorTextBig}>{prettifyError(foodError)}</Text>
+            <Text style={styles.errorTextBig}>{prettifyError(foodError, t)}</Text>
             {isLimitError(foodError) && (
               <TouchableOpacity
                 style={[styles.rewardAdBtn, { marginTop: 16 }, watchingAd && styles.generateBtnDisabled]}
@@ -640,7 +687,7 @@ export default function HomeScreen() {
                 {watchingAd ? (
                   <ActivityIndicator color="#ffffff" size="small" />
                 ) : (
-                  <Text style={styles.rewardAdBtnText}>🎁 광고 보고 추가로 더 이용하기</Text>
+                  <Text style={styles.rewardAdBtnText}>{t('home.watchAdMore')}</Text>
                 )}
               </TouchableOpacity>
             )}
@@ -659,7 +706,7 @@ export default function HomeScreen() {
                 <ActivityIndicator color="#000" size="small" />
               ) : (
                 <Text style={styles.generateBtnText}>
-                  {message ? '새 메시지 받기' : '오늘의 메시지 받기'}
+                  {message ? t('home.getAnotherMessage') : t('home.getMessage')}
                 </Text>
               )}
             </TouchableOpacity>
@@ -673,7 +720,7 @@ export default function HomeScreen() {
                 <ActivityIndicator color="rgba(255,255,255,0.7)" size="small" />
               ) : (
                 <Text style={styles.activityBtnText}>
-                  {activity ? '🌈 다른 활동 추천받기' : '🌈 오늘 날씨엔 뭘 하면 좋을까?'}
+                  {activity ? t('home.activityAnother') : t('home.activityCta')}
                 </Text>
               )}
             </TouchableOpacity>
@@ -687,7 +734,7 @@ export default function HomeScreen() {
                 <ActivityIndicator color="rgba(255,255,255,0.7)" size="small" />
               ) : (
                 <Text style={styles.activityBtnText}>
-                  {food ? '🍱 다른 음식 추천받기' : '🍱 오늘 같은 날씨엔 뭘 먹을까?'}
+                  {food ? t('home.foodAnother') : t('home.foodCta')}
                 </Text>
               )}
             </TouchableOpacity>
@@ -712,7 +759,7 @@ export default function HomeScreen() {
                     <ActivityIndicator color="#ffffff" size="small" />
                   ) : (
                     <Text style={styles.rewardAdBtnText}>
-                      🎁 광고 보고 1회 충전하기
+                      {t('home.chargeOne')}
                     </Text>
                   )}
                 </TouchableOpacity>
@@ -737,11 +784,11 @@ export default function HomeScreen() {
       >
         <Pressable style={styles.modalOverlay} onPress={() => setPickerOpen(false)}>
           <Pressable style={styles.modalSheet} onPress={(e) => e.stopPropagation()}>
-            <Text style={styles.modalTitle}>오늘은 어떤 메시지를 받고 싶으세요?</Text>
-            <Text style={styles.modalSubtitle}>지금 기분에 맞는 톤을 골라주세요</Text>
+            <Text style={styles.modalTitle}>{t('home.tonePickTitle')}</Text>
+            <Text style={styles.modalSubtitle}>{t('home.tonePickSubtitle')}</Text>
 
             <View style={styles.modalOptions}>
-              {PREF_OPTIONS.map(({ key, desc }) => (
+              {PREF_ORDER.map((key) => (
                 <TouchableOpacity
                   key={key}
                   style={styles.optionRow}
@@ -749,8 +796,8 @@ export default function HomeScreen() {
                 >
                   <Text style={styles.optionEmoji}>{PREFERENCE_EMOJI[key]}</Text>
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.optionTitle}>{PREFERENCE_KO[key]}</Text>
-                    <Text style={styles.optionDesc}>{desc}</Text>
+                    <Text style={styles.optionTitle}>{prefLabel(key)}</Text>
+                    <Text style={styles.optionDesc}>{t(PREF_DESC_KEY[key])}</Text>
                   </View>
                 </TouchableOpacity>
               ))}
@@ -760,7 +807,7 @@ export default function HomeScreen() {
               style={styles.modalCancel}
               onPress={() => setPickerOpen(false)}
             >
-              <Text style={styles.modalCancelText}>취소</Text>
+              <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
           </Pressable>
         </Pressable>

@@ -200,6 +200,7 @@ export async function fetchKmaWeather(
   let humidity = 0;
   let windMs = 0;
   let ptyNow = '0';
+  let rn1 = NaN; // 1시간 강수량 (mm)
   if (ncstItems) {
     for (const it of ncstItems) {
       const v = it.obsrValue ?? '';
@@ -207,6 +208,7 @@ export async function fetchKmaWeather(
       else if (it.category === 'REH') humidity = parseFloat(v);
       else if (it.category === 'WSD') windMs = parseFloat(v);
       else if (it.category === 'PTY') ptyNow = v;
+      else if (it.category === 'RN1') rn1 = parseFloat(v); // "강수없음"이면 NaN → 0 처리
     }
   }
 
@@ -279,6 +281,7 @@ export async function fetchKmaWeather(
     const cond = kmaToCondition(s.pty ?? '0', s.sky ?? '1');
     forecast.push({
       hour: parseInt(s.time.slice(0, 2), 10),
+      condition: cond,
       conditionKo: CONDITION_META[cond].ko,
       temp: Math.round(s.tmp),
       pop: (s.pop ?? 0) / 100, // KMA는 %, 앱은 0~1 규약
@@ -312,5 +315,7 @@ export async function fetchKmaWeather(
     city: '', // weather.ts에서 reverseGeocode 결과로 채움
     description: meta.ko,
     forecast: forecast.length > 0 ? forecast : undefined,
+    rainfall: isNaN(rn1) ? 0 : Math.round(rn1 * 10) / 10,
+    // uv/pm은 weather.ts에서 Open-Meteo로 채움
   };
 }

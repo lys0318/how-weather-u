@@ -41,6 +41,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import PermissionSetupScreen from './src/screens/PermissionSetupScreen';
 import { getHasOnboarded } from './src/utils/storage';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { LanguageProvider, useI18n } from './src/i18n';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -58,6 +59,7 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
 function MainTabs() {
+  const { t } = useI18n();
   return (
     <Tab.Navigator
       screenOptions={{
@@ -71,7 +73,7 @@ function MainTabs() {
         name="Home"
         component={HomeScreen}
         options={{
-          title: '홈',
+          title: t('tabs.home'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
           ),
@@ -81,7 +83,7 @@ function MainTabs() {
         name="History"
         component={HistoryScreen}
         options={{
-          title: '히스토리',
+          title: t('tabs.history'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="time" size={size} color={color} />
           ),
@@ -91,7 +93,7 @@ function MainTabs() {
         name="Settings"
         component={SettingsScreen}
         options={{
-          title: '설정',
+          title: t('tabs.settings'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="settings" size={size} color={color} />
           ),
@@ -145,8 +147,10 @@ function AppNavigator() {
 
 export default function App() {
   return (
-    <AuthProvider>
-      <AppNavigator />
-    </AuthProvider>
+    <LanguageProvider>
+      <AuthProvider>
+        <AppNavigator />
+      </AuthProvider>
+    </LanguageProvider>
   );
 }

@@ -5,6 +5,7 @@ import React, { forwardRef } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WeatherCondition } from '../constants/weather';
+import { translate } from '../i18n';
 
 interface Props {
   text: string;
@@ -52,8 +53,8 @@ export const ShareableCard = forwardRef<View, Props>(function ShareableCard(
             <Text style={styles.brandEn}>How Weather You</Text>
           </View>
           <View style={styles.downloadCallout}>
-            <Text style={styles.downloadHint}>play.google.com 에서</Text>
-            <Text style={styles.downloadCta}>하우웨더유 ⌄</Text>
+            <Text style={styles.downloadHint}>{translate('share.downloadHint')}</Text>
+            <Text style={styles.downloadCta}>{translate('common.appName')} ⌄</Text>
           </View>
         </View>
       </LinearGradient>

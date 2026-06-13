@@ -12,6 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { requestLocationPermission } from '../services/weather';
 import { requestNotificationPermission } from '../services/notification';
 import { setHasOnboarded } from '../utils/storage';
+import { useI18n } from '../i18n';
 
 interface Props {
   onDone: () => void;
@@ -19,6 +20,7 @@ interface Props {
 
 export default function PermissionSetupScreen({ onDone }: Props) {
   const { user } = useAuth();
+  const { t } = useI18n();
   const [loading, setLoading] = useState(false);
   const [locStatus, setLocStatus] = useState<'pending' | 'granted' | 'denied'>('pending');
   const [notifStatus, setNotifStatus] = useState<'pending' | 'granted' | 'denied'>('pending');
@@ -60,27 +62,24 @@ export default function PermissionSetupScreen({ onDone }: Props) {
         <View style={styles.content}>
           <Text style={styles.welcomeEmoji}>👋</Text>
           <Text style={styles.welcomeText}>
-            {userName ? `${userName}님,\n환영해요` : '환영해요'}
+            {userName ? t('permission.welcome', { name: userName }) : t('permission.welcomeNoName')}
           </Text>
-          <Text style={styles.desc}>
-            시작하기 전에{'\n'}
-            아래 두 가지 권한이 필요해요
-          </Text>
+          <Text style={styles.desc}>{t('permission.desc')}</Text>
 
           <View style={styles.permList}>
             <PermissionRow
               emoji="📍"
-              title="위치 정보"
-              desc="현재 위치 날씨를 가져오기 위해"
+              title={t('permission.locationTitle')}
+              desc={t('permission.locationDesc')}
             />
             <PermissionRow
               emoji="🔔"
-              title="알림"
-              desc="아침/저녁 메시지를 받기 위해"
+              title={t('permission.notifTitle')}
+              desc={t('permission.notifDesc')}
             />
           </View>
 
-          <Text style={styles.note}>언제든 폰 설정에서 변경할 수 있어요</Text>
+          <Text style={styles.note}>{t('permission.note')}</Text>
         </View>
 
         <TouchableOpacity
@@ -91,7 +90,7 @@ export default function PermissionSetupScreen({ onDone }: Props) {
           {loading ? (
             <ActivityIndicator color="#0f0f0f" size="small" />
           ) : (
-            <Text style={styles.buttonText}>권한 허용하고 시작하기</Text>
+            <Text style={styles.buttonText}>{t('permission.startButton')}</Text>
           )}
         </TouchableOpacity>
       </View>

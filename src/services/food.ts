@@ -1,5 +1,6 @@
-import { WeatherInfo, CONDITION_META, getTimeOfDay, TIME_OF_DAY_KO } from '../constants/weather';
+import { WeatherInfo, getTimeOfDay } from '../constants/weather';
 import { callFunction } from './backend';
+import { getCurrentLang } from '../i18n';
 
 export interface FoodRecommendation {
   text: string;
@@ -10,22 +11,27 @@ export interface FoodRecommendation {
 
 export async function generateFood(weather: WeatherInfo): Promise<FoodRecommendation> {
   const hour = new Date().getHours();
-  // 향후 12시간 예보도 함께 전달 (예: 이따 비 올 예정 → 따뜻한 국물요리)
+  // 향후 12시간 예보도 함께 전달 — condition enum (서버가 언어별 라벨링)
   const forecastPayload = (weather.forecast ?? []).map((f) => ({
     hour: f.hour,
-    conditionKo: f.conditionKo,
+    condition: f.condition,
     temp: f.temp,
     popPercent: Math.round(f.pop * 100),
   }));
 
   const res = await callFunction('generate-food', {
-    conditionKo: CONDITION_META[weather.condition].ko,
-    timeOfDayKo: TIME_OF_DAY_KO[getTimeOfDay(hour)],
+    condition: weather.condition,
+    timeOfDay: getTimeOfDay(hour),
     hour,
     temp: weather.temp,
     tempMin: weather.tempMin,
     tempMax: weather.tempMax,
     forecast: forecastPayload,
+    uvIndex: weather.uvIndex,
+    pm10: weather.pm10,
+    pm25: weather.pm25,
+    rainfall: weather.rainfall,
+    lang: getCurrentLang(),
   });
 
   return { text: res.text, generatedAt: new Date(), used: res.used, limit: res.limit };

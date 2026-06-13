@@ -6,9 +6,41 @@ import {
   CONDITION_META,
 } from '../constants/weather';
 import { fetchKmaWeather, isInKorea } from './kma';
+import { translate } from '../i18n';
 
 const API_KEY = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
 const BASE_URL = 'https://api.openweathermap.org/data/2.5';
+
+// 자외선/미세먼지: Open-Meteo Air Quality API (무료·무키, 전 세계)
+// 한 번 호출로 UV 지수 + PM10 + PM2.5 모두 제공
+const AIR_QUALITY_URL = 'https://air-quality-api.open-meteo.com/v1/air-quality';
+
+interface AirQuality {
+  uvIndex?: number;
+  pm10?: number;
+  pm25?: number;
+}
+
+async function fetchAirQuality(lat: number, lon: number): Promise<AirQuality> {
+  try {
+    const url = `${AIR_QUALITY_URL}?latitude=${lat}&longitude=${lon}&current=pm10,pm2_5,uv_index`;
+    const res = await fetch(url);
+    if (!res.ok) return {};
+    const json = await res.json();
+    const c = json?.current ?? {};
+    const num = (v: unknown) => (typeof v === 'number' && !isNaN(v) ? v : undefined);
+    const uv = num(c.uv_index);
+    const pm10 = num(c.pm10);
+    const pm25 = num(c.pm2_5);
+    return {
+      uvIndex: uv !== undefined ? Math.round(uv * 10) / 10 : undefined,
+      pm10: pm10 !== undefined ? Math.round(pm10) : undefined,
+      pm25: pm25 !== undefined ? Math.round(pm25) : undefined,
+    };
+  } catch {
+    return {};
+  }
+}
 
 // ── 10분 인메모리 캐시 ─────────────────────────────────────
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10분
@@ -70,20 +102,28 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
 
   const granted = await requestLocationPermission();
   if (!granted) {
-    throw new Error('위치 권한이 필요합니다.');
+    throw new Error(translate('common.locationNeeded'));
   }
 
   const { lat, lon } = await getCurrentCoords();
 
-  // 행정구역(시/동) 먼저 조회 — 어느 소스를 쓰든 도시명 표시에 사용
-  const koPlace = await reverseGeocodeKo(lat, lon);
+  // 행정구역(시/동) + 자외선/미세먼지를 병렬 조회 — 어느 날씨 소스를 쓰든 공통
+  const [koPlace, airQuality] = await Promise.all([
+    reverseGeocodeKo(lat, lon),
+    fetchAirQuality(lat, lon),
+  ]);
 
   // ── 1순위: 한국이면 기상청(KMA) — 가장 정확 ──────────────
   if (isInKorea(lat, lon)) {
     try {
       const kma = await fetchKmaWeather(lat, lon);
       if (kma) {
-        const result: WeatherInfo = { ...kma, city: koPlace || kma.city || '내 위치' };
+        // kma는 rainfall(RN1)까지 채워 옴. uv/pm은 Open-Meteo로 보강.
+        const result: WeatherInfo = {
+          ...kma,
+          city: koPlace || kma.city || '내 위치',
+          ...airQuality,
+        };
         weatherCache = { data: result, fetchedAt: Date.now() };
         return result;
       }
@@ -100,7 +140,7 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
   ]);
 
   if (!res.ok) {
-    throw new Error(`날씨 데이터를 가져오지 못했습니다. (${res.status})`);
+    throw new Error(`${translate('common.weatherFail')} (${res.status})`);
   }
 
   const data = await res.json();
@@ -139,6 +179,7 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
         const cond = getConditionFromId(it.weather[0]?.id ?? 800);
         return {
           hour: kstHour,
+          condition: cond,
           conditionKo: CONDITION_META[cond].ko,
           temp: Math.round(it.main.temp),
           pop: it.pop ?? 0,
@@ -177,6 +218,10 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
     }
   }
 
+  // 1시간 강수량 (OpenWeather는 rain['1h'] 제공, 없으면 0)
+  const rainfall =
+    typeof data.rain?.['1h'] === 'number' ? Math.round(data.rain['1h'] * 10) / 10 : 0;
+
   const result: WeatherInfo = {
     condition,
     conditionKo: meta.ko,
@@ -192,6 +237,8 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
     city: koPlace || data.name,
     description: data.weather[0].description,
     forecast: forecastSummary.length > 0 ? forecastSummary : undefined,
+    rainfall,
+    ...airQuality,
   };
 
   weatherCache = { data: result, fetchedAt: Date.now() };
