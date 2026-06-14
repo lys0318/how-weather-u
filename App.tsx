@@ -6,6 +6,8 @@ import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
 import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
+import { useFonts } from 'expo-font';
+import { COLORS } from './src/constants/theme';
 
 // 백그라운드 태스크 정의 (구버전 호환용)
 import { unregisterBackgroundTask } from './src/tasks/backgroundTask';
@@ -64,9 +66,9 @@ function MainTabs() {
     <Tab.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: '#1a1a1a', borderTopColor: '#333' },
-        tabBarActiveTintColor: '#ffffff',
-        tabBarInactiveTintColor: '#666666',
+        tabBarStyle: { backgroundColor: COLORS.card, borderTopColor: COLORS.line, borderTopWidth: 1 },
+        tabBarActiveTintColor: COLORS.ember,
+        tabBarInactiveTintColor: COLORS.ink3,
       }}
     >
       <Tab.Screen
@@ -105,8 +107,8 @@ function MainTabs() {
 
 function LoadingScreen() {
   return (
-    <View style={{ flex: 1, backgroundColor: '#0f0f0f', justifyContent: 'center', alignItems: 'center' }}>
-      <ActivityIndicator color="#ffffff" />
+    <View style={{ flex: 1, backgroundColor: COLORS.paper, justifyContent: 'center', alignItems: 'center' }}>
+      <ActivityIndicator color={COLORS.ember} />
     </View>
   );
 }
@@ -146,6 +148,20 @@ function AppNavigator() {
 }
 
 export default function App() {
+  const [fontsLoaded, fontError] = useFonts({
+    GowunBatang: require('./assets/fonts/GowunBatang-Regular.ttf'),
+    GowunBatangBold: require('./assets/fonts/GowunBatang-Bold.ttf'),
+    Newsreader: require('./assets/fonts/Newsreader-Regular.ttf'),
+    NewsreaderLight: require('./assets/fonts/Newsreader-Light.ttf'),
+    SplineSansMono: require('./assets/fonts/SplineSansMono-Regular.ttf'),
+    SplineSansMonoMedium: require('./assets/fonts/SplineSansMono-Medium.ttf'),
+  });
+
+  // 폰트 로딩 전에는 로딩 화면 (에러 시엔 시스템 폰트로 폴백하며 진행)
+  if (!fontsLoaded && !fontError) {
+    return <LoadingScreen />;
+  }
+
   return (
     <LanguageProvider>
       <AuthProvider>

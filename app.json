@@ -3,15 +3,15 @@
     "name": "하우웨더유",
     "slug": "howweateryou",
     "scheme": "howweateryou",
-    "version": "1.0.18",
+    "version": "1.0.21",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "userInterfaceStyle": "dark",
+    "userInterfaceStyle": "light",
     "newArchEnabled": false,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
-      "backgroundColor": "#0f0f0f"
+      "backgroundColor": "#F3ECDF"
     },
     "ios": {
       "supportsTablet": false,
@@ -31,10 +31,10 @@
     },
     "android": {
       "package": "com.howweatheryou.app",
-      "versionCode": 20,
+      "versionCode": 23,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
-        "backgroundColor": "#0f0f0f"
+        "backgroundColor": "#7A6796"
       },
       "intentFilters": [
         {

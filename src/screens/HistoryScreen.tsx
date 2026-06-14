@@ -27,6 +27,12 @@ import {
 } from '../constants/weather';
 import { useI18n, getCurrentLang, translate } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
+import { LinearGradient } from 'expo-linear-gradient';
+import { setStatusBarStyle } from 'expo-status-bar';
+import { COLORS, FONTS, RADII } from '../constants/theme';
+import Grain from '../components/Grain';
+import { useWeather } from '../hooks/useWeather';
+import { getSkyKind, getPaperTint } from '../components/SkyBackground';
 
 type Tab = 'all' | 'bookmark';
 
@@ -35,6 +41,8 @@ type TFn = (key: string, vars?: Record<string, string | number>) => string;
 export default function HistoryScreen() {
   const { t, lang } = useI18n();
   const { isGuest } = useAuth();
+  const { weather } = useWeather();
+  const paper = getPaperTint(getSkyKind(weather?.condition ?? null, new Date().getHours()));
   const [tab, setTab] = useState<Tab>('all');
   const [messages, setMessages] = useState<StoredMessage[]>([]);
   const [cloudBookmarks, setCloudBookmarks] = useState<StoredMessage[]>([]);
@@ -71,6 +79,7 @@ export default function HistoryScreen() {
   // 화면 포커스될 때마다 새로 로드
   useFocusEffect(
     useCallback(() => {
+      setStatusBarStyle('dark');
       setLoading(true);
       loadMessages();
     }, [loadMessages])
@@ -159,14 +168,20 @@ export default function HistoryScreen() {
 
   if (loading) {
     return (
-      <View style={styles.center}>
-        <ActivityIndicator color="#ffffff" />
+      <View style={[styles.center, { backgroundColor: paper }]}>
+        <ActivityIndicator color={COLORS.ember} />
       </View>
     );
   }
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: paper }]}>
+      <LinearGradient
+        colors={[COLORS.paper2, paper]}
+        style={styles.crown}
+        pointerEvents="none"
+      />
+
       {/* 헤더 */}
       <View style={styles.header}>
         <Text style={styles.heading}>{t('history.title')}</Text>
@@ -212,7 +227,7 @@ export default function HistoryScreen() {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={handleRefresh}
-              tintColor="#ffffff"
+              tintColor={COLORS.ink3}
             />
           }
           renderItem={({ item, index }) => (
@@ -241,6 +256,8 @@ export default function HistoryScreen() {
           dateLabel={buildDateLabel(shareMsg.generatedAt)}
         />
       )}
+
+      <Grain />
     </View>
   );
 }
@@ -379,84 +396,66 @@ function formatDate(iso: string): string {
 
 // ── 스타일 ──────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#0f0f0f',
-  },
+  container: { flex: 1, backgroundColor: COLORS.paper },
+  crown: { position: 'absolute', top: 0, left: 0, right: 0, height: 150 },
   center: {
     flex: 1,
-    backgroundColor: '#0f0f0f',
+    backgroundColor: 'transparent',
     alignItems: 'center',
     justifyContent: 'center',
+    paddingHorizontal: 40,
   },
   header: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    paddingHorizontal: 24,
+    paddingHorizontal: 26,
     paddingTop: 60,
-    paddingBottom: 16,
+    paddingBottom: 6,
   },
-  heading: {
-    fontSize: 26,
-    fontWeight: 'bold',
-    color: '#ffffff',
-    flex: 1,
-  },
-  count: {
-    fontSize: 13,
-    color: '#555',
-  },
+  heading: { fontFamily: FONTS.serifKoBold, fontSize: 27, color: COLORS.ink, flex: 1 },
+  count: { fontFamily: FONTS.mono, fontSize: 12.5, color: COLORS.ink3 },
   retentionNotice: {
-    fontSize: 11,
-    color: '#555',
-    paddingHorizontal: 24,
+    fontSize: 11.5,
+    color: COLORS.ink3,
+    paddingHorizontal: 26,
     marginBottom: 12,
     lineHeight: 16,
   },
-  // 탭
   tabBar: {
     flexDirection: 'row',
-    marginHorizontal: 24,
+    marginHorizontal: 26,
     marginBottom: 8,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 12,
+    backgroundColor: COLORS.paper3,
+    borderRadius: 13,
     padding: 4,
   },
-  tab: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: 'center',
-    borderRadius: 9,
-  },
+  tab: { flex: 1, paddingVertical: 9, alignItems: 'center', borderRadius: 10 },
   tabActive: {
-    backgroundColor: '#2e2e2e',
+    backgroundColor: COLORS.card,
+    shadowColor: '#2B2620',
+    shadowOpacity: 0.12,
+    shadowRadius: 6,
+    shadowOffset: { width: 0, height: 2 },
+    elevation: 1,
   },
-  tabText: {
-    fontSize: 14,
-    color: '#555',
-    fontWeight: '600',
-  },
-  tabTextActive: {
-    color: '#ffffff',
-  },
-  // 리스트
-  listContent: {
-    paddingHorizontal: 24,
-    paddingBottom: 32,
-  },
+  tabText: { fontSize: 13.5, color: COLORS.ink3, fontWeight: '600' },
+  tabTextActive: { color: COLORS.ink },
+  listContent: { paddingHorizontal: 26, paddingBottom: 32 },
   dateHeader: {
-    fontSize: 12,
-    color: '#444',
-    marginTop: 20,
-    marginBottom: 8,
-    fontWeight: '600',
+    fontFamily: FONTS.mono,
+    fontSize: 11,
+    color: COLORS.ink3,
+    marginTop: 18,
+    marginBottom: 10,
+    letterSpacing: 0.4,
   },
-  // 카드
   card: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 14,
+    backgroundColor: COLORS.card,
+    borderRadius: RADII.card,
     padding: 16,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.line,
   },
   cardTop: {
     flexDirection: 'row',
@@ -464,63 +463,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  cardMeta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  weatherEmoji: {
-    fontSize: 20,
-  },
+  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  weatherEmoji: { fontSize: 18 },
   kindTag: {
-    backgroundColor: '#2a2a2a',
-    borderRadius: 8,
+    backgroundColor: 'rgba(76,110,107,0.10)',
+    borderRadius: 7,
     paddingHorizontal: 8,
     paddingVertical: 3,
   },
-  kindTagText: {
-    fontSize: 11,
-    color: '#aaa',
-    fontWeight: '600',
-  },
-  time: {
-    fontSize: 12,
-    color: '#555',
-  },
-  cardActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionBtn: {
-    padding: 2,
-  },
-  actionIcon: {
-    fontSize: 18,
-    color: '#555',
-  },
-  bookmarked: {
-    color: '#f5c518',
-  },
-  messageText: {
-    fontSize: 15,
-    color: '#dddddd',
-    lineHeight: 24,
-  },
-  // 빈 상태
-  emptyEmoji: {
-    fontSize: 48,
-    marginBottom: 16,
-  },
-  emptyTitle: {
-    fontSize: 16,
-    color: '#666',
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  emptyDesc: {
-    fontSize: 13,
-    color: '#444',
-    textAlign: 'center',
-    lineHeight: 22,
-  },
+  kindTagText: { fontSize: 10.5, color: COLORS.teal, fontWeight: '600' },
+  time: { fontFamily: FONTS.mono, fontSize: 11.5, color: COLORS.ink3 },
+  cardActions: { flexDirection: 'row', gap: 14 },
+  actionBtn: { padding: 2 },
+  actionIcon: { fontSize: 16, color: COLORS.ink3 },
+  bookmarked: { color: COLORS.ember },
+  messageText: { fontFamily: FONTS.serifKo, fontSize: 15.5, color: COLORS.ink, lineHeight: 27 },
+  emptyEmoji: { fontSize: 44, marginBottom: 16 },
+  emptyTitle: { fontFamily: FONTS.serifKo, fontSize: 17, color: COLORS.ink2, marginBottom: 8 },
+  emptyDesc: { fontSize: 13, color: COLORS.ink3, textAlign: 'center', lineHeight: 22 },
 });

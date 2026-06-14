@@ -25,6 +25,13 @@ import {
 } from '../services/notification';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../i18n';
+import { useFocusEffect } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { setStatusBarStyle } from 'expo-status-bar';
+import { COLORS, FONTS, RADII } from '../constants/theme';
+import Grain from '../components/Grain';
+import { useWeather } from '../hooks/useWeather';
+import { getSkyKind, getPaperTint } from '../components/SkyBackground';
 
 const SLOT_LABEL_KEY: Record<NotifSlot, string> = {
   morning: 'settings.slotMorning',
@@ -35,6 +42,8 @@ const SLOT_LABEL_KEY: Record<NotifSlot, string> = {
 export default function SettingsScreen() {
   const { user, signOut, deleteAccount, isGuest, signInWithGoogle } = useAuth();
   const { t, lang, setLang } = useI18n();
+  const { weather } = useWeather();
+  const paper = getPaperTint(getSkyKind(weather?.condition ?? null, new Date().getHours()));
   const [deleting, setDeleting] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
 
@@ -136,6 +145,13 @@ export default function SettingsScreen() {
     })();
   }, []);
 
+  // 페이퍼 화면 — 다크 상태바
+  useFocusEffect(
+    React.useCallback(() => {
+      setStatusBarStyle('dark');
+    }, []),
+  );
+
   /**
    * 알림 ON/OFF 토글
    * - ON: 권한 요청 → 플래그 true → 현재 선택된 슬롯 예약
@@ -210,7 +226,13 @@ export default function SettingsScreen() {
   };
 
   return (
-    <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
+    <View style={[styles.root, { backgroundColor: paper }]}>
+      <LinearGradient
+        colors={[COLORS.paper2, paper]}
+        style={styles.crown}
+        pointerEvents="none"
+      />
+      <ScrollView style={styles.scroll} contentContainerStyle={styles.container}>
       <Text style={styles.heading}>{t('settings.heading')}</Text>
 
       {/* 사용자 카드 */}
@@ -263,7 +285,7 @@ export default function SettingsScreen() {
           <Text
             style={[
               styles.notifToggleStatus,
-              { color: notifEnabled ? '#7ec9ff' : '#888' },
+              { color: notifEnabled ? COLORS.ember : COLORS.ink3 },
             ]}
           >
             {notifEnabled ? t('settings.pushOn') : t('settings.pushOff')}
@@ -273,8 +295,8 @@ export default function SettingsScreen() {
           value={notifEnabled}
           onValueChange={handleToggleNotifications}
           disabled={notifToggling}
-          trackColor={{ false: '#2a2a2a', true: '#3a7fb8' }}
-          thumbColor={notifEnabled ? '#ffffff' : '#777'}
+          trackColor={{ false: COLORS.paper3, true: COLORS.ember }}
+          thumbColor={'#ffffff'}
         />
       </View>
 
@@ -360,224 +382,119 @@ export default function SettingsScreen() {
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
-        <Text style={styles.appVersion}>v1.0.18</Text>
+        <Text style={styles.appVersion}>v1.0.21</Text>
       </View>
-    </ScrollView>
+      </ScrollView>
+
+      <Grain />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scroll: { flex: 1, backgroundColor: '#0f0f0f' },
-  container: { padding: 24, paddingTop: 60 },
-  heading: { fontSize: 26, fontWeight: 'bold', color: '#fff', marginBottom: 32 },
+  root: { flex: 1, backgroundColor: COLORS.paper },
+  crown: { position: 'absolute', top: 0, left: 0, right: 0, height: 150 },
+  scroll: { flex: 1, backgroundColor: 'transparent' },
+  container: { padding: 26, paddingTop: 60, paddingBottom: 40 },
+  heading: { fontFamily: FONTS.serifKoBold, fontSize: 27, color: COLORS.ink, marginBottom: 22 },
   section: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 14,
+    backgroundColor: COLORS.card,
+    borderRadius: RADII.card,
     padding: 18,
-    marginBottom: 16,
-  },
-  sectionTitle: { color: '#aaa', fontSize: 13, marginBottom: 14 },
-  desc: {
-    color: '#dddddd',
-    fontSize: 14,
-    lineHeight: 22,
     marginBottom: 12,
+    borderWidth: 1,
+    borderColor: COLORS.line,
   },
-  subDesc: {
-    color: '#777',
-    fontSize: 12,
-    lineHeight: 20,
-  },
+  sectionTitle: { color: COLORS.ink, fontSize: 14, fontWeight: '600', marginBottom: 10 },
+  desc: { color: COLORS.ink2, fontSize: 13.5, lineHeight: 21, marginBottom: 10 },
+  subDesc: { color: COLORS.ink3, fontSize: 12, lineHeight: 19 },
   primaryButton: {
-    backgroundColor: '#ffffff',
-    borderRadius: 14,
+    backgroundColor: COLORS.ember,
+    borderRadius: RADII.btn,
     paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 8,
+    marginTop: 4,
   },
-  primaryButtonText: { color: '#000', fontSize: 15, fontWeight: '700' },
-  secondaryButton: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 10,
-    borderWidth: 1,
-    borderColor: '#2a2a2a',
-  },
-  secondaryButtonText: { color: '#888', fontSize: 14 },
-  tertiaryButton: {
-    borderRadius: 14,
-    paddingVertical: 14,
-    alignItems: 'center',
-    marginTop: 6,
-  },
-  tertiaryButtonText: { color: '#444', fontSize: 14 },
+  primaryButtonText: { color: COLORS.emberText, fontSize: 15, fontWeight: '600' },
   buttonDisabled: { opacity: 0.5 },
-  // 사용자 카드
   userCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 14,
+    backgroundColor: COLORS.card,
+    borderRadius: RADII.card,
     padding: 18,
-    marginBottom: 16,
+    marginBottom: 12,
     gap: 14,
+    borderWidth: 1,
+    borderColor: COLORS.line,
   },
   userAvatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: '#2e7dc4',
+    width: 46,
+    height: 46,
+    borderRadius: 23,
+    backgroundColor: COLORS.ember,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  userAvatarText: {
-    color: '#ffffff',
-    fontSize: 20,
-    fontWeight: '700',
-  },
-  userName: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  userEmail: {
-    color: '#777',
-    fontSize: 12,
-    marginTop: 2,
-  },
-  // 로그아웃
-  divider: {
-    height: 1,
-    backgroundColor: '#1a1a1a',
-    marginVertical: 18,
-  },
+  userAvatarText: { fontFamily: FONTS.serifEn, color: COLORS.emberText, fontSize: 21 },
+  userName: { color: COLORS.ink, fontSize: 15, fontWeight: '600' },
+  userEmail: { fontFamily: FONTS.mono, color: COLORS.ink3, fontSize: 11.5, marginTop: 3 },
+  divider: { height: 1, backgroundColor: COLORS.line, marginVertical: 16 },
   notifToggleCard: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#1a1a1a',
-    borderRadius: 14,
+    backgroundColor: COLORS.card,
+    borderRadius: RADII.card,
     paddingVertical: 16,
     paddingHorizontal: 18,
     marginBottom: 10,
     gap: 12,
+    borderWidth: 1,
+    borderColor: COLORS.line,
   },
-  notifToggleTitle: {
-    color: '#ffffff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
+  notifToggleTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '600' },
+  notifToggleStatus: { fontSize: 12, marginTop: 4 },
   slotsCard: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 14,
+    backgroundColor: COLORS.card,
+    borderRadius: RADII.card,
     padding: 18,
     marginBottom: 10,
+    borderWidth: 1,
+    borderColor: COLORS.line,
   },
-  slotsTitle: {
-    color: '#ffffff',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  slotsSub: {
-    color: '#888',
-    fontSize: 12,
-    marginBottom: 14,
-  },
-  slotsRow: {
-    flexDirection: 'row',
-    gap: 8,
-  },
+  slotsTitle: { color: COLORS.ink, fontSize: 14, fontWeight: '600', marginBottom: 4 },
+  slotsSub: { color: COLORS.ink3, fontSize: 12, marginBottom: 14 },
+  slotsRow: { flexDirection: 'row', gap: 8 },
   slotChip: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: 12,
     borderRadius: 12,
     borderWidth: 1.5,
-    borderColor: '#2a2a2a',
-    backgroundColor: '#111',
+    borderColor: COLORS.line,
+    backgroundColor: COLORS.paper,
     alignItems: 'center',
   },
-  slotChipActive: {
-    borderColor: '#3a7fb8',
-    backgroundColor: 'rgba(58, 127, 184, 0.18)',
-  },
-  slotChipLabel: {
-    color: '#888',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 4,
-  },
-  slotChipLabelActive: {
-    color: '#ffffff',
-  },
-  slotChipTime: {
-    color: '#555',
-    fontSize: 11,
-  },
-  slotChipTimeActive: {
-    color: '#7ec9ff',
-  },
-  slotsWarn: {
-    color: '#cc6666',
-    fontSize: 12,
-    marginTop: 10,
-    textAlign: 'center',
-  },
-  notifToggleStatus: {
-    fontSize: 12,
-    marginTop: 4,
-  },
+  slotChipActive: { borderColor: COLORS.ember, backgroundColor: COLORS.emberSoft },
+  slotChipLabel: { color: COLORS.ink2, fontSize: 13.5, fontWeight: '600', marginBottom: 4 },
+  slotChipLabelActive: { color: COLORS.emberD },
+  slotChipTime: { fontFamily: FONTS.mono, color: COLORS.ink3, fontSize: 10.5 },
+  slotChipTimeActive: { color: COLORS.ember },
+  slotsWarn: { color: COLORS.danger, fontSize: 12, marginTop: 10, textAlign: 'center' },
   feedbackButton: {
-    backgroundColor: '#1a1a1a',
-    borderRadius: 14,
-    paddingVertical: 14,
+    backgroundColor: COLORS.card,
+    borderRadius: RADII.card,
+    paddingVertical: 15,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#2a2a2a',
+    borderColor: COLORS.line,
   },
-  feedbackButtonText: {
-    color: '#d4a8e8',
-    fontSize: 14,
-    fontWeight: '600',
-  },
-  feedbackHint: {
-    color: '#555',
-    fontSize: 11,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  logoutButton: {
-    paddingVertical: 14,
-    alignItems: 'center',
-  },
-  logoutButtonText: {
-    color: '#cc6666',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  deleteAccountButton: {
-    paddingVertical: 12,
-    alignItems: 'center',
-    marginTop: 2,
-  },
-  deleteAccountText: {
-    color: '#666',
-    fontSize: 13,
-    textDecorationLine: 'underline',
-  },
-  appInfo: {
-    alignItems: 'center',
-    marginTop: 40,
-  },
-  appName: {
-    color: 'rgba(255,255,255,0.2)',
-    fontSize: 13,
-    letterSpacing: 2,
-  },
-  appVersion: {
-    color: 'rgba(255,255,255,0.15)',
-    fontSize: 11,
-    marginTop: 4,
-  },
+  feedbackButtonText: { color: COLORS.teal, fontSize: 14, fontWeight: '600' },
+  feedbackHint: { color: COLORS.ink3, fontSize: 11.5, textAlign: 'center', marginTop: 8 },
+  logoutButton: { paddingVertical: 14, alignItems: 'center' },
+  logoutButtonText: { color: COLORS.danger, fontSize: 14, fontWeight: '500' },
+  deleteAccountButton: { paddingVertical: 12, alignItems: 'center', marginTop: 2 },
+  deleteAccountText: { color: COLORS.ink3, fontSize: 12.5, textDecorationLine: 'underline' },
+  appInfo: { alignItems: 'center', marginTop: 32 },
+  appName: { fontFamily: FONTS.serifKo, color: COLORS.ink3, fontSize: 13, letterSpacing: 2 },
+  appVersion: { fontFamily: FONTS.mono, color: COLORS.ink3, fontSize: 11, marginTop: 4, opacity: 0.7 },
 });

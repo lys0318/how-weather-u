@@ -7,9 +7,11 @@ import {
   ActivityIndicator,
   Alert,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../i18n';
+import { COLORS, FONTS, RADII } from '../constants/theme';
+import SkyBackground, { getPaperTint } from '../components/SkyBackground';
+import Grain from '../components/Grain';
 
 export default function LoginScreen() {
   const { signInWithGoogle, signInAsGuest } = useAuth();
@@ -42,139 +44,127 @@ export default function LoginScreen() {
   };
 
   return (
-    <LinearGradient
-      colors={['#0a1228', '#1a2350', '#5a3870', '#c36c80']}
-      style={styles.gradient}
-    >
-      <View style={styles.container}>
-        {/* 브랜드 */}
+    <View style={[styles.root, { backgroundColor: getPaperTint('dusk') }]}>
+      <View style={styles.skyWrap}>
+        <SkyBackground kind="dusk" />
+      </View>
+
+      <View style={styles.content}>
+        {/* 브랜드 — 하늘 위 */}
         <View style={styles.brand}>
-          <Text style={styles.appName}>하우웨더유</Text>
-          <Text style={styles.tagline}>How Weather You</Text>
-          <Text style={styles.desc}>{t('login.tagline')}</Text>
+          <Text style={styles.mark}>하우웨더유</Text>
+          <Text style={styles.markEn}>HOW WEATHER YOU</Text>
         </View>
 
-        {/* 로그인 버튼 */}
-        <View style={styles.buttonArea}>
-          <TouchableOpacity
-            style={[styles.googleButton, loading && styles.disabled]}
-            onPress={handleGoogleLogin}
-            disabled={loading}
-          >
-            {loading ? (
-              <ActivityIndicator color="#0f0f0f" size="small" />
-            ) : (
-              <>
-                <Text style={styles.googleG}>G</Text>
-                <Text style={styles.googleButtonText}>{t('login.googleStart')}</Text>
-              </>
-            )}
-          </TouchableOpacity>
+        {/* 시 + 액션 — 페이퍼 위 */}
+        <View>
+          <Text style={styles.poem}>{t('login.tagline')}</Text>
 
-          <Text style={styles.privacy}>{t('login.agree')}</Text>
+          <View style={styles.actions}>
+            <TouchableOpacity
+              style={[styles.googleButton, loading && styles.disabled]}
+              onPress={handleGoogleLogin}
+              disabled={loading}
+            >
+              {loading ? (
+                <ActivityIndicator color={COLORS.ink} size="small" />
+              ) : (
+                <>
+                  <Text style={styles.googleG}>G</Text>
+                  <Text style={styles.googleButtonText}>{t('login.googleStart')}</Text>
+                </>
+              )}
+            </TouchableOpacity>
 
-          {/* 게스트(로그인 없이) 둘러보기 */}
-          <TouchableOpacity
-            style={[styles.guestButton, guestLoading && styles.disabled]}
-            onPress={handleGuest}
-            disabled={guestLoading || loading}
-          >
-            {guestLoading ? (
-              <ActivityIndicator color="rgba(255,255,255,0.8)" size="small" />
-            ) : (
-              <Text style={styles.guestButtonText}>{t('login.guestStart')}</Text>
-            )}
-          </TouchableOpacity>
-          <Text style={styles.guestNote}>{t('login.guestNote')}</Text>
+            <TouchableOpacity
+              style={[styles.guestButton, guestLoading && styles.disabled]}
+              onPress={handleGuest}
+              disabled={guestLoading || loading}
+            >
+              {guestLoading ? (
+                <ActivityIndicator color={COLORS.ink2} size="small" />
+              ) : (
+                <Text style={styles.guestButtonText}>{t('login.guestStart')}</Text>
+              )}
+            </TouchableOpacity>
+
+            <Text style={styles.fineprint}>{t('login.agree')}</Text>
+            <Text style={styles.guestNote}>{t('login.guestNote')}</Text>
+          </View>
         </View>
       </View>
-    </LinearGradient>
+
+      <Grain />
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
-  container: {
+  root: { flex: 1, backgroundColor: COLORS.paper },
+  skyWrap: { position: 'absolute', top: 0, left: 0, right: 0, height: '58%' },
+  content: {
     flex: 1,
-    paddingHorizontal: 36,
-    paddingTop: 100,
-    paddingBottom: 56,
+    paddingHorizontal: 30,
+    paddingTop: 84,
+    paddingBottom: 48,
     justifyContent: 'space-between',
   },
-  brand: {
-    alignItems: 'center',
-    marginTop: 60,
-  },
-  appName: {
-    fontSize: 38,
-    fontWeight: '700',
-    color: '#ffffff',
-    letterSpacing: -1,
-  },
-  tagline: {
-    fontSize: 14,
-    color: 'rgba(255,255,255,0.5)',
-    marginTop: 8,
+  brand: { alignItems: 'center', marginTop: 4 },
+  mark: {
+    fontFamily: FONTS.serifKoBold,
+    fontSize: 42,
+    color: '#fff',
     letterSpacing: 2,
+    textShadowColor: 'rgba(40,30,50,0.25)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 22,
   },
-  desc: {
-    fontSize: 16,
-    color: 'rgba(255,255,255,0.85)',
-    marginTop: 40,
+  markEn: {
+    fontFamily: FONTS.mono,
+    fontSize: 11.5,
+    color: 'rgba(255,255,255,0.74)',
+    letterSpacing: 4,
+    marginTop: 13,
+    paddingLeft: 4,
+  },
+  poem: {
+    fontFamily: FONTS.serifKo,
+    fontSize: 21,
+    color: COLORS.ink,
     textAlign: 'center',
-    lineHeight: 26,
-    fontWeight: '300',
+    lineHeight: 38,
+    marginBottom: 30,
   },
-  buttonArea: {
-    alignItems: 'center',
-  },
+  actions: { alignItems: 'center' },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
+    backgroundColor: COLORS.card,
+    borderRadius: RADII.btn,
     paddingVertical: 17,
     paddingHorizontal: 24,
     width: '100%',
-    gap: 12,
+    gap: 11,
+    borderWidth: 1,
+    borderColor: COLORS.line,
   },
-  googleG: {
-    fontSize: 20,
-    fontWeight: '700',
-    color: '#4285F4',
-    fontFamily: 'sans-serif',
-  },
-  googleButtonText: {
-    fontSize: 16,
-    color: '#0f0f0f',
-    fontWeight: '600',
-  },
+  googleG: { fontFamily: FONTS.serifEn, fontSize: 19, color: COLORS.ember, fontWeight: '500' },
+  googleButtonText: { fontSize: 15.5, color: COLORS.ink, fontWeight: '600' },
   disabled: { opacity: 0.5 },
-  privacy: {
-    fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
-    textAlign: 'center',
-    marginTop: 18,
-    lineHeight: 16,
-  },
-  guestButton: {
-    marginTop: 26,
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
+  guestButton: { marginTop: 22, paddingVertical: 8, alignItems: 'center' },
   guestButtonText: {
-    color: 'rgba(255,255,255,0.85)',
-    fontSize: 15,
-    fontWeight: '600',
+    color: COLORS.ink2,
+    fontSize: 14,
+    fontWeight: '500',
     textDecorationLine: 'underline',
   },
-  guestNote: {
+  fineprint: {
     fontSize: 11,
-    color: 'rgba(255,255,255,0.4)',
+    color: COLORS.ink3,
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: 16,
+    lineHeight: 17,
   },
+  guestNote: { fontSize: 11, color: COLORS.ink3, textAlign: 'center', marginTop: 8 },
 });

@@ -5,14 +5,15 @@ import {
   StyleSheet,
   TouchableOpacity,
   ActivityIndicator,
-  Linking,
 } from 'react-native';
-import { LinearGradient } from 'expo-linear-gradient';
 import { useAuth } from '../contexts/AuthContext';
 import { requestLocationPermission } from '../services/weather';
 import { requestNotificationPermission } from '../services/notification';
 import { setHasOnboarded } from '../utils/storage';
 import { useI18n } from '../i18n';
+import { COLORS, FONTS, RADII } from '../constants/theme';
+import SkyBackground, { getPaperTint } from '../components/SkyBackground';
+import Grain from '../components/Grain';
 
 interface Props {
   onDone: () => void;
@@ -22,8 +23,6 @@ export default function PermissionSetupScreen({ onDone }: Props) {
   const { user } = useAuth();
   const { t } = useI18n();
   const [loading, setLoading] = useState(false);
-  const [locStatus, setLocStatus] = useState<'pending' | 'granted' | 'denied'>('pending');
-  const [notifStatus, setNotifStatus] = useState<'pending' | 'granted' | 'denied'>('pending');
 
   const userName =
     user?.user_metadata?.full_name ||
@@ -33,19 +32,11 @@ export default function PermissionSetupScreen({ onDone }: Props) {
   const handleStart = async () => {
     setLoading(true);
     try {
-      // 1. 위치 권한
-      const locOk = await requestLocationPermission();
-      setLocStatus(locOk ? 'granted' : 'denied');
-
-      // 2. 알림 권한 (권한만 받아두고 자동 예약은 안 함 — 사용자가 설정에서 직접 켜야 함)
-      const notifOk = await requestNotificationPermission();
-      setNotifStatus(notifOk ? 'granted' : 'denied');
-
-      // 3. 둘 다 거부해도 그냥 진행 (앱은 권한 없이도 일부 사용 가능)
+      await requestLocationPermission();
+      await requestNotificationPermission();
       await setHasOnboarded(true);
       onDone();
     } catch (e) {
-      // 권한 거부도 정상 흐름. 그냥 통과.
       await setHasOnboarded(true);
       onDone();
     } finally {
@@ -54,16 +45,18 @@ export default function PermissionSetupScreen({ onDone }: Props) {
   };
 
   return (
-    <LinearGradient
-      colors={['#0a1228', '#1a2350', '#5a3870', '#c36c80']}
-      style={styles.gradient}
-    >
+    <View style={[styles.root, { backgroundColor: getPaperTint('day') }]}>
+      <View style={styles.skyWrap}>
+        <SkyBackground kind="day" />
+      </View>
+
       <View style={styles.container}>
         <View style={styles.content}>
-          <Text style={styles.welcomeEmoji}>👋</Text>
+          <Text style={styles.kicker}>WELCOME</Text>
           <Text style={styles.welcomeText}>
             {userName ? t('permission.welcome', { name: userName }) : t('permission.welcomeNoName')}
           </Text>
+
           <Text style={styles.desc}>{t('permission.desc')}</Text>
 
           <View style={styles.permList}>
@@ -88,28 +81,24 @@ export default function PermissionSetupScreen({ onDone }: Props) {
           disabled={loading}
         >
           {loading ? (
-            <ActivityIndicator color="#0f0f0f" size="small" />
+            <ActivityIndicator color={COLORS.paper} size="small" />
           ) : (
             <Text style={styles.buttonText}>{t('permission.startButton')}</Text>
           )}
         </TouchableOpacity>
       </View>
-    </LinearGradient>
+
+      <Grain />
+    </View>
   );
 }
 
-function PermissionRow({
-  emoji,
-  title,
-  desc,
-}: {
-  emoji: string;
-  title: string;
-  desc: string;
-}) {
+function PermissionRow({ emoji, title, desc }: { emoji: string; title: string; desc: string }) {
   return (
     <View style={styles.permRow}>
-      <Text style={styles.permEmoji}>{emoji}</Text>
+      <View style={styles.permStamp}>
+        <Text style={styles.permEmoji}>{emoji}</Text>
+      </View>
       <View style={{ flex: 1 }}>
         <Text style={styles.permTitle}>{title}</Text>
         <Text style={styles.permDesc}>{desc}</Text>
@@ -119,70 +108,69 @@ function PermissionRow({
 }
 
 const styles = StyleSheet.create({
-  gradient: { flex: 1 },
+  root: { flex: 1, backgroundColor: COLORS.paper },
+  skyWrap: { position: 'absolute', top: 0, left: 0, right: 0, height: '42%' },
   container: {
     flex: 1,
-    paddingHorizontal: 32,
-    paddingTop: 100,
-    paddingBottom: 56,
+    paddingHorizontal: 28,
+    paddingTop: 64,
+    paddingBottom: 44,
     justifyContent: 'space-between',
   },
-  content: {
-    flex: 1,
-    alignItems: 'center',
-    marginTop: 20,
+  content: { flex: 1 },
+  kicker: {
+    fontFamily: FONTS.mono,
+    fontSize: 11,
+    letterSpacing: 4,
+    color: 'rgba(255,255,255,0.8)',
   },
-  welcomeEmoji: { fontSize: 56 },
   welcomeText: {
-    fontSize: 28,
-    color: '#ffffff',
-    fontWeight: '700',
-    textAlign: 'center',
-    marginTop: 20,
-    lineHeight: 38,
+    fontFamily: FONTS.serifKo,
+    fontSize: 34,
+    color: '#fff',
+    marginTop: 14,
+    lineHeight: 46,
+    textShadowColor: 'rgba(40,30,50,0.22)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 18,
   },
   desc: {
-    fontSize: 15,
-    color: 'rgba(255,255,255,0.7)',
-    textAlign: 'center',
-    marginTop: 32,
+    fontSize: 14.5,
+    color: COLORS.ink2,
+    marginTop: 30,
     lineHeight: 24,
-    fontWeight: '300',
   },
-  permList: {
-    width: '100%',
-    marginTop: 36,
-    gap: 14,
-  },
+  permList: { marginTop: 26, gap: 12 },
   permRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    borderRadius: 14,
-    padding: 18,
-    gap: 16,
+    backgroundColor: COLORS.card,
+    borderRadius: RADII.card,
+    padding: 17,
+    gap: 15,
     borderWidth: 1,
-    borderColor: 'rgba(255,255,255,0.1)',
+    borderColor: COLORS.line,
   },
-  permEmoji: { fontSize: 28 },
-  permTitle: { color: '#ffffff', fontSize: 15, fontWeight: '600' },
-  permDesc: {
-    color: 'rgba(255,255,255,0.55)',
-    fontSize: 12,
-    marginTop: 2,
+  permStamp: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: COLORS.paper3,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  note: {
-    fontSize: 12,
-    color: 'rgba(255,255,255,0.4)',
-    textAlign: 'center',
-    marginTop: 28,
-  },
+  permEmoji: { fontSize: 18 },
+  permTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '600' },
+  permDesc: { color: COLORS.ink3, fontSize: 12.5, marginTop: 3, lineHeight: 17 },
+  note: { fontSize: 12, color: COLORS.ink3, textAlign: 'center', marginTop: 22 },
   button: {
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
+    backgroundColor: COLORS.ink,
+    borderRadius: RADII.btn,
     paddingVertical: 17,
     alignItems: 'center',
   },
   buttonDisabled: { opacity: 0.5 },
-  buttonText: { color: '#0f0f0f', fontSize: 16, fontWeight: '700' },
+  buttonText: { color: COLORS.paper, fontSize: 15.5, fontWeight: '600' },
 });

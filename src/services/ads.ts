@@ -9,8 +9,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { __DEV__ } from './_env';
 import { redeemAdCredit, UsageInfo } from './usage';
 
-// 종류(메시지/활동/음식)별로 "당일 첫 호출 무광고" 추적
-const FREE_DAILY_PREFIX = 'lastAdFreeDate:'; // + kind (예: lastAdFreeDate:message)
+// 하루 전체(메시지·활동·음식 통틀어) 첫 생성 1회만 무광고
+const FREE_DAILY_KEY = 'lastFreeGenDate';
 
 function kstTodayString(): string {
   const now = new Date();
@@ -21,14 +21,13 @@ function kstTodayString(): string {
   return `${y}-${m}-${d}`;
 }
 
-// 해당 종류의 오늘 첫 호출이면 true (그리고 오늘 날짜로 마킹 → 다음부턴 false)
-async function isFirstCallOfDay(kind: string): Promise<boolean> {
+// 오늘 전체 통틀어 첫 생성이면 true (그리고 오늘 날짜로 마킹 → 다음부턴 false)
+async function isFirstGenerationOfDay(): Promise<boolean> {
   try {
-    const key = FREE_DAILY_PREFIX + kind;
     const today = kstTodayString();
-    const last = await AsyncStorage.getItem(key);
+    const last = await AsyncStorage.getItem(FREE_DAILY_KEY);
     if (last === today) return false;
-    await AsyncStorage.setItem(key, today);
+    await AsyncStorage.setItem(FREE_DAILY_KEY, today);
     return true;
   } catch {
     return false;
@@ -130,21 +129,16 @@ export async function initAds(): Promise<void> {
 
 /**
  * 전면 광고 + callback (메시지/활동/음식 생성용)
- * @param freebieKind 'message'|'activity'|'food' 전달 시, 그 종류의 "당일 첫 호출"은 광고 없이 무료
- *   (메시지·활동·음식 각각 하루 1회씩 무광고)
+ * - 하루 전체 통틀어 첫 생성 1회는 광고 없이 무료
+ * - 그 외(당일 2·3회차)는 짧은 전면 광고 후 생성
  * - 광고 안 떠도 callback은 반드시 실행 (UX 끊김 방지)
  */
-export async function showInterstitialThenRun(
-  callback: () => void,
-  freebieKind?: string,
-): Promise<void> {
-  // 해당 종류의 당일 첫 호출이면 광고 스킵
-  if (freebieKind) {
-    const isFirst = await isFirstCallOfDay(freebieKind);
-    if (isFirst) {
-      callback();
-      return;
-    }
+export async function showInterstitialThenRun(callback: () => void): Promise<void> {
+  // 오늘 전체 통틀어 첫 생성이면 광고 스킵 (무료)
+  const isFirst = await isFirstGenerationOfDay();
+  if (isFirst) {
+    callback();
+    return;
   }
 
   if (!admob || !nativeReady || !interstitial || !interstitialReady) {
