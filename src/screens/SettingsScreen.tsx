@@ -29,7 +29,6 @@ import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { COLORS, FONTS, RADII } from '../constants/theme';
-import Grain from '../components/Grain';
 import { useWeather } from '../hooks/useWeather';
 import { getSkyKind, getPaperTint } from '../components/SkyBackground';
 
@@ -382,11 +381,9 @@ export default function SettingsScreen() {
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
-        <Text style={styles.appVersion}>v1.0.21</Text>
+        <Text style={styles.appVersion}>v1.0.22</Text>
       </View>
       </ScrollView>
-
-      <Grain />
     </View>
   );
 }

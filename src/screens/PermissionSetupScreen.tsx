@@ -13,7 +13,6 @@ import { setHasOnboarded } from '../utils/storage';
 import { useI18n } from '../i18n';
 import { COLORS, FONTS, RADII } from '../constants/theme';
 import SkyBackground, { getPaperTint } from '../components/SkyBackground';
-import Grain from '../components/Grain';
 
 interface Props {
   onDone: () => void;
@@ -87,8 +86,6 @@ export default function PermissionSetupScreen({ onDone }: Props) {
           )}
         </TouchableOpacity>
       </View>
-
-      <Grain />
     </View>
   );
 }

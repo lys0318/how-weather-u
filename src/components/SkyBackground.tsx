@@ -1,9 +1,9 @@
 // 날씨 + 시간대에 반응하는 "수채 하늘" 배경 (Sky Letter)
 // - 6가지 팔레트(노을/맑음/흐림/비/맑은밤/흐린밤) 부드러운 세로 그라디언트
-// - 날씨 장식: 해 글로우 / 구름 / 별+달 / 구름에 가린 달
+// - 날씨 장식: 해 글로우 / 구름 / 별+초승달 / 구름에 가린 달
 // - 아래쪽은 날씨별로 살짝 물든 크림 페이퍼로 녹아들도록(melt) 처리
 import React from 'react';
-import { View, Image, StyleSheet, ImageStyle, DimensionValue } from 'react-native';
+import { View, Text, Image, StyleSheet, ImageStyle, DimensionValue } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { WeatherCondition } from '../constants/weather';
 
@@ -52,12 +52,13 @@ export function getSkyKind(condition: WeatherCondition | null, hour: number): Sk
 }
 
 // ── 구름 한 덩이 (부드러운 퍼프 3개 겹침) ───────────────────
-function Cloud({ top, left, w, color, opacity }: {
-  top: number; left: number; w: number; color: string; opacity: number;
+function Cloud({ top, left, right, w, color, opacity }: {
+  top: number; left?: number; right?: number; w: number; color: string; opacity: number;
 }) {
   const h = w * 0.6;
+  const xPos = right !== undefined ? { right } : { left: left ?? 0 };
   return (
-    <View style={{ position: 'absolute', top, left, width: w, height: h }} pointerEvents="none">
+    <View style={[{ position: 'absolute', top, width: w, height: h }, xPos]} pointerEvents="none">
       <Image source={GLOW_SRC} resizeMode="stretch"
         style={{ position: 'absolute', left: 0, top: h * 0.22, width: w * 0.6, height: h * 0.7, opacity, tintColor: color }} />
       <Image source={GLOW_SRC} resizeMode="stretch"
@@ -68,14 +69,8 @@ function Cloud({ top, left, w, color, opacity }: {
   );
 }
 
-const CLOUD_CFG = {
-  cloudy: { color: '#f2f1ea', op: 0.55 },
-  rain: { color: '#9aa2a0', op: 0.5 },
-  cloudyNight: { color: '#3b4056', op: 0.72 },
-} as const;
-
-function Clouds({ variant }: { variant: keyof typeof CLOUD_CFG }) {
-  const c = CLOUD_CFG[variant];
+function Clouds({ variant }: { variant: 'cloudy' | 'rain' }) {
+  const c = variant === 'rain' ? { color: '#9aa2a0', op: 0.5 } : { color: '#f2f1ea', op: 0.55 };
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
       <Cloud top={56} left={-36} w={250} color={c.color} opacity={c.op} />
@@ -110,30 +105,33 @@ function Stars() {
   );
 }
 
-// ── 달 (맑은 밤 = 밝게 / 흐린 밤 = 은은하게) ──────────────────
-function Moon({ dim }: { dim?: boolean }) {
-  return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="none">
-      <Image source={GLOW_SRC} resizeMode="stretch"
-        style={{ position: 'absolute', width: 170, height: 170, top: 18, right: 4, opacity: dim ? 0.3 : 0.55, tintColor: '#e9ecf5' }} />
-      <View style={{
-        position: 'absolute', width: 60, height: 60, borderRadius: 30, top: 72, right: 56,
-        backgroundColor: dim ? '#d2d5de' : '#f0f2f7',
-      }} />
-    </View>
-  );
-}
-
 function Decor({ kind }: { kind: SkyKind }) {
   if (kind === 'day' || kind === 'dusk') {
     return <Image source={GLOW_SRC} resizeMode="stretch" style={[styles.sun, SUN_GLOW[kind]]} />;
   }
   if (kind === 'night') {
-    return <><Stars /><Moon /></>;
+    // 맑은 밤 — 별 + 노란 초승달
+    return (
+      <>
+        <Stars />
+        <Image source={GLOW_SRC} resizeMode="stretch"
+          style={{ position: 'absolute', width: 170, height: 170, top: 4, right: -2, opacity: 0.45, tintColor: '#ffe6a8' }} />
+        <Text style={styles.crescent}>🌙</Text>
+      </>
+    );
   }
   if (kind === 'cloudyNight') {
-    // 달을 먼저 그리고 구름을 위에 → 구름에 가린 달
-    return <><Moon dim /><Clouds variant="cloudyNight" /></>;
+    // 흐린 밤 — 은은한 달을 구름이 앞에서 가림 (달 → 구름 순서로 그려 가려지게)
+    return (
+      <>
+        <Image source={GLOW_SRC} resizeMode="stretch"
+          style={{ position: 'absolute', width: 150, height: 150, top: 6, right: 8, opacity: 0.4, tintColor: '#e9e2c4' }} />
+        <View style={styles.dimMoon} />
+        <Cloud top={92} right={-18} w={244} color="#3b4056" opacity={0.8} />
+        <Cloud top={150} left={20} w={200} color="#3b4056" opacity={0.66} />
+        <Cloud top={56} left={-46} w={178} color="#3b4056" opacity={0.6} />
+      </>
+    );
   }
   // cloudy / rain
   return <Clouds variant={kind === 'rain' ? 'rain' : 'cloudy'} />;
@@ -158,5 +156,10 @@ export default function SkyBackground({ kind }: { kind: SkyKind }) {
 
 const styles = StyleSheet.create({
   sun: { position: 'absolute' },
+  crescent: { position: 'absolute', top: 46, right: 52, fontSize: 64 },
+  dimMoon: {
+    position: 'absolute', top: 50, right: 66, width: 58, height: 58, borderRadius: 29,
+    backgroundColor: '#e7ddbb',
+  },
   melt: { position: 'absolute', left: 0, right: 0, bottom: 0, height: '40%' },
 });

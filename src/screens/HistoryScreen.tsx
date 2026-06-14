@@ -30,7 +30,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { LinearGradient } from 'expo-linear-gradient';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { COLORS, FONTS, RADII } from '../constants/theme';
-import Grain from '../components/Grain';
 import { useWeather } from '../hooks/useWeather';
 import { getSkyKind, getPaperTint } from '../components/SkyBackground';
 
@@ -256,8 +255,6 @@ export default function HistoryScreen() {
           dateLabel={buildDateLabel(shareMsg.generatedAt)}
         />
       )}
-
-      <Grain />
     </View>
   );
 }

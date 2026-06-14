@@ -46,7 +46,6 @@ import { ShareableCard } from '../components/ShareableCard';
 import { COLORS, FONTS, RADII } from '../constants/theme';
 import SkyBackground, { getSkyKind, getPaperTint } from '../components/SkyBackground';
 import WeatherAnimation from '../components/WeatherAnimation';
-import Grain from '../components/Grain';
 import { useFocusEffect } from '@react-navigation/native';
 import { setStatusBarStyle } from 'expo-status-bar';
 
@@ -765,8 +764,6 @@ export default function HomeScreen() {
           </View>
         </View>
       </ScrollView>
-
-      <Grain />
 
       {/* 메시지 유형 선택 모달 */}
       <Modal

@@ -11,7 +11,6 @@ import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../i18n';
 import { COLORS, FONTS, RADII } from '../constants/theme';
 import SkyBackground, { getPaperTint } from '../components/SkyBackground';
-import Grain from '../components/Grain';
 
 export default function LoginScreen() {
   const { signInWithGoogle, signInAsGuest } = useAuth();
@@ -93,8 +92,6 @@ export default function LoginScreen() {
           </View>
         </View>
       </View>
-
-      <Grain />
     </View>
   );
 }
