@@ -15,7 +15,7 @@
     --ink:#fdf3f0;
     --ink-soft:rgba(253,243,240,.72);
     --ink-dim:rgba(253,243,240,.45);
-    --accent:#f3b7a6;
+    --accent:#f3c98e;
     --panel-pad: clamp(28px, 6vw, 120px);
   }
   *{box-sizing:border-box;margin:0;padding:0;}
@@ -23,7 +23,7 @@
   body{
     font-family:"Pretendard Variable",Pretendard,system-ui,sans-serif;
     color:var(--ink);
-    background:#0a1030;
+    background:#232a44;
     overflow:hidden;
     -webkit-font-smoothing:antialiased;
   }
@@ -39,13 +39,13 @@
     scroll-behavior:smooth;
     /* the single warm-shifting gradient that spans the whole journey */
     background:linear-gradient(100deg,
-      #0a1030 0%,
-      #15173c 16%,
-      #2c2350 33%,
-      #44315f 50%,
-      #6a3f63 66%,
-      #a55f66 82%,
-      #e8a594 100%);
+      #232a44 0%,
+      #474b81 18%,
+      #5b5f93 34%,
+      #8d6f9c 52%,
+      #c4837b 70%,
+      #e2a877 86%,
+      #efc593 100%);
     background-attachment:local;
     scrollbar-width:none;
   }
@@ -263,67 +263,56 @@
     <!-- 1. WEATHER -->
     <section class="panel feature" data-screen-label="01-weather">
       <div class="copy">
-        <span class="step"><b>01</b> / 06</span>
-        <h2>내 동네 날씨를<br>정확하게</h2>
-        <p class="sub">기상청 기반 실시간 날씨</p>
-        <p class="desc">기상청 데이터를 받아 지금 내 위치의 날씨를 보여드려요. 온도와 체감, 습도, 바람까지 한 화면에서 확인하고 바로 오늘의 메시지를 받아볼 수 있어요.</p>
+        <span class="step"><b>01</b> / 05</span>
+        <h2>내 동네 날씨가<br>하늘로 펼쳐져요</h2>
+        <p class="sub">날씨·시간 따라 바뀌는 하늘</p>
+        <p class="desc">기상청 데이터로 지금 내 위치의 날씨를 보여드려요. 배경 하늘은 맑음·노을·흐림·비, 밤엔 별과 달까지 날씨와 시간에 맞춰 바뀌어요. 체감·습도·바람은 물론 자외선·미세먼지·강수량까지 한눈에 보이고, 비 소식이 있으면 우산도 미리 챙겨드려요.</p>
       </div>
       <div class="device"><img src="assets/device_2.png" alt="실시간 날씨 화면" /></div>
     </section>
 
-    <!-- 2. TONE -->
-    <section class="panel feature" data-screen-label="02-tone">
+    <!-- 2. AI MESSAGE -->
+    <section class="panel feature" data-screen-label="02-message">
       <div class="copy">
-        <span class="step"><b>02</b> / 06</span>
-        <h2>위로·응원·조언<br>골라서 받기</h2>
-        <p class="sub">지금 기분에 맞는 한마디</p>
-        <p class="desc">위로가 필요한 날엔 위로를, 힘이 필요한 날엔 응원을. 지금 내 마음에 맞는 톤을 직접 고르면, 그에 어울리는 메시지를 건네드려요.</p>
+        <span class="step"><b>02</b> / 05</span>
+        <h2>날씨가 건네는<br>한 통의 편지</h2>
+        <p class="sub">위로·응원·조언, 골라 받기</p>
+        <p class="desc">오늘의 날씨와 시간, 요일을 읽고 AI가 당신만을 위한 한 줄을 편지처럼 써내려가요. 위로가 필요한 날엔 위로를, 힘이 필요한 날엔 응원을 — 지금 마음에 맞는 톤을 직접 고르면 돼요. 마음에 들면 그대로 공유할 수 있어요.</p>
       </div>
-      <div class="device"><img src="assets/device_3.png" alt="메시지 톤 선택 화면" /></div>
-    </section>
-
-    <!-- 3. AI MESSAGE -->
-    <section class="panel feature" data-screen-label="03-message">
-      <div class="copy">
-        <span class="step"><b>03</b> / 06</span>
-        <h2>날씨에 맞춘<br>따뜻한 AI 메시지</h2>
-        <p class="sub">오늘 하루를 위한 한 줄</p>
-        <p class="desc">오늘의 날씨와 시간, 요일을 읽고 AI가 당신만을 위한 한 줄을 써내려가요. 마음에 들면 그대로 공유하고, 새로운 메시지도 언제든 다시 받을 수 있어요.</p>
-      </div>
-      <div class="device"><img src="assets/device_4.png" alt="AI 메시지 화면" /></div>
+      <div class="device"><img src="assets/device_3.png" alt="AI 감성 메시지 화면" /></div>
     </section>
 
     <!-- 4. ACTIVITY -->
     <section class="panel feature" data-screen-label="04-activity">
       <div class="copy">
-        <span class="step"><b>04</b> / 06</span>
+        <span class="step"><b>03</b> / 05</span>
         <h2>오늘 뭐 하면<br>좋을까?</h2>
         <p class="sub">날씨에 맞춘 활동 추천</p>
         <p class="desc">지금 날씨와 앞으로의 예보까지 읽어, 오늘 하기 좋은 활동을 콕 집어 추천해드려요. 비 오기 전 가벼운 산책처럼, 시간과 상황에 어울리는 한 가지를요.</p>
       </div>
-      <div class="device"><img src="assets/device_6.png" alt="활동 추천 화면" /></div>
+      <div class="device"><img src="assets/device_4.png" alt="활동 추천 화면" /></div>
     </section>
 
     <!-- 5. FOOD -->
     <section class="panel feature" data-screen-label="05-food">
       <div class="copy">
-        <span class="step"><b>05</b> / 06</span>
+        <span class="step"><b>04</b> / 05</span>
         <h2>오늘 뭐 먹으면<br>좋을까?</h2>
         <p class="sub">지금 딱 어울리는 한 끼</p>
-        <p class="desc">흐린 밤엔 따뜻한 볶음밥처럼, 지금 기온과 시간대·기분에 어울리는 음식을 친구처럼 권해드려요. 메뉴 고민은 덜고, 오늘 한 끼가 더 즐거워져요.</p>
+        <p class="desc">흐린 밤엔 뜨끈한 순두부찌개처럼, 지금 기온과 시간대·기분에 어울리는 음식을 친구처럼 권해드려요. 메뉴 고민은 덜고, 오늘 한 끼가 더 즐거워져요.</p>
       </div>
-      <div class="device"><img src="assets/device_7.png" alt="음식 추천 화면" /></div>
+      <div class="device"><img src="assets/device_5.png" alt="음식 추천 화면" /></div>
     </section>
 
     <!-- 6. HISTORY -->
     <section class="panel feature" data-screen-label="06-history">
       <div class="copy">
-        <span class="step"><b>06</b> / 06</span>
+        <span class="step"><b>05</b> / 05</span>
         <h2>받은 메시지<br>모아서 다시 보기</h2>
         <p class="sub">마음에 든 글은 북마크</p>
         <p class="desc">받은 메시지는 7일간 보관돼요. 지난 한마디를 다시 꺼내 읽고, 오래 간직하고 싶은 글은 북마크해 따로 모아둘 수 있어요.</p>
       </div>
-      <div class="device"><img src="assets/device_5.png" alt="메시지 기록 화면" /></div>
+      <div class="device"><img src="assets/device_6.png" alt="메시지 기록 화면" /></div>
     </section>
 
     <!-- 5. CTA -->
