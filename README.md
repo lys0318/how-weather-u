@@ -113,7 +113,7 @@ Supabase secret으로만 보관합니다. (`.env`, `*.jks`는 git 추적 제외)
 
 ## 📄 개인정보처리방침
 
-https://lys0318.github.io/how-weather-u/privacy-policy.html
+https://how-weather-u.pages.dev/privacy-policy.html
 
 ---
 

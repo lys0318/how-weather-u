@@ -95,7 +95,7 @@ AI가 위로·응원·조언 메시지를 들려드리는 감성 앱이에요.
 - 위치는 날씨 조회 시점에만 사용하고 저장하지 않아요.
 - 모든 통신은 HTTPS 암호화.
 - 앱 내 [설정 → 계정 탈퇴] 한 번으로 모든 데이터 즉시 영구 삭제.
-- 개인정보처리방침: https://lys0318.github.io/how-weather-u/privacy-policy.html
+- 개인정보처리방침: https://how-weather-u.pages.dev/privacy-policy.html
 
 
 💰 무료로 즐기세요
@@ -232,7 +232,7 @@ Each message arrives on warm, cream "letter paper." The background sky comes ali
 - Your location is used only to fetch weather and is not stored.
 - All traffic is encrypted over HTTPS.
 - Settings → Delete account removes all your data instantly and permanently.
-- Privacy Policy: https://lys0318.github.io/how-weather-u/privacy-policy.html
+- Privacy Policy: https://how-weather-u.pages.dev/privacy-policy.html
 
 
 💰 Free to enjoy
