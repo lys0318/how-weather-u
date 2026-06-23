@@ -6,6 +6,12 @@
 
 ---
 
+##둘러보기
+랜딩페이지 : https://how-weather-u.pages.dev/
+
+##시작하기
+플레이스토어에서 하우웨더유 검색 후 다운 https://play.google.com/store/apps/details?id=com.howweatheryou.app
+
 ## ✨ 주요 기능
 
 - **AI 감성 메시지** — 현재 날씨/요일/시간대에 맞춘 위로·응원·조언 메시지 (Claude AI)
