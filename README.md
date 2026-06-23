@@ -7,10 +7,21 @@
 ---
 
 ##둘러보기
+
 랜딩페이지 : https://how-weather-u.pages.dev/
 
+---
+
+---
+
 ##시작하기
-플레이스토어에서 하우웨더유 검색 후 다운 https://play.google.com/store/apps/details?id=com.howweatheryou.app
+
+플레이스토어에서 하우웨더유 검색 후 다운 
+https://play.google.com/store/apps/details?id=com.howweatheryou.app
+
+---
+
+---
 
 ## ✨ 주요 기능
 
