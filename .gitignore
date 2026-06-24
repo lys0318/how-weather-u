@@ -43,3 +43,6 @@ yarn-error.*
 
 # 스토어 스크린샷 작업 파일
 store-shots/
+
+# Supabase CLI 임시 파일
+supabase/.temp/
