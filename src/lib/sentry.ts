@@ -2,8 +2,6 @@
 // - 네이티브 모듈이 없는 환경(테스트 등)에서도 안전하게 graceful degrade
 // - DSN이 없으면 초기화 skip (개발 빌드에선 안 보내고 싶을 때 유용)
 
-import { __DEV__ } from '../services/_env';
-
 let Sentry: any = null;
 try {
   // eslint-disable-next-line @typescript-eslint/no-var-requires

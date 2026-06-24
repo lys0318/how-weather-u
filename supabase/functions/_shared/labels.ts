@@ -28,7 +28,7 @@ export function conditionLabel(lang: Lang, c: string): string {
   return CONDITION[lang][c] ?? CONDITION[lang].unknown;
 }
 export function timeOfDayLabel(lang: Lang, t: string): string {
-  return TIME_OF_DAY[lang][t] ?? t;
+  return TIME_OF_DAY[lang][t] ?? ''; // 미지 입력 원문 echo 방지 (프롬프트 주입 차단)
 }
 export function dowLabel(lang: Lang, n: number): string {
   return DOW[lang][n] ?? '';

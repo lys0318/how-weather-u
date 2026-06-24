@@ -14,6 +14,9 @@ export const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
 export type Feature = 'message' | 'activity' | 'food';
 // 메시지/활동/음식 합산 하루 3회 (Claude API 비용 절감)
 export const DAILY_LIMIT_TOTAL = 3;
+// 광고 보상 일일 상한 (무한 충전 → Claude 비용 폭탄 방지)
+// ponytail: 단순 카운트 상한. 정밀 차단은 AdMob 서버사이드 검증(SSV) — 이 규모엔 과함.
+export const MAX_AD_REWARDS_PER_DAY = 20;
 
 /**
  * Authorization 헤더에서 JWT 추출해 사용자 검증
@@ -91,6 +94,13 @@ export async function getEffectiveLimit(userId: string): Promise<number> {
  * - 테이블 없으면 에러 throw (클라이언트에 알려야 함)
  */
 export async function grantAdReward(userId: string, adUnitId?: string): Promise<void> {
+  // 일일 상한 체크 (무한 충전 방지)
+  // ponytail: 동시호출 시 상한을 살짝 넘을 수 있으나, 비용 바운드 목적엔 충분.
+  const today = await getAdRewardsToday(userId);
+  if (today >= MAX_AD_REWARDS_PER_DAY) {
+    throw new Error(`오늘 광고 충전 한도(${MAX_AD_REWARDS_PER_DAY}회)에 도달했어요. 내일 다시 이용해주세요 🌙`);
+  }
+
   const { error } = await supabaseAdmin
     .from('ad_rewards')
     .insert({ user_id: userId, ad_unit_id: adUnitId ?? null });

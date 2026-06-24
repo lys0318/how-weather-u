@@ -48,7 +48,6 @@ Rules:
 interface ForecastSlot {
   hour: number;
   condition?: string;
-  conditionKo?: string; // 구버전 호환
   temp: number;
   popPercent: number;
 }
@@ -66,13 +65,10 @@ interface RequestBody {
   pm25?: number;
   rainfall?: number;
   lang?: Lang;
-  // ── 구버전 클라이언트 호환 ──
-  conditionKo?: string;
-  timeOfDayKo?: string;
 }
 
 function fcLabel(lang: Lang, f: ForecastSlot): string {
-  return f.condition ? conditionLabel(lang, f.condition) : (f.conditionKo ?? '');
+  return f.condition ? conditionLabel(lang, f.condition) : '';
 }
 
 const CUISINE_POOL: Record<Lang, string[]> = {
@@ -117,7 +113,7 @@ Deno.serve(async (req) => {
 
     const body = (await req.json()) as RequestBody;
 
-    if ((!body.condition && !body.conditionKo) || body.temp === undefined) {
+    if (!body.condition || body.temp === undefined) {
       return new Response(
         JSON.stringify({ error: 'missing required fields' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -128,8 +124,8 @@ Deno.serve(async (req) => {
     const kst = getKstContext(lang);
     const meal = mealHint(lang, body.hour);
     const metrics = metricLines(lang, body);
-    const condText = body.condition ? conditionLabel(lang, body.condition) : (body.conditionKo ?? '');
-    const todText = body.timeOfDay ? timeOfDayLabel(lang, body.timeOfDay) : (body.timeOfDayKo ?? '');
+    const condText = body.condition ? conditionLabel(lang, body.condition) : '';
+    const todText = body.timeOfDay ? timeOfDayLabel(lang, body.timeOfDay) : '';
 
     // 향후 예보
     let forecastBlock = '';

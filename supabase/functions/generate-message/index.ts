@@ -58,10 +58,6 @@ interface RequestBody {
   dayOfWeek?: number;
   preference: 'comfort' | 'cheer' | 'advice';
   lang?: Lang;
-  // ── 구버전 클라이언트 호환 (enum 도입 전) ──
-  conditionKo?: string;
-  timeOfDayKo?: string;
-  dayOfWeekKo?: string;
 }
 
 const TONE_GUIDE: Record<Lang, Record<string, string>> = {
@@ -94,8 +90,7 @@ Deno.serve(async (req) => {
 
     const body = (await req.json()) as RequestBody;
 
-    // 신·구 포맷 모두 허용 (condition enum 또는 구버전 conditionKo)
-    if (!body.preference || (!body.condition && !body.conditionKo)) {
+    if (!body.preference || !body.condition) {
       return new Response(
         JSON.stringify({ error: 'missing required fields' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } },
@@ -105,15 +100,14 @@ Deno.serve(async (req) => {
     const lang: Lang = body.lang === 'en' ? 'en' : 'ko';
     const toneGuide = TONE_GUIDE[lang][body.preference];
 
-    // 라벨: 신버전(enum)이면 lang 라벨링, 구버전이면 받은 한국어 문자열 사용
-    const condText = body.condition ? conditionLabel(lang, body.condition) : (body.conditionKo ?? '');
-    const todText = body.timeOfDay ? timeOfDayLabel(lang, body.timeOfDay) : (body.timeOfDayKo ?? '');
+    const condText = body.condition ? conditionLabel(lang, body.condition) : '';
+    const todText = body.timeOfDay ? timeOfDayLabel(lang, body.timeOfDay) : '';
     const dowText =
       body.dayOfWeek !== undefined && body.dayOfWeek !== null
         ? lang === 'ko'
           ? `${dowLabel('ko', body.dayOfWeek)}요일`
           : dowLabel('en', body.dayOfWeek)
-        : (body.dayOfWeekKo ?? '');
+        : '';
 
     const userPrompt =
       lang === 'ko'
