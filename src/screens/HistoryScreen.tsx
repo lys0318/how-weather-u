@@ -287,10 +287,13 @@ function MessageCard({ message, showDateHeader, onBookmarkToggle, onShare, t }: 
         <Text style={styles.dateHeader}>{formatDateHeader(message.generatedAt)}</Text>
       )}
       <View style={styles.card}>
+        <View style={styles.cardStripe} />
         {/* 날씨 + 시간 */}
         <View style={styles.cardTop}>
           <View style={styles.cardMeta}>
-            <Text style={styles.weatherEmoji}>{message.weatherEmoji}</Text>
+            <View style={styles.weatherStamp}>
+              <Text style={styles.weatherEmoji}>{message.weatherEmoji}</Text>
+            </View>
             {message.kind && message.kind !== 'message' && (
               <View style={styles.kindTag}>
                 <Text style={styles.kindTagText}>
@@ -306,7 +309,7 @@ function MessageCard({ message, showDateHeader, onBookmarkToggle, onShare, t }: 
               style={styles.actionBtn}
               hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             >
-              <Text style={styles.actionIcon}>↑</Text>
+              <Text style={styles.actionIcon}>↗</Text>
             </TouchableOpacity>
             <TouchableOpacity
               onPress={() => onBookmarkToggle(message.id)}
@@ -321,6 +324,14 @@ function MessageCard({ message, showDateHeader, onBookmarkToggle, onShare, t }: 
         </View>
         {/* 메시지 텍스트 */}
         <Text style={styles.messageText}>{message.text}</Text>
+        <View style={styles.cardFoot}>
+          <Text style={styles.letterMark}>SKY LETTER</Text>
+          <View style={[styles.bookmarkSeal, message.isBookmarked && styles.bookmarkSealOn]}>
+            <Text style={[styles.bookmarkSealText, message.isBookmarked && styles.bookmarkSealTextOn]}>
+              {message.isBookmarked ? '★' : '☆'}
+            </Text>
+          </View>
+        </View>
       </View>
     </>
   );
@@ -447,12 +458,29 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   card: {
-    backgroundColor: COLORS.card,
-    borderRadius: RADII.card,
-    padding: 16,
-    marginBottom: 10,
+    backgroundColor: '#FFFDF7',
+    borderRadius: 18,
+    padding: 17,
+    paddingTop: 20,
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: COLORS.line,
+    borderColor: 'rgba(120,95,65,0.18)',
+    shadowColor: '#2B2620',
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 6 },
+    elevation: 1,
+    overflow: 'hidden',
+  },
+  cardStripe: {
+    position: 'absolute',
+    top: 0,
+    left: 18,
+    right: 18,
+    height: 4,
+    borderBottomLeftRadius: 999,
+    borderBottomRightRadius: 999,
+    backgroundColor: COLORS.emberSoft,
   },
   cardTop: {
     flexDirection: 'row',
@@ -460,8 +488,18 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 10,
   },
-  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 9 },
-  weatherEmoji: { fontSize: 18 },
+  cardMeta: { flexDirection: 'row', alignItems: 'center', gap: 9, flex: 1 },
+  weatherStamp: {
+    width: 34,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: COLORS.emberSoft,
+    borderWidth: 1,
+    borderColor: 'rgba(194,104,63,0.20)',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  weatherEmoji: { fontSize: 17 },
   kindTag: {
     backgroundColor: 'rgba(76,110,107,0.10)',
     borderRadius: 7,
@@ -470,11 +508,43 @@ const styles = StyleSheet.create({
   },
   kindTagText: { fontSize: 10.5, color: COLORS.teal, fontWeight: '600' },
   time: { fontFamily: FONTS.mono, fontSize: 11.5, color: COLORS.ink3 },
-  cardActions: { flexDirection: 'row', gap: 14 },
-  actionBtn: { padding: 2 },
-  actionIcon: { fontSize: 16, color: COLORS.ink3 },
+  cardActions: { flexDirection: 'row', gap: 8 },
+  actionBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: COLORS.paper,
+    borderWidth: 1,
+    borderColor: COLORS.line2,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  actionIcon: { fontSize: 15, color: COLORS.ink3 },
   bookmarked: { color: COLORS.ember },
-  messageText: { fontFamily: FONTS.serifKo, fontSize: 15.5, color: COLORS.ink, lineHeight: 27 },
+  messageText: { fontFamily: FONTS.serifKo, fontSize: 16, color: COLORS.ink, lineHeight: 28 },
+  cardFoot: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 15,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(43,38,32,0.07)',
+  },
+  letterMark: { fontFamily: FONTS.mono, color: COLORS.ink3, fontSize: 10, letterSpacing: 1.8 },
+  bookmarkSeal: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    backgroundColor: COLORS.paper,
+  },
+  bookmarkSealOn: { backgroundColor: COLORS.ember, borderColor: COLORS.ember },
+  bookmarkSealText: { color: COLORS.ink3, fontSize: 14 },
+  bookmarkSealTextOn: { color: COLORS.emberText },
   emptyEmoji: { fontSize: 44, marginBottom: 16 },
   emptyTitle: { fontFamily: FONTS.serifKo, fontSize: 17, color: COLORS.ink2, marginBottom: 8 },
   emptyDesc: { fontSize: 13, color: COLORS.ink3, textAlign: 'center', lineHeight: 22 },

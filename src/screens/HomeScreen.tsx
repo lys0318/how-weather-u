@@ -12,6 +12,7 @@ import {
   AppState,
   Alert,
   RefreshControl,
+  Animated,
 } from 'react-native';
 import { useWeather } from '../hooks/useWeather';
 import { useMessage } from '../hooks/useMessage';
@@ -56,7 +57,7 @@ const PREF_DESC_KEY: Record<Preference, string> = {
   advice: 'home.prefAdviceDesc',
 };
 
-// ── 로딩 중 보여줄 재밌는 문구 키 ────────────────────────────
+// ?? 濡쒕뵫 以?蹂댁뿬以??щ컡??臾멸뎄 ??????????????????????????????
 const LOADING_KEYS = [
   'home.loading1', 'home.loading2', 'home.loading3',
   'home.loading4', 'home.loading5', 'home.loading6',
@@ -64,7 +65,7 @@ const LOADING_KEYS = [
 
 type TFn = (key: string, vars?: Record<string, string | number>) => string;
 
-// ── 친절한 에러 메시지 변환 (언어 인지) ───────────────────────
+// ?? 移쒖젅???먮윭 硫붿떆吏 蹂??(?몄뼱 ?몄?) ???????????????????????
 function isLimitError(raw: string | null): boolean {
   if (!raw) return false;
   return raw.includes('한도') || raw.includes('LIMIT') || raw.includes('limit');
@@ -83,7 +84,7 @@ function prettifyError(raw: string | null, t: TFn): string | null {
   return raw;
 }
 
-// ── 사용 횟수 점 시각화 ────────────────────────────────────
+// ?? ?ъ슜 ?잛닔 ???쒓컖??????????????????????????????????????
 function UsageDots({ used, limit }: { used: number; limit: number }) {
   return (
     <View style={dotStyles.row}>
@@ -101,7 +102,7 @@ const dotStyles = StyleSheet.create({
   dotOff: { backgroundColor: 'transparent', borderColor: COLORS.ink3 },
 });
 
-// 향후 예보에서 비 올 슬롯을 찾아 "N시간 뒤 / 확률" 계산
+// ?ν썑 ?덈낫?먯꽌 鍮????щ’??李얠븘 "N?쒓컙 ??/ ?뺣쪧" 怨꾩궛
 function computeUmbrella(
   forecast: ForecastSlot[] | undefined,
   hour: number,
@@ -131,19 +132,26 @@ export default function HomeScreen() {
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [now, setNow] = useState<Date>(() => new Date());
   const [serverUsage, setServerUsage] = useState<UsageInfo | null>(null);
+  // ?쒕룄 珥덇낵 ??愿묎퀬 蹂????먮룞 ?ㅽ뻾???앹꽦 ?숈옉 蹂닿?
+  const pendingGenRef = useRef<(() => void) | null>(null);
+  // "異⑹쟾?섍린" 踰꾪듉?쇰줈 誘몃━ 愿묎퀬 蹂?寃쎌슦 ???ㅼ쓬 ?앹꽦 1?뚮뒗 ?꾨㈃ 愿묎퀬 ?앸왂
+  const skipNextInterstitialRef = useRef(false);
+  const letterAnim = useRef(new Animated.Value(0)).current;
+  const [letterExpanded, setLetterExpanded] = useState(false);
+  const lastLetterTapRef = useRef(0);
 
-  // 홈은 하늘 위 — 밝은 상태바
+  // 홈은 하늘 위 - 밝은 상태바
   useFocusEffect(
     useCallback(() => {
       setStatusBarStyle('light');
     }, []),
   );
 
-  // ── 시간 자동 동기화 ────────────────────────────────────
-  // 1) 분이 바뀔 때마다 갱신
-  // 2) 앱이 백그라운드 → 포그라운드 복귀 시 즉시 갱신
+  // ?? ?쒓컙 ?먮룞 ?숆린??????????????????????????????????????
+  // 1) 遺꾩씠 諛붾??뚮쭏??媛깆떊
+  // 2) ?깆씠 諛깃렇?쇱슫?????ш렇?쇱슫??蹂듦? ??利됱떆 媛깆떊
   useEffect(() => {
-    // 다음 분 경계에 맞춰 첫 갱신을 정렬 (UX 자연스러움)
+    // ?ㅼ쓬 遺?寃쎄퀎??留욎떠 泥?媛깆떊???뺣젹 (UX ?먯뿰?ㅻ윭?)
     const msUntilNextMinute = 60_000 - (new Date().getSeconds() * 1000 + new Date().getMilliseconds());
     let intervalId: ReturnType<typeof setInterval> | null = null;
     const firstTimer = setTimeout(() => {
@@ -151,7 +159,7 @@ export default function HomeScreen() {
       intervalId = setInterval(() => setNow(new Date()), 60_000);
     }, msUntilNextMinute);
 
-    // 포그라운드 복귀 시 즉시 갱신 + 사용량 재조회
+    // 앱이 foreground로 돌아오면 시간과 사용량을 갱신
     const sub = AppState.addEventListener('change', (state) => {
       if (state === 'active') {
         setNow(new Date());
@@ -166,12 +174,12 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // 마운트 시 오늘 사용량 즉시 조회 (메시지 생성 안 해도 잔여 횟수 표시)
+  // 留덉슫?????ㅻ뒛 ?ъ슜??利됱떆 議고쉶 (硫붿떆吏 ?앹꽦 ???대룄 ?붿뿬 ?잛닔 ?쒖떆)
   useEffect(() => {
     fetchTodayUsage().then((u) => { if (u) setServerUsage(u); });
   }, []);
 
-  // 진입 시 사용 안내 모달 ('오늘 하루 안 보기' 안 누른 경우만)
+  // 吏꾩엯 ???ъ슜 ?덈궡 紐⑤떖 ('?ㅻ뒛 ?섎（ ??蹂닿린' ???꾨Ⅸ 寃쎌슦留?
   useEffect(() => {
     isGuideDismissedToday().then((dismissed) => {
       if (!dismissed) setGuideOpen(true);
@@ -183,7 +191,7 @@ export default function HomeScreen() {
     setGuideOpen(false);
   }, []);
 
-  // 로딩 중일 때 문구 2.5초마다 회전
+  // 濡쒕뵫 以묒씪 ??臾멸뎄 2.5珥덈쭏???뚯쟾
   const anyLoading = messageLoading || activityLoading || foodLoading;
   useEffect(() => {
     if (!anyLoading) return;
@@ -195,6 +203,25 @@ export default function HomeScreen() {
   }, [anyLoading]);
   const loadingMsg = t(LOADING_KEYS[loadingMsgIdx]);
 
+  useEffect(() => {
+    if (!message) return;
+    letterAnim.setValue(0);
+    Animated.spring(letterAnim, {
+      toValue: 1,
+      friction: 8,
+      tension: 62,
+      useNativeDriver: true,
+    }).start();
+  }, [letterAnim, message]);
+
+  const handleLetterPress = useCallback(() => {
+    const nowMs = Date.now();
+    if (nowMs - lastLetterTapRef.current < 320) {
+      setLetterExpanded(true);
+    }
+    lastLetterTapRef.current = nowMs;
+  }, []);
+
   const isEn = lang === 'en';
   const hour = now.getHours();
   const minutes = String(now.getMinutes()).padStart(2, '0');
@@ -202,24 +229,24 @@ export default function HomeScreen() {
   const day = now.getDate();
   const dow = now.getDay();
   const timeOfDay = isEn ? TIME_OF_DAY_EN[getTimeOfDay(hour)] : TIME_OF_DAY_KO[getTimeOfDay(hour)];
-  // 날짜 라벨: ko "6월 13일 토요일" / en "Sat, Jun 13"
+  // ?좎쭨 ?쇰꺼: ko "6??13???좎슂?? / en "Sat, Jun 13"
   const dateText = isEn
     ? `${DAY_OF_WEEK_EN_SHORT[dow]}, ${MONTH_EN_SHORT[month - 1]} ${day}`
     : `${month}월 ${day}일 ${DAY_OF_WEEK_KO[dow]}`;
   const timeText = `${timeOfDay} · ${hour}:${minutes}`;
 
-  // 공유/카드용 날짜 라벨 (시간대 포함)
+  // 怨듭쑀/移대뱶???좎쭨 ?쇰꺼 (?쒓컙? ?ы븿)
   const dateLabel = `${dateText} ${timeOfDay}`;
   const prefLabel = (p: Preference) => (isEn ? PREFERENCE_EN[p] : PREFERENCE_KO[p]);
   const conditionLabel = (c: WeatherCondition, ko: string) => (isEn ? CONDITION_META[c].en : ko);
-  // 편지 톤 태그: ko "위로 · COMFORT" / en "COMFORT"
+  // ?몄? ???쒓렇: ko "?꾨줈 쨌 COMFORT" / en "COMFORT"
   const toneTag = (p: Preference) =>
     isEn ? PREFERENCE_EN[p].toUpperCase() : `${PREFERENCE_KO[p]} · ${PREFERENCE_EN[p].toUpperCase()}`;
 
   const skyKind = getSkyKind(weather?.condition ?? null, hour);
   const paper = getPaperTint(skyKind);
 
-  // 비 예보 시 우산 안내
+  // 鍮??덈낫 ???곗궛 ?덈궡
   const umbrella = computeUmbrella(weather?.forecast, hour);
   const umbrellaText = umbrella
     ? umbrella.pct >= 10
@@ -231,19 +258,25 @@ export default function HomeScreen() {
         : t('home.umbrellaHNoPct', { hours: umbrella.hours })
     : null;
 
-  // 가장 최근 응답에서 used/limit 추출 (합산 카운트)
-  const latestUsage = [message, activity, food]
-    .filter((x): x is NonNullable<typeof x> => !!x && typeof x.used === 'number')
-    .sort((a, b) => b.generatedAt.getTime() - a.generatedAt.getTime())[0];
-  // 우선순위: 방금 생성한 응답 > 서버 조회 > fallback 안내
-  const displayUsage = latestUsage?.limit
-    ? { used: latestUsage.used as number, limit: latestUsage.limit as number }
-    : serverUsage;
+  // ?앹꽦 ?묐떟???ы븿??理쒖떊 ?ъ슜?됱쓣 ?붾㈃???⑥씪 usage ?곹깭濡??≪닔?쒕떎.
+  // 蹂댁긽??愿묎퀬 異⑹쟾 ?꾩뿉??serverUsage媛 利됱떆 +1 ??limit??媛뽮린 ?뚮Ц??
+  // ?ㅻ옒???앹꽦 ?묐떟(?? 3/3)???붾㈃???ㅼ떆 ??뼱?곗? ?딄쾶 ?쒕떎.
+  useEffect(() => {
+    const latestUsage = [message, activity, food]
+      .filter((x): x is NonNullable<typeof x> => !!x && typeof x.used === 'number' && typeof x.limit === 'number')
+      .sort((a, b) => b.generatedAt.getTime() - a.generatedAt.getTime())[0];
+    if (latestUsage) {
+      setServerUsage({ used: latestUsage.used as number, limit: latestUsage.limit as number });
+      pendingGenRef.current = null;
+    }
+  }, [message, activity, food]);
+
+  const displayUsage = serverUsage;
   const usageText = displayUsage
     ? t('home.usageUsed', { used: displayUsage.used, limit: displayUsage.limit })
     : t('home.usageFallback');
 
-  // 앱 열 때 예약 알림 부족하면 자동 보충
+  // ???????덉빟 ?뚮┝ 遺議깊븯硫??먮룞 蹂댁땐
   useEffect(() => {
     (async () => {
       try {
@@ -252,21 +285,21 @@ export default function HomeScreen() {
     })();
   }, []);
 
-  // 메시지 저장 (생성될 때마다) — 게스트는 저장 안 함
+  // 생성된 메시지 저장
   useEffect(() => {
     if (message && weather && !isGuest) {
       saveMessage(message, weather.emoji).catch(() => {});
     }
   }, [message]);
 
-  // 활동 추천 저장 — 게스트 제외
+  // ?쒕룞 異붿쿇 ?????寃뚯뒪???쒖쇅
   useEffect(() => {
     if (activity && weather && !isGuest) {
       saveEntry(activity.text, weather.emoji, weather.condition, 'activity').catch(() => {});
     }
   }, [activity]);
 
-  // 음식 추천 저장 — 게스트 제외
+  // ?뚯떇 異붿쿇 ?????寃뚯뒪???쒖쇅
   useEffect(() => {
     if (food && weather && !isGuest) {
       saveEntry(food.text, weather.emoji, weather.condition, 'food').catch(() => {});
@@ -279,33 +312,41 @@ export default function HomeScreen() {
   const [sharing, setSharing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [watchingAd, setWatchingAd] = useState(false);
-  // 한도 초과 시 광고 본 뒤 자동 실행할 생성 동작 보관
-  const pendingGenRef = useRef<(() => void) | null>(null);
-  // "충전하기" 버튼으로 미리 광고 본 경우 → 다음 생성 1회는 전면 광고 생략
-  const skipNextInterstitialRef = useRef(false);
 
   /**
-   * 생성 트리거 — 광고 정책 분기
-   * - 한도 이내: 전면 광고 → 생성 (종류별 당일 첫 회는 무료)
-   * - 한도 초과: 자동 광고 X → 아래 "광고 보고 1회 충전하기" 버튼으로 유도
+   * ?앹꽦 ?몃━嫄???愿묎퀬 ?뺤콉 遺꾧린
+   * - ?쒕룄 ?대궡: ?섎（ 泥?1?뚮쭔 臾대즺, ?댄썑 吏㏃? ?꾨㈃ 愿묎퀬 ???앹꽦
+   * - ?쒕룄 珥덇낵: 湲?蹂댁긽??愿묎퀬濡?+1 異⑹쟾 ??諛⑷툑 ?꾨Ⅸ 異붿쿇 ?댁뼱???앹꽦
    */
   const triggerGenerate = useCallback(
     async (fn: () => void) => {
-      const overLimit = !!displayUsage && displayUsage.used >= displayUsage.limit;
+      let usageForDecision = displayUsage;
+      if (!usageForDecision) {
+        const freshUsage = await fetchTodayUsage();
+        if (freshUsage) {
+          usageForDecision = freshUsage;
+          setServerUsage(freshUsage);
+        }
+      }
+
+      const overLimit = !!usageForDecision && usageForDecision.used >= usageForDecision.limit;
+      const isFirstFreeGeneration = usageForDecision?.used === 0;
+      pendingGenRef.current = fn;
 
       if (overLimit) {
-        // 자동으로 긴 광고를 띄우지 않고, 하단 충전 버튼으로 안내
+        // ?먮룞?쇰줈 湲?愿묎퀬瑜??꾩슦吏 ?딄퀬, ?섎떒 異⑹쟾 踰꾪듉?쇰줈 ?덈궡.
+        // ?ъ슜?먭? 蹂댁긽??愿묎퀬瑜?蹂대㈃ pendingGenRef???앹꽦 ?숈옉??諛붾줈 ?댁뼱 ?ㅽ뻾?쒕떎.
         Alert.alert(t('home.overLimitTitle'), t('home.overLimitBody'));
         return;
       }
 
       if (skipNextInterstitialRef.current) {
-        // 직전에 "충전하기"로 이미 광고를 봤으면 전면 광고 생략하고 바로 생성
+        // 吏곸쟾??"異⑹쟾?섍린"濡??대? 愿묎퀬瑜?遊ㅼ쑝硫??꾨㈃ 愿묎퀬 ?앸왂?섍퀬 諛붾줈 ?앹꽦
         skipNextInterstitialRef.current = false;
         fn();
       } else {
-        // 한도 이내 → 하루 첫 생성은 무료, 2·3회차는 짧은 전면 광고 후 생성
-        showInterstitialThenRun(fn);
+        // ?쒕룄 ?대궡 ???섎（ 泥??앹꽦? 臾대즺, 2쨌3?뚯감??吏㏃? ?꾨㈃ 愿묎퀬 ???앹꽦
+        showInterstitialThenRun(fn, isFirstFreeGeneration);
       }
     },
     [displayUsage, t],
@@ -327,7 +368,7 @@ export default function HomeScreen() {
     triggerGenerate(() => generateFood(weather));
   };
 
-  // 맨 아래 "광고 보고 1회 충전하기" 전용 — 충전만 하고 자유롭게 생성하도록 (자동 생성 X)
+  // 留??꾨옒 "愿묎퀬 蹂닿퀬 1??異⑹쟾?섍린" ?꾩슜 ??異⑹쟾留??섍퀬 ?먯쑀濡?쾶 ?앹꽦?섎룄濡?(?먮룞 ?앹꽦 X)
   const handleChargeOnly = useCallback(async () => {
     if (watchingAd) return;
     setWatchingAd(true);
@@ -335,9 +376,15 @@ export default function HomeScreen() {
       const result = await showRewardedAndGrant();
       if (result) {
         setServerUsage(result);
-        // 방금 광고를 봤으니, 다음 생성 1회는 전면 광고 생략
-        skipNextInterstitialRef.current = true;
-        Alert.alert(t('home.chargeDoneTitle'), t('home.chargeDoneFree'));
+        const pending = pendingGenRef.current;
+        if (pending) {
+          pendingGenRef.current = null;
+          pending();
+        } else {
+          // 諛⑷툑 愿묎퀬瑜?遊ㅼ쑝?? ?ㅼ쓬 ?앹꽦 1?뚮뒗 ?꾨㈃ 愿묎퀬 ?앸왂
+          skipNextInterstitialRef.current = true;
+          Alert.alert(t('home.chargeDoneTitle'), t('home.chargeDoneFree'));
+        }
       } else {
         Alert.alert(t('home.adUnavailableTitle'), t('home.adUnavailableBodyCharge'));
       }
@@ -346,7 +393,7 @@ export default function HomeScreen() {
     }
   }, [watchingAd, t]);
 
-  // (에러 카드) 광고 보고 추가 이용 → 직전 시도한 생성 자동 실행
+  // (?먮윭 移대뱶) 愿묎퀬 蹂닿퀬 異붽? ?댁슜 ??吏곸쟾 ?쒕룄???앹꽦 ?먮룞 ?ㅽ뻾
   const handleWatchAdForCredit = useCallback(async () => {
     if (watchingAd) return;
     setWatchingAd(true);
@@ -354,9 +401,11 @@ export default function HomeScreen() {
       const result = await showRewardedAndGrant();
       if (result) {
         setServerUsage(result);
-        // 직전에 시도한 생성 동작이 있으면 자동 실행 (버튼 재클릭 불필요)
+        // 吏곸쟾???쒕룄???앹꽦 ?숈옉???덉쑝硫??먮룞 ?ㅽ뻾 (踰꾪듉 ?ы겢由?遺덊븘??
         if (pendingGenRef.current) {
-          pendingGenRef.current();
+          const pending = pendingGenRef.current;
+          pendingGenRef.current = null;
+          pending();
         } else {
           Alert.alert(
             t('home.chargeDoneTitle'),
@@ -374,13 +423,12 @@ export default function HomeScreen() {
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      // 날씨 새로 가져오기 (캐시 무시)
+      // ?좎뵪 ?덈줈 媛?몄삤湲?(罹먯떆 臾댁떆)
       await refetch();
-      // 시간 갱신 (그라디언트/인사말 즉시 반영)
+      // ?쒓컙 媛깆떊 (洹몃씪?붿뼵???몄궗留?利됱떆 諛섏쁺)
       setNow(new Date());
-      // 오늘 사용량 재조회
-      fetchTodayUsage().then((u) => { if (u) setServerUsage(u); });
-      // 예약 알림 보충 시도 (실패해도 무시)
+      // ?ㅻ뒛 ?ъ슜???ъ“??      fetchTodayUsage().then((u) => { if (u) setServerUsage(u); });
+      // ?덉빟 ?뚮┝ 蹂댁땐 ?쒕룄 (?ㅽ뙣?대룄 臾댁떆)
       try {
         await refreshNotificationsIfNeeded();
       } catch {}
@@ -393,19 +441,19 @@ export default function HomeScreen() {
     if (!message || !weather) return;
     setSharing(true);
     try {
-      // 다음 프레임까지 대기 (카드가 완전히 렌더링되도록)
+      // ?ㅼ쓬 ?꾨젅?꾧퉴吏 ?湲?(移대뱶媛 ?꾩쟾???뚮뜑留곷릺?꾨줉)
       await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
 
-      // 카드 캡처
-      if (!cardRef.current) throw new Error('카드 ref가 비어있어요');
+      // 移대뱶 罹≪쿂
+      if (!cardRef.current) throw new Error('Share card ref is empty');
       const uri = await captureRef(cardRef, {
         format: 'png',
         quality: 0.95,
         result: 'tmpfile',
       });
-      if (!uri) throw new Error('캡처 결과가 비어있어요');
+      if (!uri) throw new Error('Share capture result is empty');
 
-      // 공유
+      // 怨듭쑀
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
         await Share.share({
@@ -449,7 +497,7 @@ export default function HomeScreen() {
           />
         }
       >
-        {/* ─── HERO (수채 하늘) ─── */}
+        {/* ??? HERO (?섏콈 ?섎뒛) ??? */}
         <View style={styles.hero}>
           <SkyBackground kind={skyKind} />
           {weather && <WeatherAnimation condition={weather.condition} />}
@@ -478,7 +526,7 @@ export default function HomeScreen() {
           {weather && !weatherLoading && (
             <View style={styles.wx}>
               <Text style={styles.wxStamp}>{weather.emoji}</Text>
-              <Text style={styles.wxTemp}>{weather.temp}°</Text>
+              <Text style={styles.wxTemp}>{weather.temp}℃</Text>
               <Text style={styles.wxRange}>
                 {t('weather.tempRange', { min: weather.tempMin, max: weather.tempMax })}
               </Text>
@@ -487,11 +535,11 @@ export default function HomeScreen() {
                 {weather.city && weather.city !== '내 위치' ? weather.city : t('weather.myLocation')}
               </Text>
 
-              {/* 체감 / 습도 / 바람 — 유리 스트립 */}
+              {/* 泥닿컧 / ?듬룄 / 諛붾엺 ???좊━ ?ㅽ듃由?*/}
               <View style={styles.glassRow}>
                 <View style={styles.glassCell}>
                   <Text style={styles.glassK}>{t('weather.feelsLike')}</Text>
-                  <Text style={styles.glassV}>{weather.feelsLike}°</Text>
+                  <Text style={styles.glassV}>{weather.feelsLike}℃</Text>
                 </View>
                 <View style={styles.glassDivider} />
                 <View style={styles.glassCell}>
@@ -501,11 +549,11 @@ export default function HomeScreen() {
                 <View style={styles.glassDivider} />
                 <View style={styles.glassCell}>
                   <Text style={styles.glassK}>{t('weather.wind')}</Text>
-                  <Text style={styles.glassV}>{weather.windSpeed}㎧</Text>
+                  <Text style={styles.glassV}>{weather.windSpeed}m/s</Text>
                 </View>
               </View>
 
-              {/* 자외선 / 미세먼지 / 강수 (값 있을 때만) */}
+              {/* ?먯쇅??/ 誘몄꽭癒쇱? / 媛뺤닔 (媛??덉쓣 ?뚮쭔) */}
               {(weather.uvIndex !== undefined ||
                 weather.pm10 !== undefined ||
                 weather.pm25 !== undefined ||
@@ -516,7 +564,7 @@ export default function HomeScreen() {
                     <Text style={styles.glassV}>
                       {weather.uvIndex !== undefined
                         ? `${Math.round(weather.uvIndex)} · ${isEn ? uvGrade(weather.uvIndex).en : uvGrade(weather.uvIndex).ko}`
-                        : '—'}
+                        : '-' }
                     </Text>
                   </View>
                   <View style={styles.glassDivider} />
@@ -525,7 +573,7 @@ export default function HomeScreen() {
                     <Text style={styles.glassV}>
                       {(() => {
                         const g = airQualityGrade(weather.pm10, weather.pm25);
-                        return g ? (isEn ? g.en : g.ko) : '—';
+                        return g ? (isEn ? g.en : g.ko) : '-';
                       })()}
                     </Text>
                   </View>
@@ -544,53 +592,95 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* ─── 페이퍼 본문 ─── */}
+        {/* ??? ?섏씠??蹂몃Ц ??? */}
         <View style={[styles.body, { backgroundColor: paper }]}>
-          {/* 비 예보 — 우산 안내 */}
+          {/* 鍮??덈낫 ???곗궛 ?덈궡 */}
           {umbrellaText && (
             <View style={styles.umbrella}>
               <Text style={styles.umbrellaText}>{umbrellaText}</Text>
             </View>
           )}
 
-          {/* 게스트 안내 배너 */}
+          {/* 寃뚯뒪???덈궡 諛곕꼫 */}
           {isGuest && (
             <View style={styles.guestBanner}>
-              <Text style={styles.guestBannerText}>👤 {t('home.guestBanner')}</Text>
+              <Text style={styles.guestBannerText}>☁️ {t('home.guestBanner')}</Text>
             </View>
           )}
 
-          {/* 로딩 중 문구 */}
+          {/* 濡쒕뵫 以?臾멸뎄 */}
           {anyLoading && (
-            <View style={styles.loadingCard}>
-              <ActivityIndicator color={COLORS.ember} size="small" />
+            <View style={styles.envelopeLoading}>
+              <View style={styles.loadingEnvelope}>
+                <View style={styles.loadingEnvelopeFlap} />
+                <View style={styles.loadingEnvelopePocket} />
+                <View style={styles.loadingSeal}>
+                  <ActivityIndicator color={COLORS.emberText} size="small" />
+                </View>
+              </View>
               <Text style={styles.loadingCardText}>{loadingMsg}</Text>
             </View>
           )}
 
-          {/* 감성 메시지 — 편지 노트 */}
+          {/* 媛먯꽦 硫붿떆吏 ??遊됲닾?먯꽌 爰쇰궦 ?몄? */}
           {message && (
-            <View style={styles.note}>
-              <View style={styles.noteTag}>
-                <Text style={styles.noteTagEmoji}>{PREFERENCE_EMOJI[message.context.preference]}</Text>
-                <Text style={styles.noteTagText}>{toneTag(message.context.preference)}</Text>
+            <View style={styles.letterScene}>
+              <View style={styles.envelopeBack}>
+                <View style={styles.envelopeBackFlap} />
               </View>
-              <Text style={styles.noteQuote}>“</Text>
-              <Text style={styles.noteText}>{message.text}</Text>
-              <View style={styles.noteFoot}>
-                <Text style={styles.noteSign}>{t('home.shareSignature')}</Text>
-                <TouchableOpacity onPress={handleShare} style={styles.noteShare} disabled={sharing}>
-                  {sharing ? (
-                    <ActivityIndicator color={COLORS.ink2} size="small" />
-                  ) : (
-                    <Text style={styles.noteShareText}>{t('home.shareUp')}</Text>
-                  )}
-                </TouchableOpacity>
+              <Pressable onPress={handleLetterPress}>
+                <Animated.View
+                  style={[
+                    styles.note,
+                    {
+                      opacity: letterAnim.interpolate({ inputRange: [0, 0.35, 1], outputRange: [0, 0.95, 1] }),
+                      transform: [
+                        { translateY: letterAnim.interpolate({ inputRange: [0, 1], outputRange: [46, 0] }) },
+                        { scale: letterAnim.interpolate({ inputRange: [0, 1], outputRange: [0.96, 1] }) },
+                      ],
+                    },
+                  ]}
+                >
+                  <View style={styles.notePaperLine} />
+                  <View style={styles.noteTag}>
+                    <View style={styles.noteStamp}>
+                      <Text style={styles.noteTagEmoji}>{PREFERENCE_EMOJI[message.context.preference]}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.noteKicker}>SKY LETTER</Text>
+                      <Text style={styles.noteTagText}>{toneTag(message.context.preference)}</Text>
+                    </View>
+                  </View>
+                  <Text style={styles.noteText}>{message.text}</Text>
+                  <View style={styles.noteFoot}>
+                    <View>
+                      <Text style={styles.noteSign}>{t('common.appName')}</Text>
+                      <Text style={styles.noteDate}>{dateLabel}</Text>
+                    </View>
+                    <TouchableOpacity onPress={handleShare} style={styles.noteShare} disabled={sharing}>
+                      {sharing ? (
+                        <ActivityIndicator color={COLORS.ember} size="small" />
+                      ) : (
+                        <>
+                          <Text style={styles.noteShareIcon}>↗</Text>
+                          <Text style={styles.noteShareText}>{t('home.shareUp')}</Text>
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                </Animated.View>
+              </Pressable>
+              <View pointerEvents="none" style={styles.envelopeFront}>
+                <View style={styles.envelopeFrontLeft} />
+                <View style={styles.envelopeFrontRight} />
+                <View style={styles.envelopeSeal}>
+                  <Text style={styles.envelopeSealText}>{weather?.emoji ?? '💌'}</Text>
+                </View>
               </View>
             </View>
           )}
 
-          {/* 공유용 카드 — 캡처 전용 (화면엔 영향 없음) */}
+          {/* 怨듭쑀??移대뱶 ??罹≪쿂 ?꾩슜 (?붾㈃???곹뼢 ?놁쓬) */}
           {message && weather && (
             <ShareableCard
               ref={cardRef}
@@ -625,7 +715,7 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* 활동 추천 */}
+          {/* ?쒕룞 異붿쿇 */}
           {activity && (
             <View style={styles.recCard}>
               <View style={styles.recIco}>
@@ -657,7 +747,7 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* 음식 추천 */}
+          {/* ?뚯떇 異붿쿇 */}
           {food && (
             <View style={styles.recCard}>
               <View style={styles.recIco}>
@@ -689,7 +779,7 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* 버튼 영역 */}
+          {/* 踰꾪듉 ?곸뿭 */}
           {weather && !weatherLoading && (
             <View style={styles.btnGroup}>
               <TouchableOpacity
@@ -734,12 +824,12 @@ export default function HomeScreen() {
                 )}
               </TouchableOpacity>
 
-              {/* 사용 횟수 점 시각화 */}
+              {/* ?ъ슜 ?잛닔 ???쒓컖??*/}
               <View style={styles.usageContainer}>
                 <UsageDots used={displayUsage?.used ?? 0} limit={displayUsage?.limit ?? 3} />
                 <Text style={styles.usageText}>{usageText}</Text>
 
-                {/* 한도 도달 시 — 광고 보고 충전 */}
+                {/* ?쒕룄 ?꾨떖 ????愿묎퀬 蹂닿퀬 異⑹쟾 */}
                 {overLimit && (
                   <TouchableOpacity
                     style={[styles.chargeBtn, watchingAd && styles.btnDisabled]}
@@ -757,15 +847,15 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* 앱 이름 */}
+          {/* ???대쫫 */}
           <View style={styles.appNameArea}>
-            <Text style={styles.appName}>하우웨더유</Text>
+            <Text style={styles.appName}>{t('common.appName')}</Text>
             <Text style={styles.appNameEn}>HOW WEATHER YOU</Text>
           </View>
         </View>
       </ScrollView>
 
-      {/* 메시지 유형 선택 모달 */}
+      {/* 硫붿떆吏 ?좏삎 ?좏깮 紐⑤떖 */}
       <Modal
         animationType="fade"
         transparent
@@ -803,7 +893,49 @@ export default function HomeScreen() {
         </Pressable>
       </Modal>
 
-      {/* 사용 안내 모달 (진입 시 1회, '오늘 하루 안 보기'로 끔) */}
+      {/* ?ъ슜 ?덈궡 紐⑤떖 (吏꾩엯 ??1?? '?ㅻ뒛 ?섎（ ??蹂닿린'濡??? */}
+      <Modal
+        animationType="fade"
+        transparent
+        visible={letterExpanded}
+        onRequestClose={() => setLetterExpanded(false)}
+      >
+        <Pressable style={styles.fullLetterOverlay} onPress={() => setLetterExpanded(false)}>
+          <Pressable style={styles.fullLetterWrap} onPress={(e) => e.stopPropagation()}>
+            <View style={styles.fullLetterSheet}>
+              <View style={styles.fullLetterLine} />
+              {message && (
+                <>
+                  <View style={styles.fullLetterHead}>
+                    <View style={styles.fullLetterStamp}>
+                      <Text style={styles.fullLetterStampText}>
+                        {PREFERENCE_EMOJI[message.context.preference]}
+                      </Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.fullLetterKicker}>SKY LETTER</Text>
+                      <Text style={styles.fullLetterTone}>{toneTag(message.context.preference)}</Text>
+                    </View>
+                  </View>
+                  <ScrollView showsVerticalScrollIndicator={false} style={styles.fullLetterScroll}>
+                    <Text style={styles.fullLetterText}>{message.text}</Text>
+                  </ScrollView>
+                  <View style={styles.fullLetterFoot}>
+                    <View>
+                      <Text style={styles.fullLetterSign}>{t('common.appName')}</Text>
+                      <Text style={styles.fullLetterDate}>{dateLabel}</Text>
+                    </View>
+                    <TouchableOpacity style={styles.fullLetterClose} onPress={() => setLetterExpanded(false)}>
+                      <Text style={styles.fullLetterCloseText}>{t('common.close')}</Text>
+                    </TouchableOpacity>
+                  </View>
+                </>
+              )}
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
       <Modal
         animationType="fade"
         transparent
@@ -815,10 +947,10 @@ export default function HomeScreen() {
             <View style={styles.sheetGrip} />
             <Text style={styles.modalTitle}>{t('guide.title')}</Text>
             <View style={styles.guideList}>
-              <Text style={styles.guideLine}>• {t('guide.line1')}</Text>
-              <Text style={styles.guideLine}>• {t('guide.line2')}</Text>
-              <Text style={styles.guideLine}>• {t('guide.line3')}</Text>
-              <Text style={styles.guideLine}>• {t('guide.line4')}</Text>
+              <Text style={styles.guideLine}>🌤️ {t('guide.line1')}</Text>
+              <Text style={styles.guideLine}>💌 {t('guide.line2')}</Text>
+              <Text style={styles.guideLine}>🎁 {t('guide.line3')}</Text>
+              <Text style={styles.guideLine}>📮 {t('guide.line4')}</Text>
             </View>
             <TouchableOpacity style={styles.guideGotIt} onPress={() => setGuideOpen(false)}>
               <Text style={styles.guideGotItText}>{t('guide.gotIt')}</Text>
@@ -838,7 +970,7 @@ const styles = StyleSheet.create({
   scroll: { flex: 1, backgroundColor: COLORS.paper },
   container: { paddingBottom: 44 },
 
-  // ─── HERO ───
+  // ??? HERO ???
   hero: {
     paddingTop: 54,
     paddingBottom: 54,
@@ -909,7 +1041,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  // ─── 페이퍼 본문 ───
+  // ??? ?섏씠??蹂몃Ц ???
   body: { paddingHorizontal: 26, paddingTop: 4 },
 
   umbrella: {
@@ -939,11 +1071,11 @@ const styles = StyleSheet.create({
   },
   guestBannerText: { color: COLORS.ink2, fontSize: 12.5, textAlign: 'center' },
 
-  loadingCard: {
-    backgroundColor: COLORS.card,
+  envelopeLoading: {
+    backgroundColor: 'rgba(251,247,238,0.74)',
     borderRadius: RADII.card,
-    paddingVertical: 18,
-    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 18,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 14,
@@ -951,7 +1083,48 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: COLORS.line,
   },
-  loadingCardText: { color: COLORS.ink2, fontSize: 13, flex: 1 },
+  loadingEnvelope: {
+    width: 56,
+    height: 38,
+    borderRadius: 8,
+    backgroundColor: COLORS.paper2,
+    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: COLORS.line,
+  },
+  loadingEnvelopeFlap: {
+    position: 'absolute',
+    top: -17,
+    left: 8,
+    width: 40,
+    height: 40,
+    backgroundColor: COLORS.card,
+    transform: [{ rotate: '45deg' }],
+    borderWidth: 1,
+    borderColor: COLORS.line2,
+  },
+  loadingEnvelopePocket: {
+    position: 'absolute',
+    left: -8,
+    right: -8,
+    bottom: -22,
+    height: 44,
+    backgroundColor: COLORS.paper3,
+    transform: [{ rotate: '-5deg' }],
+    opacity: 0.72,
+  },
+  loadingSeal: {
+    position: 'absolute',
+    left: 18,
+    top: 12,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: COLORS.ember,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  loadingCardText: { color: COLORS.ink2, fontSize: 13, flex: 1, lineHeight: 19 },
 
   loadingArea: { alignItems: 'center', marginTop: 50, gap: 14 },
   loadingTextSky: { fontSize: 14, color: COLORS.skyText2 },
@@ -967,27 +1140,88 @@ const styles = StyleSheet.create({
   },
   retryText: { fontSize: 14, color: COLORS.skyText },
 
-  // 편지 노트
-  note: {
-    backgroundColor: COLORS.noteTop,
-    borderRadius: RADII.note,
-    paddingHorizontal: 24,
-    paddingTop: 22,
-    paddingBottom: 18,
+  // ?몄? ?명듃
+  letterScene: {
+    minHeight: 430,
+    marginBottom: 24,
+    justifyContent: 'flex-end',
+    overflow: 'visible',
+  },
+  envelopeBack: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 0,
+    height: 154,
+    borderRadius: 22,
+    backgroundColor: COLORS.paper2,
     borderWidth: 1,
     borderColor: COLORS.line,
-    marginBottom: 14,
     shadowColor: '#2B2620',
-    shadowOpacity: 0.18,
-    shadowRadius: 22,
-    shadowOffset: { width: 0, height: 14 },
-    elevation: 3,
+    shadowOpacity: 0.12,
+    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 9 },
   },
-  noteTag: { flexDirection: 'row', alignItems: 'center', gap: 7 },
+  envelopeBackFlap: {
+    position: 'absolute',
+    left: 48,
+    right: 48,
+    top: -58,
+    height: 116,
+    backgroundColor: COLORS.card,
+    borderWidth: 1,
+    borderColor: COLORS.line2,
+    transform: [{ rotate: '45deg' }],
+  },
+  note: {
+    backgroundColor: '#FFFDF7',
+    borderRadius: 18,
+    paddingHorizontal: 24,
+    paddingTop: 24,
+    paddingBottom: 24,
+    borderWidth: 1,
+    borderColor: 'rgba(120,95,65,0.18)',
+    marginHorizontal: 16,
+    marginBottom: 138,
+    shadowColor: '#2B2620',
+    shadowOpacity: 0.2,
+    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 12 },
+    elevation: 4,
+    zIndex: 3,
+  },
+  notePaperLine: {
+    position: 'absolute',
+    top: 0,
+    left: 22,
+    right: 22,
+    height: 4,
+    borderBottomLeftRadius: 999,
+    borderBottomRightRadius: 999,
+    backgroundColor: COLORS.emberSoft,
+  },
+  noteTag: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
   notePip: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.ember },
-  noteTagEmoji: { fontSize: 13 },
+  noteStamp: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: COLORS.emberSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(194,104,63,0.20)',
+  },
+  noteTagEmoji: { fontSize: 17 },
+  noteKicker: {
+    fontFamily: FONTS.mono,
+    fontSize: 10,
+    color: COLORS.ink3,
+    letterSpacing: 1.4,
+    marginBottom: 3,
+  },
   noteTagText: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: '600',
     letterSpacing: 1,
     color: COLORS.emberD,
@@ -1002,8 +1236,8 @@ const styles = StyleSheet.create({
   },
   noteText: {
     fontFamily: FONTS.serifKo,
-    fontSize: 18,
-    lineHeight: 32,
+    fontSize: 18.5,
+    lineHeight: 33,
     color: COLORS.ink,
     letterSpacing: -0.2,
   },
@@ -1011,23 +1245,75 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginTop: 16,
-    paddingTop: 14,
+    marginTop: 18,
+    paddingTop: 15,
     borderTopWidth: 1,
-    borderTopColor: COLORS.line2,
+    borderTopColor: 'rgba(43,38,32,0.08)',
   },
-  noteSign: { fontFamily: FONTS.serifKo, fontSize: 13, color: COLORS.ink3, fontStyle: 'italic' },
+  noteSign: { fontFamily: FONTS.serifKoBold, fontSize: 13, color: COLORS.ink2 },
+  noteDate: { fontFamily: FONTS.mono, fontSize: 10.5, color: COLORS.ink3, marginTop: 4 },
   noteShare: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
     borderWidth: 1,
-    borderColor: COLORS.line,
-    borderRadius: 20,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    backgroundColor: COLORS.paper,
+    borderColor: 'rgba(194,104,63,0.24)',
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: COLORS.emberSoft,
   },
-  noteShareText: { fontSize: 12.5, fontWeight: '600', color: COLORS.ink2 },
+  noteShareIcon: { color: COLORS.emberD, fontSize: 13, fontWeight: '800' },
+  noteShareText: { fontSize: 12.5, fontWeight: '700', color: COLORS.emberD },
+  envelopeFront: {
+    position: 'absolute',
+    left: 8,
+    right: 8,
+    bottom: 0,
+    height: 116,
+    borderBottomLeftRadius: 22,
+    borderBottomRightRadius: 22,
+    overflow: 'hidden',
+    zIndex: 2,
+  },
+  envelopeFrontLeft: {
+    position: 'absolute',
+    left: -60,
+    bottom: -74,
+    width: '72%',
+    height: 160,
+    backgroundColor: COLORS.paper3,
+    transform: [{ rotate: '24deg' }],
+    borderWidth: 1,
+    borderColor: COLORS.line2,
+  },
+  envelopeFrontRight: {
+    position: 'absolute',
+    right: -60,
+    bottom: -74,
+    width: '72%',
+    height: 160,
+    backgroundColor: COLORS.paper2,
+    transform: [{ rotate: '-24deg' }],
+    borderWidth: 1,
+    borderColor: COLORS.line2,
+  },
+  envelopeSeal: {
+    position: 'absolute',
+    alignSelf: 'center',
+    bottom: 38,
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: COLORS.ember,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: 'rgba(255,245,238,0.75)',
+  },
+  envelopeSealText: { fontSize: 18 },
 
-  // 활동/음식 추천 카드
+  // ?쒕룞/?뚯떇 異붿쿇 移대뱶
   recCard: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -1058,7 +1344,7 @@ const styles = StyleSheet.create({
   },
   recText: { fontFamily: FONTS.serifKo, fontSize: 15.5, lineHeight: 27, color: COLORS.ink },
 
-  // 버튼
+  // 踰꾪듉
   btnGroup: { gap: 10, marginTop: 2 },
   primaryBtn: {
     backgroundColor: COLORS.ember,
@@ -1114,7 +1400,7 @@ const styles = StyleSheet.create({
   appName: { fontFamily: FONTS.serifKo, fontSize: 14, color: COLORS.ink3, letterSpacing: 2 },
   appNameEn: { fontFamily: FONTS.mono, fontSize: 9.5, color: COLORS.ink3, letterSpacing: 2, marginTop: 4, opacity: 0.7 },
 
-  // ─── 모달 (페이퍼 시트) ───
+  // ??? 紐⑤떖 (?섏씠???쒗듃) ???
   modalOverlay: { flex: 1, backgroundColor: 'rgba(28,22,30,0.42)', justifyContent: 'flex-end' },
   modalSheet: {
     backgroundColor: COLORS.paper,
@@ -1160,7 +1446,89 @@ const styles = StyleSheet.create({
   modalCancel: { marginTop: 16, paddingVertical: 12, alignItems: 'center' },
   modalCancelText: { color: COLORS.ink3, fontSize: 14 },
 
-  // 사용 안내 모달
+  // ?ъ슜 ?덈궡 紐⑤떖
+  fullLetterOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(28,22,30,0.58)',
+    justifyContent: 'center',
+    paddingHorizontal: 22,
+    paddingVertical: 38,
+  },
+  fullLetterWrap: { flex: 1, justifyContent: 'center' },
+  fullLetterSheet: {
+    maxHeight: '88%',
+    backgroundColor: '#FFFDF7',
+    borderRadius: 22,
+    paddingHorizontal: 24,
+    paddingTop: 25,
+    paddingBottom: 20,
+    borderWidth: 1,
+    borderColor: 'rgba(120,95,65,0.20)',
+    shadowColor: '#000',
+    shadowOpacity: 0.22,
+    shadowRadius: 28,
+    shadowOffset: { width: 0, height: 16 },
+    elevation: 8,
+  },
+  fullLetterLine: {
+    position: 'absolute',
+    top: 0,
+    left: 24,
+    right: 24,
+    height: 5,
+    borderBottomLeftRadius: 999,
+    borderBottomRightRadius: 999,
+    backgroundColor: COLORS.emberSoft,
+  },
+  fullLetterHead: { flexDirection: 'row', alignItems: 'center', gap: 13, marginBottom: 18 },
+  fullLetterStamp: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: COLORS.emberSoft,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(194,104,63,0.22)',
+  },
+  fullLetterStampText: { fontSize: 19 },
+  fullLetterKicker: {
+    fontFamily: FONTS.mono,
+    fontSize: 10.5,
+    color: COLORS.ink3,
+    letterSpacing: 1.5,
+    marginBottom: 4,
+  },
+  fullLetterTone: { color: COLORS.emberD, fontSize: 12.5, fontWeight: '700', letterSpacing: 0.9 },
+  fullLetterScroll: { marginHorizontal: -2 },
+  fullLetterText: {
+    fontFamily: FONTS.serifKo,
+    fontSize: 20,
+    lineHeight: 35,
+    color: COLORS.ink,
+    letterSpacing: -0.2,
+    paddingHorizontal: 2,
+    paddingBottom: 8,
+  },
+  fullLetterFoot: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 18,
+    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(43,38,32,0.08)',
+  },
+  fullLetterSign: { fontFamily: FONTS.serifKoBold, fontSize: 14, color: COLORS.ink2 },
+  fullLetterDate: { fontFamily: FONTS.mono, fontSize: 10.5, color: COLORS.ink3, marginTop: 4 },
+  fullLetterClose: {
+    borderRadius: 999,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+    backgroundColor: COLORS.ember,
+  },
+  fullLetterCloseText: { color: COLORS.emberText, fontSize: 13, fontWeight: '700' },
+
   guideList: { gap: 12, marginTop: 4, marginBottom: 4 },
   guideLine: { color: COLORS.ink2, fontSize: 14.5, lineHeight: 21 },
   guideGotIt: {

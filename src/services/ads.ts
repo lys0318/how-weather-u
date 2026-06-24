@@ -1,38 +1,7 @@
 // AdMob 광고 헬퍼 (전면 + 보상형)
-// - 네이티브 모듈이 없는 빌드(예: Expo Go)에서도 graceful degrade
-//   → 광고 못 보이면 그냥 바로 callback 실행
-// - 광고를 미리 로드해두고, 호출 시 즉시 표시 → 다음 광고 다시 로드
-// - 전면: 하루 첫 호출은 광고 스킵 (선물)
-// - 보상형: 사용자가 직접 "광고 보고 충전" 클릭 시 호출
 
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { __DEV__ } from './_env';
+import { AppState } from 'react-native';
 import { redeemAdCredit, UsageInfo } from './usage';
-
-// 하루 전체(메시지·활동·음식 통틀어) 첫 생성 1회만 무광고
-const FREE_DAILY_KEY = 'lastFreeGenDate';
-
-function kstTodayString(): string {
-  const now = new Date();
-  const kst = new Date(now.getTime() + 9 * 60 * 60 * 1000);
-  const y = kst.getUTCFullYear();
-  const m = String(kst.getUTCMonth() + 1).padStart(2, '0');
-  const d = String(kst.getUTCDate()).padStart(2, '0');
-  return `${y}-${m}-${d}`;
-}
-
-// 오늘 전체 통틀어 첫 생성이면 true (그리고 오늘 날짜로 마킹 → 다음부턴 false)
-async function isFirstGenerationOfDay(): Promise<boolean> {
-  try {
-    const today = kstTodayString();
-    const last = await AsyncStorage.getItem(FREE_DAILY_KEY);
-    if (last === today) return false;
-    await AsyncStorage.setItem(FREE_DAILY_KEY, today);
-    return true;
-  } catch {
-    return false;
-  }
-}
 
 // 네이티브 모듈 안전 require
 let admob: any = null;
@@ -45,16 +14,17 @@ try {
 
 // 실제 광고 사용 (출시 빌드).
 // ⚠️ 본인 기기에서 실제 광고 클릭 금지 — AdMob 계정 정지 위험.
-// 개발 중 테스트하려면 일시적으로 true (Google 테스트 광고)로 변경.
+// 개발 중 테스트하려면 임시로 true (Google 테스트 광고)로 변경
 const USE_TEST_ADS = false;
 
 // 실제 광고 단위 ID (USE_TEST_ADS=false일 때만 사용)
-const REAL_INTERSTITIAL_ID = 'ca-app-pub-8051681065734198/8755169596';
-// 보상형 — AdMob 콘솔에서 발급 ("충전 보상형")
+const REAL_INTERSTITIAL_ID = 'ca-app-pub-8051681065734198/7890150188';
+// 보상형 ID — AdMob 콘솔에서 발급 ("충전 보상형")
 const REAL_REWARDED_ID = 'ca-app-pub-8051681065734198/3369583147';
 
 let interstitial: any = null;
 let interstitialReady = false;
+let interstitialLoading: Promise<boolean> | null = null;
 let rewarded: any = null;
 let rewardedReady = false;
 let nativeReady = false;
@@ -72,23 +42,109 @@ function getRewardedUnitId(): string {
   return REAL_REWARDED_ID;
 }
 
-function loadInterstitial(): void {
-  if (!admob) return;
-  try {
-    interstitial = admob.InterstitialAd.createForAdRequest(getInterstitialUnitId(), {
-      requestNonPersonalizedAdsOnly: true,
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function waitForActiveApp(timeoutMs = 5000): Promise<boolean> {
+  if (AppState.currentState === 'active') return Promise.resolve(true);
+
+  return new Promise((resolve) => {
+    let settled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let sub: { remove: () => void } | null = null;
+
+    const finish = (ok: boolean) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { sub?.remove(); } catch {}
+      resolve(ok);
+    };
+
+    timer = setTimeout(() => finish(AppState.currentState === 'active'), timeoutMs);
+    sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') finish(true);
     });
-    interstitialReady = false;
-    interstitial.addAdEventListener(admob.AdEventType.LOADED, () => {
-      interstitialReady = true;
-    });
-    interstitial.addAdEventListener(admob.AdEventType.ERROR, () => {
+  });
+}
+
+function loadInterstitial(): Promise<boolean> {
+  if (!admob) return Promise.resolve(false);
+  if (interstitialLoading) return interstitialLoading;
+
+  interstitialLoading = (async () => {
+    const active = await waitForActiveApp();
+    if (!active) {
+      console.warn('[ads] interstitial load skipped: app not active');
+      return false;
+    }
+
+    // Give Android a small beat after foregrounding so the current Activity is attached.
+    await delay(450);
+
+    return new Promise<boolean>((resolve) => {
+    let resolved = false;
+    const finish = (ok: boolean) => {
+      if (resolved) return;
+      resolved = true;
+      resolve(ok);
+    };
+
+    const cleanup = () => {
+      clearTimeout(timer);
+      try { loadedSub?.(); } catch {}
+      try { errorSub?.(); } catch {}
+    };
+
+    let loadedSub: (() => void) | undefined;
+    let errorSub: (() => void) | undefined;
+    const timer = setTimeout(() => {
+      console.warn('[ads] interstitial load timeout');
+      cleanup();
+      finish(false);
+    }, 8000);
+
+    try {
+      interstitial = admob.InterstitialAd.createForAdRequest(getInterstitialUnitId(), {
+        requestNonPersonalizedAdsOnly: true,
+      });
       interstitialReady = false;
+      loadedSub = interstitial.addAdEventListener(admob.AdEventType.LOADED, () => {
+        interstitialReady = true;
+        console.log('[ads] interstitial loaded');
+        cleanup();
+        finish(true);
+      });
+      errorSub = interstitial.addAdEventListener(admob.AdEventType.ERROR, (e: unknown) => {
+        interstitialReady = false;
+        console.warn('[ads] interstitial load error:', e);
+        cleanup();
+        finish(false);
+      });
+      interstitial.load();
+    } catch (e) {
+      console.warn('[ads] loadInterstitial 실패:', e);
+      cleanup();
+      finish(false);
+    }
     });
-    interstitial.load();
-  } catch (e) {
-    console.warn('[ads] loadInterstitial 실패:', e);
-  }
+  })().finally(() => {
+    interstitialLoading = null;
+  });
+
+  return interstitialLoading;
+}
+
+async function waitForInterstitialReady(timeoutMs = 6000): Promise<boolean> {
+  if (interstitialReady && interstitial) return true;
+  if (!admob || !nativeReady) return false;
+
+  const loadPromise = loadInterstitial();
+  return Promise.race([
+    loadPromise,
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+  ]);
 }
 
 function loadRewarded(): void {
@@ -112,13 +168,15 @@ function loadRewarded(): void {
 
 export async function initAds(): Promise<void> {
   if (!admob) {
-    console.log('[ads] 네이티브 모듈 없음 — 광고 비활성');
+    console.log('[ads] native module missing - ads disabled');
     return;
   }
   try {
     await admob.default().initialize();
     nativeReady = true;
-    loadInterstitial();
+    setTimeout(() => {
+      loadInterstitial().catch((e) => console.warn('[ads] delayed interstitial preload failed:', e));
+    }, 1200);
     loadRewarded();
     console.log('[ads] 초기화 완료');
   } catch (e) {
@@ -130,22 +188,25 @@ export async function initAds(): Promise<void> {
 /**
  * 전면 광고 + callback (메시지/활동/음식 생성용)
  * - 하루 전체 통틀어 첫 생성 1회는 광고 없이 무료
- * - 그 외(당일 2·3회차)는 짧은 전면 광고 후 생성
- * - 광고 안 떠도 callback은 반드시 실행 (UX 끊김 방지)
+ * - 그 다음(같은 날 2·3회차)은 짧은 전면 광고 후 생성
+ * - 광고 실패 시에도 callback은 반드시 실행 (UX 멈춤 방지)
  */
-export async function showInterstitialThenRun(callback: () => void): Promise<void> {
-  // 오늘 전체 통틀어 첫 생성이면 광고 스킵 (무료)
-  const isFirst = await isFirstGenerationOfDay();
-  if (isFirst) {
+export async function showInterstitialThenRun(callback: () => void, skipAd = false): Promise<void> {
+  if (skipAd) {
+    console.log('[ads] interstitial skipped: first server usage of day');
     callback();
     return;
   }
 
-  if (!admob || !nativeReady || !interstitial || !interstitialReady) {
+  const ready = await waitForInterstitialReady();
+  if (!admob || !nativeReady || !interstitial || !ready) {
+    console.warn('[ads] interstitial unavailable, continuing without ad', {
+      hasModule: !!admob,
+      nativeReady,
+      hasInterstitial: !!interstitial,
+      interstitialReady,
+    });
     callback();
-    if (admob && nativeReady && !interstitialReady) {
-      loadInterstitial();
-    }
     return;
   }
 
@@ -167,9 +228,12 @@ export async function showInterstitialThenRun(callback: () => void): Promise<voi
       callback();
     });
 
+    interstitialReady = false;
+    console.log('[ads] interstitial show');
     interstitial.show();
   } catch (e) {
     console.warn('[ads] show 실패:', e);
+    loadInterstitial();
     callback();
   }
 }
@@ -181,7 +245,7 @@ export async function showInterstitialThenRun(callback: () => void): Promise<voi
  */
 export async function showRewardedAndGrant(): Promise<UsageInfo | null> {
   if (!admob || !nativeReady || !rewarded || !rewardedReady) {
-    // 광고 모듈 없거나 로드 실패 — 광고 없이는 충전 불가
+    // 광고 모듈 없거나 로드 실패 → 광고 없이는 충전 불가
     if (admob && nativeReady && !rewardedReady) {
       loadRewarded();
     }
@@ -212,7 +276,7 @@ export async function showRewardedAndGrant(): Promise<UsageInfo | null> {
         const result = await redeemAdCredit(getRewardedUnitId());
         resolve(result);
       } else {
-        // 끝까지 안 봄 → 보상 없음
+        // 끝까지 안 봐서 보상 없음
         resolve(null);
       }
     });
