@@ -175,9 +175,16 @@ export default function HomeScreen() {
   const umbrella = weather ? computeUmbrella(weather, hour) : null;
   let umbrellaText: string | null = null;
   if (umbrella?.needed) {
-    if (umbrella.raining) umbrellaText = t('home.umbrellaNow');
-    else if (umbrella.hoursUntil && umbrella.hoursUntil >= 1) umbrellaText = t('home.umbrellaH', { hours: umbrella.hoursUntil });
-    else umbrellaText = t('home.umbrellaSoon');
+    const pct = Math.round(umbrella.pop * 100);
+    if (umbrella.raining) {
+      umbrellaText = t('home.umbrellaNow');
+    } else if (umbrella.hoursUntil && umbrella.hoursUntil >= 1) {
+      umbrellaText = pct > 0
+        ? t('home.umbrellaH', { hours: umbrella.hoursUntil, pct })
+        : t('home.umbrellaHNoPct', { hours: umbrella.hoursUntil });
+    } else {
+      umbrellaText = pct > 0 ? t('home.umbrellaSoon', { pct }) : t('home.umbrellaSoonNoPct');
+    }
   }
 
   useEffect(() => {

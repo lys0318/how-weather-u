@@ -20,12 +20,15 @@ export default function LifeIndex({ weather, currentHour }: Props) {
   const umbrella = computeUmbrella(weather, currentHour);
   const mask = maskIndex(weather);
 
+  const umbrellaPct = Math.round(umbrella.pop * 100);
   const umbrellaDesc = umbrella.raining
     ? '지금 비 와요'
     : !umbrella.needed
       ? '우산 불필요'
       : umbrella.hoursUntil && umbrella.hoursUntil >= 1
-        ? `${umbrella.hoursUntil}시간 뒤 비`
+        ? umbrellaPct > 0
+          ? `${umbrella.hoursUntil}시간 뒤 비 ${umbrellaPct}%`
+          : `${umbrella.hoursUntil}시간 뒤 비`
         : '곧 비 소식';
 
   const cards = [
