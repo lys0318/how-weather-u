@@ -1,7 +1,7 @@
 // 날씨 기반 음식 추천 Edge Function (ko/en)
 
 import { corsHeaders } from '../_shared/cors.ts';
-import { callClaude } from '../_shared/claude.ts';
+import { callClaude, MODEL_HAIKU } from '../_shared/claude.ts';
 import { requireUser, checkAndLog, limitExceededResponse } from '../_shared/limit.ts';
 import { getKstContext } from '../_shared/datetime.ts';
 import { Lang, conditionLabel, timeOfDayLabel, metricLines } from '../_shared/labels.ts';
@@ -179,6 +179,7 @@ Recommend exactly ONE dish that fits this moment, described to make their mouth 
       systemPrompt: lang === 'ko' ? SYSTEM_PROMPT_KO : SYSTEM_PROMPT_EN,
       userPrompt,
       maxTokens: 280,
+      model: MODEL_HAIKU,
       temperature: 1,
     });
 

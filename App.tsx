@@ -37,6 +37,7 @@ Notifications.setNotificationHandler({
 });
 
 import HomeScreen from './src/screens/HomeScreen';
+import MessagingScreen from './src/screens/MessagingScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import LoginScreen from './src/screens/LoginScreen';
@@ -53,6 +54,7 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
+  Messaging: undefined;
   History: undefined;
   Settings: undefined;
 };
@@ -78,6 +80,16 @@ function MainTabs() {
           title: t('tabs.home'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Messaging"
+        component={MessagingScreen}
+        options={{
+          title: t('tabs.messaging'),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="chatbubble-ellipses" size={size} color={color} />
           ),
         }}
       />

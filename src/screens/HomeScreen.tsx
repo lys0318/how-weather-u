@@ -16,8 +16,6 @@ import {
 } from 'react-native';
 import { useWeather } from '../hooks/useWeather';
 import { useMessage } from '../hooks/useMessage';
-import { useActivity } from '../hooks/useActivity';
-import { useFood } from '../hooks/useFood';
 import {
   getTimeOfDay,
   TIME_OF_DAY_KO,
@@ -26,7 +24,6 @@ import {
   DAY_OF_WEEK_EN_SHORT,
   MONTH_EN_SHORT,
   WeatherCondition,
-  ForecastSlot,
   Preference,
   PREFERENCE_KO,
   PREFERENCE_EN,
@@ -34,13 +31,18 @@ import {
   CONDITION_META,
   uvGrade,
   airQualityGrade,
+  computeUmbrella,
 } from '../constants/weather';
-import { saveMessage, saveEntry, isGuideDismissedToday, dismissGuideToday } from '../utils/storage';
+import HourlyForecast from '../components/HourlyForecast';
+import WeeklyForecast from '../components/WeeklyForecast';
+import OutfitCard from '../components/OutfitCard';
+import LifeIndex from '../components/LifeIndex';
+import AppBanner from '../components/AppBanner';
+import { runWithGate } from '../hooks/useGenerationGate';
+import { saveMessage, isGuideDismissedToday, dismissGuideToday } from '../utils/storage';
 import { useI18n } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
 import { refreshNotificationsIfNeeded } from '../services/notification';
-import { showInterstitialThenRun, showRewardedAndGrant } from '../services/ads';
-import { fetchTodayUsage, UsageInfo } from '../services/usage';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { ShareableCard } from '../components/ShareableCard';
@@ -57,7 +59,6 @@ const PREF_DESC_KEY: Record<Preference, string> = {
   advice: 'home.prefAdviceDesc',
 };
 
-// ?? 濡쒕뵫 以?蹂댁뿬以??щ컡??臾멸뎄 ??????????????????????????????
 const LOADING_KEYS = [
   'home.loading1', 'home.loading2', 'home.loading3',
   'home.loading4', 'home.loading5', 'home.loading6',
@@ -65,7 +66,6 @@ const LOADING_KEYS = [
 
 type TFn = (key: string, vars?: Record<string, string | number>) => string;
 
-// ?? 移쒖젅???먮윭 硫붿떆吏 蹂??(?몄뼱 ?몄?) ???????????????????????
 function isLimitError(raw: string | null): boolean {
   if (!raw) return false;
   return raw.includes('한도') || raw.includes('LIMIT') || raw.includes('limit');
@@ -73,85 +73,33 @@ function isLimitError(raw: string | null): boolean {
 function prettifyError(raw: string | null, t: TFn): string | null {
   if (!raw) return null;
   if (isLimitError(raw)) return t('errors.limit');
-  if (raw.includes('Network') || raw.includes('네트워크') || raw.includes('fetch')) {
-    return t('errors.network');
-  }
+  if (raw.includes('Network') || raw.includes('네트워크') || raw.includes('fetch')) return t('errors.network');
   if (raw.includes('401') || raw.includes('인증')) return t('errors.auth');
   if (raw.includes('429')) return t('errors.tooFast');
-  if (raw.includes('500') || raw.includes('Claude') || raw.includes('서버')) {
-    return t('errors.server');
-  }
+  if (raw.includes('500') || raw.includes('Claude') || raw.includes('서버')) return t('errors.server');
   return raw;
-}
-
-// ?? ?ъ슜 ?잛닔 ???쒓컖??????????????????????????????????????
-function UsageDots({ used, limit }: { used: number; limit: number }) {
-  return (
-    <View style={dotStyles.row}>
-      {Array.from({ length: limit }).map((_, i) => (
-        <View key={i} style={[dotStyles.dot, i < used ? dotStyles.dotOn : dotStyles.dotOff]} />
-      ))}
-    </View>
-  );
-}
-
-const dotStyles = StyleSheet.create({
-  row: { flexDirection: 'row', justifyContent: 'center', gap: 9, marginTop: 2 },
-  dot: { width: 9, height: 9, borderRadius: 5, borderWidth: 1.4 },
-  dotOn: { backgroundColor: COLORS.ember, borderColor: COLORS.ember },
-  dotOff: { backgroundColor: 'transparent', borderColor: COLORS.ink3 },
-});
-
-// ?ν썑 ?덈낫?먯꽌 鍮????щ’??李얠븘 "N?쒓컙 ??/ ?뺣쪧" 怨꾩궛
-function computeUmbrella(
-  forecast: ForecastSlot[] | undefined,
-  hour: number,
-): { hours: number; pct: number } | null {
-  if (!forecast || forecast.length === 0) return null;
-  for (const slot of forecast) {
-    const rainy =
-      slot.condition === 'rain' || slot.condition === 'drizzle' || slot.condition === 'thunderstorm';
-    if (rainy || slot.pop >= 0.3) {
-      let h = slot.hour - hour;
-      if (h < 0) h += 24;
-      return { hours: h, pct: Math.round(slot.pop * 100) };
-    }
-  }
-  return null;
 }
 
 export default function HomeScreen() {
   const { weather, loading: weatherLoading, error: weatherError, refetch } = useWeather();
   const { message, loading: messageLoading, error: messageError, generate } = useMessage();
-  const { activity, loading: activityLoading, error: activityError, generate: generateActivity } = useActivity();
-  const { food, loading: foodLoading, error: foodError, generate: generateFood } = useFood();
   const { t, lang } = useI18n();
   const { isGuest } = useAuth();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [guideOpen, setGuideOpen] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [now, setNow] = useState<Date>(() => new Date());
-  const [serverUsage, setServerUsage] = useState<UsageInfo | null>(null);
-  // ?쒕룄 珥덇낵 ??愿묎퀬 蹂????먮룞 ?ㅽ뻾???앹꽦 ?숈옉 蹂닿?
-  const pendingGenRef = useRef<(() => void) | null>(null);
-  // "異⑹쟾?섍린" 踰꾪듉?쇰줈 誘몃━ 愿묎퀬 蹂?寃쎌슦 ???ㅼ쓬 ?앹꽦 1?뚮뒗 ?꾨㈃ 愿묎퀬 ?앸왂
-  const skipNextInterstitialRef = useRef(false);
   const letterAnim = useRef(new Animated.Value(0)).current;
   const [letterExpanded, setLetterExpanded] = useState(false);
   const lastLetterTapRef = useRef(0);
 
-  // 홈은 하늘 위 - 밝은 상태바
   useFocusEffect(
     useCallback(() => {
       setStatusBarStyle('light');
     }, []),
   );
 
-  // ?? ?쒓컙 ?먮룞 ?숆린??????????????????????????????????????
-  // 1) 遺꾩씠 諛붾??뚮쭏??媛깆떊
-  // 2) ?깆씠 諛깃렇?쇱슫?????ш렇?쇱슫??蹂듦? ??利됱떆 媛깆떊
   useEffect(() => {
-    // ?ㅼ쓬 遺?寃쎄퀎??留욎떠 泥?媛깆떊???뺣젹 (UX ?먯뿰?ㅻ윭?)
     const msUntilNextMinute = 60_000 - (new Date().getSeconds() * 1000 + new Date().getMilliseconds());
     let intervalId: ReturnType<typeof setInterval> | null = null;
     const firstTimer = setTimeout(() => {
@@ -159,12 +107,8 @@ export default function HomeScreen() {
       intervalId = setInterval(() => setNow(new Date()), 60_000);
     }, msUntilNextMinute);
 
-    // 앱이 foreground로 돌아오면 시간과 사용량을 갱신
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') {
-        setNow(new Date());
-        fetchTodayUsage().then((u) => { if (u) setServerUsage(u); });
-      }
+      if (state === 'active') setNow(new Date());
     });
 
     return () => {
@@ -174,12 +118,6 @@ export default function HomeScreen() {
     };
   }, []);
 
-  // 留덉슫?????ㅻ뒛 ?ъ슜??利됱떆 議고쉶 (硫붿떆吏 ?앹꽦 ???대룄 ?붿뿬 ?잛닔 ?쒖떆)
-  useEffect(() => {
-    fetchTodayUsage().then((u) => { if (u) setServerUsage(u); });
-  }, []);
-
-  // 吏꾩엯 ???ъ슜 ?덈궡 紐⑤떖 ('?ㅻ뒛 ?섎（ ??蹂닿린' ???꾨Ⅸ 寃쎌슦留?
   useEffect(() => {
     isGuideDismissedToday().then((dismissed) => {
       if (!dismissed) setGuideOpen(true);
@@ -191,8 +129,7 @@ export default function HomeScreen() {
     setGuideOpen(false);
   }, []);
 
-  // 濡쒕뵫 以묒씪 ??臾멸뎄 2.5珥덈쭏???뚯쟾
-  const anyLoading = messageLoading || activityLoading || foodLoading;
+  const anyLoading = messageLoading;
   useEffect(() => {
     if (!anyLoading) return;
     setLoadingMsgIdx(Math.floor(Math.random() * LOADING_KEYS.length));
@@ -206,19 +143,12 @@ export default function HomeScreen() {
   useEffect(() => {
     if (!message) return;
     letterAnim.setValue(0);
-    Animated.spring(letterAnim, {
-      toValue: 1,
-      friction: 8,
-      tension: 62,
-      useNativeDriver: true,
-    }).start();
+    Animated.spring(letterAnim, { toValue: 1, friction: 8, tension: 62, useNativeDriver: true }).start();
   }, [letterAnim, message]);
 
   const handleLetterPress = useCallback(() => {
     const nowMs = Date.now();
-    if (nowMs - lastLetterTapRef.current < 320) {
-      setLetterExpanded(true);
-    }
+    if (nowMs - lastLetterTapRef.current < 320) setLetterExpanded(true);
     lastLetterTapRef.current = nowMs;
   }, []);
 
@@ -229,209 +159,56 @@ export default function HomeScreen() {
   const day = now.getDate();
   const dow = now.getDay();
   const timeOfDay = isEn ? TIME_OF_DAY_EN[getTimeOfDay(hour)] : TIME_OF_DAY_KO[getTimeOfDay(hour)];
-  // ?좎쭨 ?쇰꺼: ko "6??13???좎슂?? / en "Sat, Jun 13"
   const dateText = isEn
     ? `${DAY_OF_WEEK_EN_SHORT[dow]}, ${MONTH_EN_SHORT[month - 1]} ${day}`
     : `${month}월 ${day}일 ${DAY_OF_WEEK_KO[dow]}`;
   const timeText = `${timeOfDay} · ${hour}:${minutes}`;
-
-  // 怨듭쑀/移대뱶???좎쭨 ?쇰꺼 (?쒓컙? ?ы븿)
   const dateLabel = `${dateText} ${timeOfDay}`;
   const prefLabel = (p: Preference) => (isEn ? PREFERENCE_EN[p] : PREFERENCE_KO[p]);
   const conditionLabel = (c: WeatherCondition, ko: string) => (isEn ? CONDITION_META[c].en : ko);
-  // ?몄? ???쒓렇: ko "?꾨줈 쨌 COMFORT" / en "COMFORT"
   const toneTag = (p: Preference) =>
     isEn ? PREFERENCE_EN[p].toUpperCase() : `${PREFERENCE_KO[p]} · ${PREFERENCE_EN[p].toUpperCase()}`;
 
   const skyKind = getSkyKind(weather?.condition ?? null, hour);
   const paper = getPaperTint(skyKind);
 
-  // 鍮??덈낫 ???곗궛 ?덈궡
-  const umbrella = computeUmbrella(weather?.forecast, hour);
-  const umbrellaText = umbrella
-    ? umbrella.pct >= 10
-      ? umbrella.hours <= 0
-        ? t('home.umbrellaSoon', { pct: umbrella.pct })
-        : t('home.umbrellaH', { hours: umbrella.hours, pct: umbrella.pct })
-      : umbrella.hours <= 0
-        ? t('home.umbrellaSoonNoPct')
-        : t('home.umbrellaHNoPct', { hours: umbrella.hours })
-    : null;
+  const umbrella = weather ? computeUmbrella(weather, hour) : null;
+  let umbrellaText: string | null = null;
+  if (umbrella?.needed) {
+    if (umbrella.raining) umbrellaText = t('home.umbrellaNow');
+    else if (umbrella.hoursUntil && umbrella.hoursUntil >= 1) umbrellaText = t('home.umbrellaH', { hours: umbrella.hoursUntil });
+    else umbrellaText = t('home.umbrellaSoon');
+  }
 
-  // ?앹꽦 ?묐떟???ы븿??理쒖떊 ?ъ슜?됱쓣 ?붾㈃???⑥씪 usage ?곹깭濡??≪닔?쒕떎.
-  // 蹂댁긽??愿묎퀬 異⑹쟾 ?꾩뿉??serverUsage媛 利됱떆 +1 ??limit??媛뽮린 ?뚮Ц??
-  // ?ㅻ옒???앹꽦 ?묐떟(?? 3/3)???붾㈃???ㅼ떆 ??뼱?곗? ?딄쾶 ?쒕떎.
-  useEffect(() => {
-    const latestUsage = [message, activity, food]
-      .filter((x): x is NonNullable<typeof x> => !!x && typeof x.used === 'number' && typeof x.limit === 'number')
-      .sort((a, b) => b.generatedAt.getTime() - a.generatedAt.getTime())[0];
-    if (latestUsage) {
-      setServerUsage({ used: latestUsage.used as number, limit: latestUsage.limit as number });
-      pendingGenRef.current = null;
-    }
-  }, [message, activity, food]);
-
-  const displayUsage = serverUsage;
-  const usageText = displayUsage
-    ? t('home.usageUsed', { used: displayUsage.used, limit: displayUsage.limit })
-    : t('home.usageFallback');
-
-  // ???????덉빟 ?뚮┝ 遺議깊븯硫??먮룞 蹂댁땐
   useEffect(() => {
     (async () => {
-      try {
-        await refreshNotificationsIfNeeded();
-      } catch {}
+      try { await refreshNotificationsIfNeeded(); } catch {}
     })();
   }, []);
 
-  // 생성된 메시지 저장
   useEffect(() => {
     if (message && weather && !isGuest) {
       saveMessage(message, weather.emoji).catch(() => {});
     }
   }, [message]);
 
-  // ?쒕룞 異붿쿇 ?????寃뚯뒪???쒖쇅
-  useEffect(() => {
-    if (activity && weather && !isGuest) {
-      saveEntry(activity.text, weather.emoji, weather.condition, 'activity').catch(() => {});
-    }
-  }, [activity]);
-
-  // ?뚯떇 異붿쿇 ?????寃뚯뒪???쒖쇅
-  useEffect(() => {
-    if (food && weather && !isGuest) {
-      saveEntry(food.text, weather.emoji, weather.condition, 'food').catch(() => {});
-    }
-  }, [food]);
-
   const openPicker = () => setPickerOpen(true);
-
   const cardRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [watchingAd, setWatchingAd] = useState(false);
-
-  /**
-   * ?앹꽦 ?몃━嫄???愿묎퀬 ?뺤콉 遺꾧린
-   * - ?쒕룄 ?대궡: ?섎（ 泥?1?뚮쭔 臾대즺, ?댄썑 吏㏃? ?꾨㈃ 愿묎퀬 ???앹꽦
-   * - ?쒕룄 珥덇낵: 湲?蹂댁긽??愿묎퀬濡?+1 異⑹쟾 ??諛⑷툑 ?꾨Ⅸ 異붿쿇 ?댁뼱???앹꽦
-   */
-  const triggerGenerate = useCallback(
-    async (fn: () => void) => {
-      let usageForDecision = displayUsage;
-      if (!usageForDecision) {
-        const freshUsage = await fetchTodayUsage();
-        if (freshUsage) {
-          usageForDecision = freshUsage;
-          setServerUsage(freshUsage);
-        }
-      }
-
-      const overLimit = !!usageForDecision && usageForDecision.used >= usageForDecision.limit;
-      const isFirstFreeGeneration = usageForDecision?.used === 0;
-      pendingGenRef.current = fn;
-
-      if (overLimit) {
-        // ?먮룞?쇰줈 湲?愿묎퀬瑜??꾩슦吏 ?딄퀬, ?섎떒 異⑹쟾 踰꾪듉?쇰줈 ?덈궡.
-        // ?ъ슜?먭? 蹂댁긽??愿묎퀬瑜?蹂대㈃ pendingGenRef???앹꽦 ?숈옉??諛붾줈 ?댁뼱 ?ㅽ뻾?쒕떎.
-        Alert.alert(t('home.overLimitTitle'), t('home.overLimitBody'));
-        return;
-      }
-
-      if (skipNextInterstitialRef.current) {
-        // 吏곸쟾??"異⑹쟾?섍린"濡??대? 愿묎퀬瑜?遊ㅼ쑝硫??꾨㈃ 愿묎퀬 ?앸왂?섍퀬 諛붾줈 ?앹꽦
-        skipNextInterstitialRef.current = false;
-        fn();
-      } else {
-        // ?쒕룄 ?대궡 ???섎（ 泥??앹꽦? 臾대즺, 2쨌3?뚯감??吏㏃? ?꾨㈃ 愿묎퀬 ???앹꽦
-        showInterstitialThenRun(fn, isFirstFreeGeneration);
-      }
-    },
-    [displayUsage, t],
-  );
 
   const handlePickPreference = (pref: Preference) => {
     setPickerOpen(false);
     if (!weather) return;
-    triggerGenerate(() => generate(weather, pref));
+    runWithGate(() => generate(weather, pref));
   };
-
-  const handleGenerateActivity = () => {
-    if (!weather) return;
-    triggerGenerate(() => generateActivity(weather));
-  };
-
-  const handleGenerateFood = () => {
-    if (!weather) return;
-    triggerGenerate(() => generateFood(weather));
-  };
-
-  // 留??꾨옒 "愿묎퀬 蹂닿퀬 1??異⑹쟾?섍린" ?꾩슜 ??異⑹쟾留??섍퀬 ?먯쑀濡?쾶 ?앹꽦?섎룄濡?(?먮룞 ?앹꽦 X)
-  const handleChargeOnly = useCallback(async () => {
-    if (watchingAd) return;
-    setWatchingAd(true);
-    try {
-      const result = await showRewardedAndGrant();
-      if (result) {
-        setServerUsage(result);
-        const pending = pendingGenRef.current;
-        if (pending) {
-          pendingGenRef.current = null;
-          pending();
-        } else {
-          // 諛⑷툑 愿묎퀬瑜?遊ㅼ쑝?? ?ㅼ쓬 ?앹꽦 1?뚮뒗 ?꾨㈃ 愿묎퀬 ?앸왂
-          skipNextInterstitialRef.current = true;
-          Alert.alert(t('home.chargeDoneTitle'), t('home.chargeDoneFree'));
-        }
-      } else {
-        Alert.alert(t('home.adUnavailableTitle'), t('home.adUnavailableBodyCharge'));
-      }
-    } finally {
-      setWatchingAd(false);
-    }
-  }, [watchingAd, t]);
-
-  // (?먮윭 移대뱶) 愿묎퀬 蹂닿퀬 異붽? ?댁슜 ??吏곸쟾 ?쒕룄???앹꽦 ?먮룞 ?ㅽ뻾
-  const handleWatchAdForCredit = useCallback(async () => {
-    if (watchingAd) return;
-    setWatchingAd(true);
-    try {
-      const result = await showRewardedAndGrant();
-      if (result) {
-        setServerUsage(result);
-        // 吏곸쟾???쒕룄???앹꽦 ?숈옉???덉쑝硫??먮룞 ?ㅽ뻾 (踰꾪듉 ?ы겢由?遺덊븘??
-        if (pendingGenRef.current) {
-          const pending = pendingGenRef.current;
-          pendingGenRef.current = null;
-          pending();
-        } else {
-          Alert.alert(
-            t('home.chargeDoneTitle'),
-            t('home.chargeDoneUsage', { used: result.used, limit: result.limit }),
-          );
-        }
-      } else {
-        Alert.alert(t('home.adUnavailableTitle'), t('home.adUnavailableBodyCharge'));
-      }
-    } finally {
-      setWatchingAd(false);
-    }
-  }, [watchingAd, t]);
 
   const handleRefresh = useCallback(async () => {
     setRefreshing(true);
     try {
-      // ?좎뵪 ?덈줈 媛?몄삤湲?(罹먯떆 臾댁떆)
       await refetch();
-      // ?쒓컙 媛깆떊 (洹몃씪?붿뼵???몄궗留?利됱떆 諛섏쁺)
       setNow(new Date());
-      // ?ㅻ뒛 ?ъ슜???ъ“??      fetchTodayUsage().then((u) => { if (u) setServerUsage(u); });
-      // ?덉빟 ?뚮┝ 蹂댁땐 ?쒕룄 (?ㅽ뙣?대룄 臾댁떆)
-      try {
-        await refreshNotificationsIfNeeded();
-      } catch {}
+      try { await refreshNotificationsIfNeeded(); } catch {}
     } finally {
       setRefreshing(false);
     }
@@ -441,45 +218,25 @@ export default function HomeScreen() {
     if (!message || !weather) return;
     setSharing(true);
     try {
-      // ?ㅼ쓬 ?꾨젅?꾧퉴吏 ?湲?(移대뱶媛 ?꾩쟾???뚮뜑留곷릺?꾨줉)
       await new Promise((resolve) => requestAnimationFrame(() => resolve(null)));
-
-      // 移대뱶 罹≪쿂
       if (!cardRef.current) throw new Error('Share card ref is empty');
-      const uri = await captureRef(cardRef, {
-        format: 'png',
-        quality: 0.95,
-        result: 'tmpfile',
-      });
+      const uri = await captureRef(cardRef, { format: 'png', quality: 0.95, result: 'tmpfile' });
       if (!uri) throw new Error('Share capture result is empty');
-
-      // 怨듭쑀
       const canShare = await Sharing.isAvailableAsync();
       if (!canShare) {
-        await Share.share({
-          message: `${weather.emoji} ${dateLabel}\n\n${message.text}\n\n${t('home.shareSignature')}`,
-        });
+        await Share.share({ message: `${weather.emoji} ${dateLabel}\n\n${message.text}\n\n${t('home.shareSignature')}` });
         return;
       }
-
-      await Sharing.shareAsync(uri, {
-        mimeType: 'image/png',
-        dialogTitle: t('home.shareDialogTitle'),
-        UTI: 'public.png',
-      });
+      await Sharing.shareAsync(uri, { mimeType: 'image/png', dialogTitle: t('home.shareDialogTitle'), UTI: 'public.png' });
     } catch (e) {
       const msg = e instanceof Error ? `${e.message}\n${e.stack?.slice(0, 200) ?? ''}` : String(e);
       console.error('[share] failed:', e);
       Alert.alert(t('home.shareFailTitle'), t('home.shareFailBody', { msg }));
-      await Share.share({
-        message: `${weather.emoji} ${dateLabel}\n\n${message.text}\n\n${t('home.shareSignature')}`,
-      }).catch(() => {});
+      await Share.share({ message: `${weather.emoji} ${dateLabel}\n\n${message.text}\n\n${t('home.shareSignature')}` }).catch(() => {});
     } finally {
       setSharing(false);
     }
   };
-
-  const overLimit = !!displayUsage && displayUsage.used >= displayUsage.limit;
 
   return (
     <View style={[styles.root, { backgroundColor: paper }]}>
@@ -497,7 +254,7 @@ export default function HomeScreen() {
           />
         }
       >
-        {/* ??? HERO (?섏콈 ?섎뒛) ??? */}
+        {/* HERO */}
         <View style={styles.hero}>
           <SkyBackground kind={skyKind} />
           {weather && <WeatherAnimation condition={weather.condition} />}
@@ -535,7 +292,6 @@ export default function HomeScreen() {
                 {weather.city && weather.city !== '내 위치' ? weather.city : t('weather.myLocation')}
               </Text>
 
-              {/* 泥닿컧 / ?듬룄 / 諛붾엺 ???좊━ ?ㅽ듃由?*/}
               <View style={styles.glassRow}>
                 <View style={styles.glassCell}>
                   <Text style={styles.glassK}>{t('weather.feelsLike')}</Text>
@@ -553,7 +309,6 @@ export default function HomeScreen() {
                 </View>
               </View>
 
-              {/* ?먯쇅??/ 誘몄꽭癒쇱? / 媛뺤닔 (媛??덉쓣 ?뚮쭔) */}
               {(weather.uvIndex !== undefined ||
                 weather.pm10 !== undefined ||
                 weather.pm25 !== undefined ||
@@ -564,7 +319,7 @@ export default function HomeScreen() {
                     <Text style={styles.glassV}>
                       {weather.uvIndex !== undefined
                         ? `${Math.round(weather.uvIndex)} · ${isEn ? uvGrade(weather.uvIndex).en : uvGrade(weather.uvIndex).ko}`
-                        : '-' }
+                        : '-'}
                     </Text>
                   </View>
                   <View style={styles.glassDivider} />
@@ -581,9 +336,7 @@ export default function HomeScreen() {
                   <View style={styles.glassCell}>
                     <Text style={styles.glassK}>{t('weather.rain')}</Text>
                     <Text style={styles.glassV}>
-                      {weather.rainfall && weather.rainfall > 0
-                        ? `${weather.rainfall}mm`
-                        : t('weather.noRain')}
+                      {weather.rainfall && weather.rainfall > 0 ? `${weather.rainfall}mm` : t('weather.noRain')}
                     </Text>
                   </View>
                 </View>
@@ -592,23 +345,20 @@ export default function HomeScreen() {
           )}
         </View>
 
-        {/* ??? ?섏씠??蹂몃Ц ??? */}
+        {/* BODY */}
         <View style={[styles.body, { backgroundColor: paper }]}>
-          {/* 鍮??덈낫 ???곗궛 ?덈궡 */}
           {umbrellaText && (
             <View style={styles.umbrella}>
               <Text style={styles.umbrellaText}>{umbrellaText}</Text>
             </View>
           )}
 
-          {/* 寃뚯뒪???덈궡 諛곕꼫 */}
           {isGuest && (
             <View style={styles.guestBanner}>
               <Text style={styles.guestBannerText}>☁️ {t('home.guestBanner')}</Text>
             </View>
           )}
 
-          {/* 濡쒕뵫 以?臾멸뎄 */}
           {anyLoading && (
             <View style={styles.envelopeLoading}>
               <View style={styles.loadingEnvelope}>
@@ -622,7 +372,6 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* 媛먯꽦 硫붿떆吏 ??遊됲닾?먯꽌 爰쇰궦 ?몄? */}
           {message && (
             <View style={styles.letterScene}>
               <View style={styles.envelopeBack}>
@@ -680,7 +429,6 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* 怨듭쑀??移대뱶 ??罹≪쿂 ?꾩슜 (?붾㈃???곹뼢 ?놁쓬) */}
           {message && weather && (
             <ShareableCard
               ref={cardRef}
@@ -699,87 +447,37 @@ export default function HomeScreen() {
           {messageError && (
             <View style={styles.errorCard}>
               <Text style={styles.errorTextBig}>{prettifyError(messageError, t)}</Text>
-              {isLimitError(messageError) && (
-                <TouchableOpacity
-                  style={[styles.rewardAdBtn, watchingAd && styles.btnDisabled]}
-                  onPress={handleWatchAdForCredit}
-                  disabled={watchingAd}
-                >
-                  {watchingAd ? (
-                    <ActivityIndicator color={COLORS.emberText} size="small" />
-                  ) : (
-                    <Text style={styles.rewardAdBtnText}>{t('home.watchAdMore')}</Text>
-                  )}
-                </TouchableOpacity>
-              )}
             </View>
           )}
 
-          {/* ?쒕룞 異붿쿇 */}
-          {activity && (
-            <View style={styles.recCard}>
-              <View style={styles.recIco}>
-                <Text style={styles.recIcoText}>🌿</Text>
-              </View>
-              <View style={styles.recBody}>
-                <Text style={styles.recKicker}>{t('home.activityLabel')}</Text>
-                <Text style={styles.recText}>{activity.text}</Text>
-              </View>
+          {/* 시간별 예보 */}
+          {weather?.hourly && weather.hourly.length > 0 && (
+            <View style={styles.forecastSection}>
+              <HourlyForecast slots={weather.hourly} currentHour={hour} />
             </View>
           )}
 
-          {activityError && (
-            <View style={styles.errorCard}>
-              <Text style={styles.errorTextBig}>{prettifyError(activityError, t)}</Text>
-              {isLimitError(activityError) && (
-                <TouchableOpacity
-                  style={[styles.rewardAdBtn, watchingAd && styles.btnDisabled]}
-                  onPress={handleWatchAdForCredit}
-                  disabled={watchingAd}
-                >
-                  {watchingAd ? (
-                    <ActivityIndicator color={COLORS.emberText} size="small" />
-                  ) : (
-                    <Text style={styles.rewardAdBtnText}>{t('home.watchAdMore')}</Text>
-                  )}
-                </TouchableOpacity>
-              )}
+          {/* 주간 예보 */}
+          {weather?.daily && weather.daily.length > 0 && (
+            <View style={styles.forecastSection}>
+              <WeeklyForecast days={weather.daily} />
             </View>
           )}
 
-          {/* ?뚯떇 異붿쿇 */}
-          {food && (
-            <View style={styles.recCard}>
-              <View style={styles.recIco}>
-                <Text style={styles.recIcoText}>🍵</Text>
-              </View>
-              <View style={styles.recBody}>
-                <Text style={styles.recKicker}>{t('home.foodLabel')}</Text>
-                <Text style={styles.recText}>{food.text}</Text>
-              </View>
+          {/* 오늘의 옷차림 */}
+          {weather && (
+            <View style={styles.forecastSection}>
+              <OutfitCard weather={weather} currentHour={hour} />
             </View>
           )}
 
-          {foodError && (
-            <View style={styles.errorCard}>
-              <Text style={styles.errorTextBig}>{prettifyError(foodError, t)}</Text>
-              {isLimitError(foodError) && (
-                <TouchableOpacity
-                  style={[styles.rewardAdBtn, watchingAd && styles.btnDisabled]}
-                  onPress={handleWatchAdForCredit}
-                  disabled={watchingAd}
-                >
-                  {watchingAd ? (
-                    <ActivityIndicator color={COLORS.emberText} size="small" />
-                  ) : (
-                    <Text style={styles.rewardAdBtnText}>{t('home.watchAdMore')}</Text>
-                  )}
-                </TouchableOpacity>
-              )}
+          {/* 생활지수 */}
+          {weather && (
+            <View style={styles.forecastSection}>
+              <LifeIndex weather={weather} currentHour={hour} />
             </View>
           )}
 
-          {/* 踰꾪듉 ?곸뿭 */}
           {weather && !weatherLoading && (
             <View style={styles.btnGroup}>
               <TouchableOpacity
@@ -795,59 +493,9 @@ export default function HomeScreen() {
                   </Text>
                 )}
               </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.ghostBtn, activityLoading && styles.btnDisabled]}
-                onPress={handleGenerateActivity}
-                disabled={activityLoading}
-              >
-                {activityLoading ? (
-                  <ActivityIndicator color={COLORS.ink2} size="small" />
-                ) : (
-                  <Text style={styles.ghostBtnText}>
-                    {activity ? t('home.activityAnother') : t('home.activityCta')}
-                  </Text>
-                )}
-              </TouchableOpacity>
-
-              <TouchableOpacity
-                style={[styles.ghostBtn, foodLoading && styles.btnDisabled]}
-                onPress={handleGenerateFood}
-                disabled={foodLoading}
-              >
-                {foodLoading ? (
-                  <ActivityIndicator color={COLORS.ink2} size="small" />
-                ) : (
-                  <Text style={styles.ghostBtnText}>
-                    {food ? t('home.foodAnother') : t('home.foodCta')}
-                  </Text>
-                )}
-              </TouchableOpacity>
-
-              {/* ?ъ슜 ?잛닔 ???쒓컖??*/}
-              <View style={styles.usageContainer}>
-                <UsageDots used={displayUsage?.used ?? 0} limit={displayUsage?.limit ?? 3} />
-                <Text style={styles.usageText}>{usageText}</Text>
-
-                {/* ?쒕룄 ?꾨떖 ????愿묎퀬 蹂닿퀬 異⑹쟾 */}
-                {overLimit && (
-                  <TouchableOpacity
-                    style={[styles.chargeBtn, watchingAd && styles.btnDisabled]}
-                    onPress={handleChargeOnly}
-                    disabled={watchingAd}
-                  >
-                    {watchingAd ? (
-                      <ActivityIndicator color={COLORS.emberText} size="small" />
-                    ) : (
-                      <Text style={styles.chargeBtnText}>{t('home.chargeOne')}</Text>
-                    )}
-                  </TouchableOpacity>
-                )}
-              </View>
             </View>
           )}
 
-          {/* ???대쫫 */}
           <View style={styles.appNameArea}>
             <Text style={styles.appName}>{t('common.appName')}</Text>
             <Text style={styles.appNameEn}>HOW WEATHER YOU</Text>
@@ -855,7 +503,7 @@ export default function HomeScreen() {
         </View>
       </ScrollView>
 
-      {/* 硫붿떆吏 ?좏삎 ?좏깮 紐⑤떖 */}
+      {/* 메시지 톤 선택 모달 */}
       <Modal
         animationType="fade"
         transparent
@@ -867,7 +515,6 @@ export default function HomeScreen() {
             <View style={styles.sheetGrip} />
             <Text style={styles.modalTitle}>{t('home.tonePickTitle')}</Text>
             <Text style={styles.modalSubtitle}>{t('home.tonePickSubtitle')}</Text>
-
             <View style={styles.modalOptions}>
               {PREF_ORDER.map((key) => (
                 <TouchableOpacity
@@ -885,7 +532,6 @@ export default function HomeScreen() {
                 </TouchableOpacity>
               ))}
             </View>
-
             <TouchableOpacity style={styles.modalCancel} onPress={() => setPickerOpen(false)}>
               <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
@@ -893,7 +539,7 @@ export default function HomeScreen() {
         </Pressable>
       </Modal>
 
-      {/* ?ъ슜 ?덈궡 紐⑤떖 (吏꾩엯 ??1?? '?ㅻ뒛 ?섎（ ??蹂닿린'濡??? */}
+      {/* 편지 전체 보기 모달 */}
       <Modal
         animationType="fade"
         transparent
@@ -947,10 +593,10 @@ export default function HomeScreen() {
             <View style={styles.sheetGrip} />
             <Text style={styles.modalTitle}>{t('guide.title')}</Text>
             <View style={styles.guideList}>
-              <Text style={styles.guideLine}>🌤️ {t('guide.line1')}</Text>
-              <Text style={styles.guideLine}>💌 {t('guide.line2')}</Text>
-              <Text style={styles.guideLine}>🎁 {t('guide.line3')}</Text>
-              <Text style={styles.guideLine}>📮 {t('guide.line4')}</Text>
+              <Text style={styles.guideLine}>💌 {t('guide.line1')}</Text>
+              <Text style={styles.guideLine}>📅 {t('guide.line2')}</Text>
+              <Text style={styles.guideLine}>🎲 {t('guide.line3')}</Text>
+              <Text style={styles.guideLine}>🎁 {t('guide.line4')}</Text>
             </View>
             <TouchableOpacity style={styles.guideGotIt} onPress={() => setGuideOpen(false)}>
               <Text style={styles.guideGotItText}>{t('guide.gotIt')}</Text>
@@ -961,6 +607,8 @@ export default function HomeScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <AppBanner />
     </View>
   );
 }
@@ -968,9 +616,9 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: COLORS.paper },
   scroll: { flex: 1, backgroundColor: COLORS.paper },
-  container: { paddingBottom: 44 },
+  container: { paddingBottom: 80 },
 
-  // ??? HERO ???
+  // HERO
   hero: {
     paddingTop: 54,
     paddingBottom: 54,
@@ -1041,7 +689,7 @@ const styles = StyleSheet.create({
     marginTop: 3,
   },
 
-  // ??? ?섏씠??蹂몃Ц ???
+  // BODY
   body: { paddingHorizontal: 26, paddingTop: 4 },
 
   umbrella: {
@@ -1140,7 +788,6 @@ const styles = StyleSheet.create({
   },
   retryText: { fontSize: 14, color: COLORS.skyText },
 
-  // ?몄? ?명듃
   letterScene: {
     minHeight: 430,
     marginBottom: 24,
@@ -1201,7 +848,6 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.emberSoft,
   },
   noteTag: { flexDirection: 'row', alignItems: 'center', gap: 10, marginBottom: 16 },
-  notePip: { width: 6, height: 6, borderRadius: 3, backgroundColor: COLORS.ember },
   noteStamp: {
     width: 38,
     height: 38,
@@ -1225,14 +871,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     letterSpacing: 1,
     color: COLORS.emberD,
-  },
-  noteQuote: {
-    fontFamily: FONTS.serifEn,
-    fontSize: 40,
-    lineHeight: 30,
-    color: COLORS.paper3,
-    marginTop: 4,
-    height: 22,
   },
   noteText: {
     fontFamily: FONTS.serifKo,
@@ -1313,76 +951,14 @@ const styles = StyleSheet.create({
   },
   envelopeSealText: { fontSize: 18 },
 
-  // ?쒕룞/?뚯떇 異붿쿇 移대뱶
-  recCard: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 13,
+  forecastSection: {
+    marginBottom: 16,
     backgroundColor: COLORS.card,
     borderRadius: RADII.card,
-    padding: 16,
-    marginBottom: 12,
+    padding: 12,
     borderWidth: 1,
     borderColor: COLORS.line,
   },
-  recIco: {
-    width: 36,
-    height: 36,
-    borderRadius: 10,
-    backgroundColor: COLORS.paper3,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  recIcoText: { fontSize: 17 },
-  recBody: { flex: 1 },
-  recKicker: {
-    fontSize: 11,
-    letterSpacing: 1,
-    color: COLORS.ink3,
-    textTransform: 'uppercase',
-    marginBottom: 8,
-  },
-  recText: { fontFamily: FONTS.serifKo, fontSize: 15.5, lineHeight: 27, color: COLORS.ink },
-
-  // 踰꾪듉
-  btnGroup: { gap: 10, marginTop: 2 },
-  primaryBtn: {
-    backgroundColor: COLORS.ember,
-    borderRadius: RADII.btn,
-    paddingVertical: 17,
-    alignItems: 'center',
-  },
-  primaryBtnText: { color: COLORS.emberText, fontSize: 15.5, fontWeight: '600', letterSpacing: 0.2 },
-  ghostBtn: {
-    backgroundColor: 'transparent',
-    borderRadius: RADII.btn,
-    paddingVertical: 15,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: COLORS.line,
-  },
-  ghostBtnText: { color: COLORS.ink2, fontSize: 15, fontWeight: '500' },
-  btnDisabled: { opacity: 0.5 },
-
-  usageContainer: { alignItems: 'center', marginTop: 14, gap: 2 },
-  usageText: { fontFamily: FONTS.mono, fontSize: 11.5, color: COLORS.ink3, marginTop: 9 },
-  chargeBtn: {
-    marginTop: 14,
-    backgroundColor: COLORS.ember,
-    borderRadius: RADII.btn,
-    paddingVertical: 13,
-    paddingHorizontal: 24,
-  },
-  chargeBtnText: { color: COLORS.emberText, fontSize: 14, fontWeight: '600' },
-  rewardAdBtn: {
-    marginTop: 14,
-    backgroundColor: COLORS.ember,
-    borderRadius: RADII.btn,
-    paddingVertical: 12,
-    paddingHorizontal: 22,
-    alignSelf: 'center',
-  },
-  rewardAdBtnText: { color: COLORS.emberText, fontSize: 14, fontWeight: '600' },
 
   errorCard: {
     backgroundColor: 'rgba(178,91,76,0.08)',
@@ -1396,11 +972,21 @@ const styles = StyleSheet.create({
   },
   errorTextBig: { color: COLORS.danger, fontSize: 14, lineHeight: 21, textAlign: 'center' },
 
-  appNameArea: { alignItems: 'center', marginTop: 30 },
+  btnGroup: { gap: 10, marginTop: 2 },
+  primaryBtn: {
+    backgroundColor: COLORS.ember,
+    borderRadius: RADII.btn,
+    paddingVertical: 17,
+    alignItems: 'center',
+  },
+  primaryBtnText: { color: COLORS.emberText, fontSize: 15.5, fontWeight: '600', letterSpacing: 0.2 },
+  btnDisabled: { opacity: 0.5 },
+
+  appNameArea: { alignItems: 'center', marginTop: 30, marginBottom: 8 },
   appName: { fontFamily: FONTS.serifKo, fontSize: 14, color: COLORS.ink3, letterSpacing: 2 },
   appNameEn: { fontFamily: FONTS.mono, fontSize: 9.5, color: COLORS.ink3, letterSpacing: 2, marginTop: 4, opacity: 0.7 },
 
-  // ??? 紐⑤떖 (?섏씠???쒗듃) ???
+  // 모달
   modalOverlay: { flex: 1, backgroundColor: 'rgba(28,22,30,0.42)', justifyContent: 'flex-end' },
   modalSheet: {
     backgroundColor: COLORS.paper,
@@ -1446,7 +1032,6 @@ const styles = StyleSheet.create({
   modalCancel: { marginTop: 16, paddingVertical: 12, alignItems: 'center' },
   modalCancelText: { color: COLORS.ink3, fontSize: 14 },
 
-  // ?ъ슜 ?덈궡 紐⑤떖
   fullLetterOverlay: {
     flex: 1,
     backgroundColor: 'rgba(28,22,30,0.58)',

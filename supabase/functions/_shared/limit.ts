@@ -11,12 +11,10 @@ export const supabaseAdmin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
   auth: { persistSession: false },
 });
 
-export type Feature = 'message' | 'activity' | 'food';
-// 메시지/활동/음식 합산 하루 3회 (Claude API 비용 절감)
-export const DAILY_LIMIT_TOTAL = 3;
-// 광고 보상 일일 상한 (무한 충전 → Claude 비용 폭탄 방지)
-// ponytail: 단순 카운트 상한. 정밀 차단은 AdMob 서버사이드 검증(SSV) — 이 규모엔 과함.
-export const MAX_AD_REWARDS_PER_DAY = 20;
+export type Feature = 'message' | 'activity' | 'food' | 'fortune';
+// ponytail: 하드 한도 제거. 스크립트 남용 방지용 상한만 유지 (UI 미노출).
+export const ABUSE_CAP = 50;
+const MAX_AD_REWARDS_PER_DAY = 10;
 
 /**
  * Authorization 헤더에서 JWT 추출해 사용자 검증
@@ -81,12 +79,8 @@ export async function getAdRewardsToday(userId: string): Promise<number> {
   }
 }
 
-/**
- * 오늘의 실효 한도 = 기본 한도 + 광고 시청 보너스
- */
-export async function getEffectiveLimit(userId: string): Promise<number> {
-  const bonus = await getAdRewardsToday(userId);
-  return DAILY_LIMIT_TOTAL + bonus;
+export async function getEffectiveLimit(_userId: string): Promise<number> {
+  return ABUSE_CAP;
 }
 
 /**
@@ -141,7 +135,7 @@ export async function checkAndLog(
 export function limitExceededResponse(used: number, limit: number, corsHeaders: Record<string, string>): Response {
   return new Response(
     JSON.stringify({
-      error: `오늘의 한도 ${limit}회를 모두 사용하셨어요.\n내일 다시 만나요 🌙`,
+      error: `잠시 후 다시 시도해주세요 🌙`,
       code: 'LIMIT_EXCEEDED',
       used,
       limit,

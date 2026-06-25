@@ -1,7 +1,7 @@
 // 날씨 기반 활동 추천 Edge Function (ko/en)
 
 import { corsHeaders } from '../_shared/cors.ts';
-import { callClaude } from '../_shared/claude.ts';
+import { callClaude, MODEL_HAIKU } from '../_shared/claude.ts';
 import { requireUser, checkAndLog, limitExceededResponse } from '../_shared/limit.ts';
 import { getKstContext } from '../_shared/datetime.ts';
 import { Lang, conditionLabel, timeOfDayLabel, metricLines } from '../_shared/labels.ts';
@@ -167,6 +167,7 @@ Recommend ONE activity that fits this moment, described so the scene comes alive
       userPrompt,
       maxTokens: 280,
       temperature: 1,
+      model: MODEL_HAIKU,
     });
 
     return new Response(

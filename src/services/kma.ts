@@ -10,6 +10,8 @@ import {
   WeatherInfo,
   WeatherCondition,
   ForecastSlot,
+  HourlySlot,
+  DailySlot,
   CONDITION_META,
 } from '../constants/weather';
 
@@ -287,7 +289,7 @@ export async function fetchKmaWeather(
   const condition = kmaToCondition(ptyNow, skyNow);
   const meta = CONDITION_META[condition];
 
-  // ── 향후 예보 슬롯 (3시간 간격 4개) ──────────────────────
+  // ── 향후 예보 슬롯 (3시간 간격 4개, 엣지함수 payload용) ──
   const forecast: ForecastSlot[] = [];
   for (let i = 0; i < upcoming.length && forecast.length < 4; i += 3) {
     const s = upcoming[i];
@@ -298,9 +300,49 @@ export async function fetchKmaWeather(
       condition: cond,
       conditionKo: CONDITION_META[cond].ko,
       temp: Math.round(s.tmp),
-      pop: (s.pop ?? 0) / 100, // KMA는 %, 앱은 0~1 규약
+      pop: (s.pop ?? 0) / 100,
     });
   }
+
+  // ── 시간별 예보 (1h 간격, ~24h) ─────────────────────────
+  const hourly: HourlySlot[] = upcoming.slice(0, 24).map((s) => {
+    const cond = kmaToCondition(s.pty ?? '0', s.sky ?? '1');
+    return {
+      hour: parseInt(s.time.slice(0, 2), 10),
+      condition: cond,
+      conditionKo: CONDITION_META[cond].ko,
+      temp: Math.round(s.tmp ?? temp),
+      pop: (s.pop ?? 0) / 100,
+    };
+  });
+
+  // ── 주간 예보 (날짜별 묶기, 3~4일) ──────────────────────
+  const dayMap = new Map<string, { tmps: number[]; pops: number[]; sky: string; pty: string }>();
+  for (const s of sortedSlots) {
+    if (!dayMap.has(s.date)) dayMap.set(s.date, { tmps: [], pops: [], sky: '1', pty: '0' });
+    const d = dayMap.get(s.date)!;
+    if (s.tmp !== undefined) d.tmps.push(s.tmp);
+    if (s.pop !== undefined) d.pops.push(s.pop);
+    if (s.sky) d.sky = s.sky;
+    if (s.pty && s.pty !== '0') d.pty = s.pty;
+  }
+  const daily: DailySlot[] = Array.from(dayMap.entries())
+    .slice(0, 4)
+    .map(([date, d]) => {
+      const cond = kmaToCondition(d.pty, d.sky);
+      const yr = parseInt(date.slice(0, 4), 10);
+      const mo = parseInt(date.slice(4, 6), 10) - 1;
+      const dy = parseInt(date.slice(6, 8), 10);
+      return {
+        date,
+        weekdayIdx: new Date(yr, mo, dy).getDay(),
+        tempMin: d.tmps.length > 0 ? Math.round(Math.min(...d.tmps)) : Math.round(temp),
+        tempMax: d.tmps.length > 0 ? Math.round(Math.max(...d.tmps)) : Math.round(temp),
+        condition: cond,
+        conditionKo: CONDITION_META[cond].ko,
+        pop: d.pops.length > 0 ? Math.max(...d.pops) / 100 : 0,
+      };
+    });
 
   // ── 오늘 최저(TMN)/최고(TMX) 보충 ────────────────────────
   // 최신 발표는 오후·저녁이 되면 오늘 TMN(06시)/TMX(15시)이 응답에서 빠진다.
@@ -352,6 +394,8 @@ export async function fetchKmaWeather(
     city: '', // weather.ts에서 reverseGeocode 결과로 채움
     description: meta.ko,
     forecast: forecast.length > 0 ? forecast : undefined,
+    hourly: hourly.length > 0 ? hourly : undefined,
+    daily: daily.length > 0 ? daily : undefined,
     rainfall: isNaN(rn1) ? 0 : Math.round(rn1 * 10) / 10,
     // uv/pm은 weather.ts에서 Open-Meteo로 채움
   };

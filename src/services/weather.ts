@@ -2,6 +2,8 @@ import * as Location from 'expo-location';
 import {
   WeatherInfo,
   ForecastSlot,
+  HourlySlot,
+  DailySlot,
   getConditionFromId,
   CONDITION_META,
 } from '../constants/weather';
@@ -136,7 +138,7 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
   // 현재 날씨 + 48시간 예보 동시 요청
   const [res, forecastRes] = await Promise.all([
     fetch(`${BASE_URL}/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&lang=kr`),
-    fetch(`${BASE_URL}/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&cnt=16`),
+    fetch(`${BASE_URL}/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric&cnt=40`),
   ]);
 
   if (!res.ok) {
@@ -157,8 +159,9 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
   //   가장 가까운 24시간 데이터로 fallback
   let tempMin = Math.round(data.main.temp);
   let tempMax = Math.round(data.main.temp);
-  // 향후 12시간 예보 슬롯 (3시간 간격 × 4개)
   let forecastSummary: ForecastSlot[] = [];
+  let owHourly: HourlySlot[] = [];
+  let owDaily: DailySlot[] = [];
 
   if (forecastRes.ok) {
     try {
@@ -171,10 +174,9 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
       };
       const list = forecastData.list as ForecastItem[];
 
-      // ── 향후 12시간 (4슬롯) 예보 요약 ─────────────────
+      // ── 향후 12시간 (4슬롯) 예보 요약 — 엣지함수 payload용 ──
       forecastSummary = list.slice(0, 4).map((it) => {
         const dt = new Date(it.dt * 1000);
-        // KST 시각으로 변환 (UTC+9)
         const kstHour = (dt.getUTCHours() + 9) % 24;
         const cond = getConditionFromId(it.weather[0]?.id ?? 800);
         return {
@@ -183,6 +185,45 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
           conditionKo: CONDITION_META[cond].ko,
           temp: Math.round(it.main.temp),
           pop: it.pop ?? 0,
+        };
+      });
+
+      // ── 시간별 예보 (3h 간격, ~24h) ───────────────────────
+      owHourly = list.slice(0, 8).map((it: any) => {
+        const kstHour = (new Date(it.dt * 1000).getUTCHours() + 9) % 24;
+        const cond = getConditionFromId(it.weather[0]?.id ?? 800);
+        return {
+          hour: kstHour,
+          condition: cond,
+          conditionKo: CONDITION_META[cond].ko,
+          temp: Math.round(it.main?.temp ?? 0),
+          pop: it.pop ?? 0,
+        };
+      });
+
+      // ── 주간 예보 (날짜별 묶기, ~4일) ─────────────────────
+      const owDayMap = new Map<string, { tmps: number[]; pops: number[]; cond: ReturnType<typeof getConditionFromId> }>();
+      for (const it of list as any[]) {
+        const kstD = new Date(it.dt * 1000 + 9 * 3600 * 1000);
+        const key = `${kstD.getUTCFullYear()}${String(kstD.getUTCMonth() + 1).padStart(2, '0')}${String(kstD.getUTCDate()).padStart(2, '0')}`;
+        if (!owDayMap.has(key)) owDayMap.set(key, { tmps: [], pops: [], cond: getConditionFromId(it.weather[0]?.id ?? 800) });
+        const day = owDayMap.get(key)!;
+        day.tmps.push(it.main?.temp ?? 0);
+        day.pops.push(it.pop ?? 0);
+        day.cond = getConditionFromId(it.weather[0]?.id ?? 800);
+      }
+      owDaily = Array.from(owDayMap.entries()).slice(0, 4).map(([date, d]) => {
+        const yr = parseInt(date.slice(0, 4), 10);
+        const mo = parseInt(date.slice(4, 6), 10) - 1;
+        const dy = parseInt(date.slice(6, 8), 10);
+        return {
+          date,
+          weekdayIdx: new Date(yr, mo, dy).getDay(),
+          tempMin: d.tmps.length > 0 ? Math.round(Math.min(...d.tmps)) : 0,
+          tempMax: d.tmps.length > 0 ? Math.round(Math.max(...d.tmps)) : 0,
+          condition: d.cond,
+          conditionKo: CONDITION_META[d.cond].ko,
+          pop: d.pops.length > 0 ? Math.max(...d.pops) : 0,
         };
       });
 
@@ -237,6 +278,8 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
     city: koPlace || data.name,
     description: data.weather[0].description,
     forecast: forecastSummary.length > 0 ? forecastSummary : undefined,
+    hourly: owHourly.length > 0 ? owHourly : undefined,
+    daily: owDaily.length > 0 ? owDaily : undefined,
     rainfall,
     ...airQuality,
   };
