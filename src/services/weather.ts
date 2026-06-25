@@ -1,4 +1,5 @@
 import * as Location from 'expo-location';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import {
   WeatherInfo,
   ForecastSlot,
@@ -96,6 +97,32 @@ export async function reverseGeocodeKo(lat: number, lon: number): Promise<string
   }
 }
 
+// ── 오늘 관측 최고/최저 누적 보정 ───────────────────────────
+// "오늘 최고" = max(예보 최고, 현재기온, 오늘 그동안 관측된 최고). 최저는 대칭.
+// 같은 날·같은 위치면 저장값과 비교해 단조 갱신(최고는 오르기만/최저는 내리기만)
+// → 새로고침해도 출렁이지 않고, '현재 > 최고' 모순도 없음. KST 자정/위치 이동 시 리셋.
+const TEMP_EXTREME_KEY = 'dailyTempExtreme';
+async function reconcileDailyExtremes(w: WeatherInfo, lat: number, lon: number): Promise<WeatherInfo> {
+  let hi = Math.max(w.tempMax, w.temp);
+  let lo = Math.min(w.tempMin, w.temp);
+  try {
+    const today = new Date(Date.now() + 9 * 3600 * 1000).toISOString().slice(0, 10);
+    const loc = `${lat.toFixed(1)},${lon.toFixed(1)}`; // ~11km 이내는 동일 위치로 간주
+    const raw = await AsyncStorage.getItem(TEMP_EXTREME_KEY);
+    if (raw) {
+      const s = JSON.parse(raw) as { date: string; loc: string; hi: number; lo: number };
+      if (s.date === today && s.loc === loc) {
+        hi = Math.max(hi, s.hi);
+        lo = Math.min(lo, s.lo);
+      }
+    }
+    await AsyncStorage.setItem(TEMP_EXTREME_KEY, JSON.stringify({ date: today, loc, hi, lo }));
+  } catch {
+    // 저장 실패해도 현재기온과의 모순은 위 hi/lo 계산으로 이미 방지됨
+  }
+  return { ...w, tempMax: hi, tempMin: lo };
+}
+
 export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
   // 캐시 유효하면 바로 반환
   if (!forceRefresh && weatherCache && Date.now() - weatherCache.fetchedAt < CACHE_TTL_MS) {
@@ -121,11 +148,11 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
       const kma = await fetchKmaWeather(lat, lon);
       if (kma) {
         // kma는 rainfall(RN1)까지 채워 옴. uv/pm은 Open-Meteo로 보강.
-        const result: WeatherInfo = {
+        const result = await reconcileDailyExtremes({
           ...kma,
           city: koPlace || kma.city || '내 위치',
           ...airQuality,
-        };
+        }, lat, lon);
         weatherCache = { data: result, fetchedAt: Date.now() };
         return result;
       }
@@ -284,6 +311,7 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
     ...airQuality,
   };
 
-  weatherCache = { data: result, fetchedAt: Date.now() };
-  return result;
+  const finalResult = await reconcileDailyExtremes(result, lat, lon);
+  weatherCache = { data: finalResult, fetchedAt: Date.now() };
+  return finalResult;
 }
