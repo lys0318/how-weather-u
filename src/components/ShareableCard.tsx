@@ -19,16 +19,16 @@ interface Props {
 
 const GLOW_SRC = require('../../assets/textures/glow.png');
 
-// 따뜻한 하늘 — 잉크가 자연스럽게 녹아들도록 톤이 고른 깊은 노을 계열
-const CLEAR: [string, string, string, string] = ['#C2683F', '#AE5A36', '#9A4E2E', '#854327'];
-const CLOUDY: [string, string, string, string] = ['#8C8071', '#7C7062', '#6C6153', '#5C5346'];
-const RAIN: [string, string, string, string] = ['#6F6A60', '#615C53', '#534E46', '#46413A'];
+// 따뜻한 하늘 — 연하고 은은한 크림/노을 계열 (앱 본연의 종이 톤)
+const CLEAR: [string, string, string, string] = ['#F4DFC1', '#EDD2AB', '#E4C195', '#D8AE7D'];
+const CLOUDY: [string, string, string, string] = ['#EDE6D8', '#E1D9C8', '#D4CAB7', '#C5BAA6'];
+const RAIN: [string, string, string, string] = ['#E8E2D8', '#DCD5C9', '#CEC7B9', '#BEB6A6'];
 
-// 잉크 (배경 위 글씨) — 따뜻한 아이보리
-const IVORY = '#FCF5E9';
-const IVORY2 = 'rgba(252,245,233,0.82)';
-const IVORY3 = 'rgba(252,245,233,0.60)';
-const HAIRLINE = 'rgba(252,245,233,0.26)';
+// 잉크 (배경 위 글씨) — 진한 잉크 (연한 배경에 또렷·은은하게)
+const INK = '#2B2620';
+const INK2 = '#6B6253';
+const INK3 = 'rgba(43,38,32,0.55)';
+const HAIRLINE = 'rgba(43,38,32,0.14)';
 
 function skyFor(condition?: WeatherCondition): [string, string, string, string] {
   if (condition === 'clouds' || condition === 'mist') return CLOUDY;
@@ -109,18 +109,18 @@ const styles = StyleSheet.create({
     position: 'absolute',
     width: 540,
     height: 540,
-    top: 70,
-    right: -150,
-    opacity: 0.5,
-    tintColor: '#FBE4BE',
+    top: 60,
+    right: -160,
+    opacity: 0.42,
+    tintColor: '#F6D9A8',
   },
 
   // 상단
   top: { flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between' },
-  date: { fontFamily: FONTS.serifKo, color: IVORY, fontSize: 42, fontWeight: '700' },
+  date: { fontFamily: FONTS.serifKo, color: INK, fontSize: 42, fontWeight: '700' },
   condition: {
     fontFamily: FONTS.mono,
-    color: IVORY3,
+    color: INK3,
     fontSize: 21,
     marginTop: 12,
     letterSpacing: 6,
@@ -132,34 +132,31 @@ const styles = StyleSheet.create({
   center: { flex: 1, justifyContent: 'center', paddingVertical: 40 },
   tone: {
     fontFamily: FONTS.mono,
-    color: IVORY2,
+    color: INK2,
     fontSize: 25,
     letterSpacing: 1.5,
     marginBottom: 34,
   },
   message: {
     fontFamily: FONTS.serifKo,
-    color: IVORY,
+    color: INK,
     fontSize: 60,
     lineHeight: 92,
     letterSpacing: -0.4,
-    textShadowColor: 'rgba(38,22,12,0.22)',
-    textShadowOffset: { width: 0, height: 2 },
-    textShadowRadius: 16,
   },
 
   // 하단
   hairline: { height: 1, backgroundColor: HAIRLINE, marginBottom: 34 },
   bottom: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' },
-  brand: { fontFamily: FONTS.serifKo, color: IVORY, fontSize: 36, fontWeight: '700', letterSpacing: 2 },
+  brand: { fontFamily: FONTS.serifKo, color: INK, fontSize: 36, fontWeight: '700', letterSpacing: 2 },
   brandEn: {
     fontFamily: FONTS.mono,
-    color: IVORY3,
+    color: INK3,
     fontSize: 17,
     marginTop: 9,
     letterSpacing: 3,
   },
   downloadCallout: { alignItems: 'flex-end' },
-  downloadHint: { fontFamily: FONTS.mono, color: IVORY3, fontSize: 16, marginBottom: 6 },
-  downloadCta: { color: IVORY, fontSize: 23, fontWeight: '700', letterSpacing: 0.5 },
+  downloadHint: { fontFamily: FONTS.mono, color: INK3, fontSize: 16, marginBottom: 6 },
+  downloadCta: { color: INK, fontSize: 23, fontWeight: '700', letterSpacing: 0.5 },
 });
