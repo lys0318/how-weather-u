@@ -367,19 +367,19 @@ export async function fetchKmaWeather(
   }
 
   // ── 오늘 최저/최고 기온 ─────────────────────────────────
-  // 오늘의 공식 최저(TMN)/최고(TMX)를 기준으로 한다. (하루 종일 고정값)
-  // 단, 실제 관측 현재기온이 예보를 벗어나면(더 덥거나 추우면) 관측값으로 보정.
-  // TMN/TMX를 못 구한 극단적 경우만 "오늘 남은 예보 + 현재"로 폴백(내일 데이터 제외).
-  const todayUpcomingTemps = upcoming
+  // 오늘의 공식 최저(TMN)/최고(TMX)를 그대로 사용 — 하루 종일 고정값.
+  // 관측 현재기온(temp)은 섞지 않는다: 섞으면 새로고침마다 최고/최저가 출렁임.
+  // TMN/TMX를 못 구한 극단적 경우만 오늘 예보 기온 범위로 폴백 (관측값 제외).
+  const todayFcstTemps = sortedSlots
     .filter((s) => s.date === todayStr && s.tmp !== undefined)
     .map((s) => s.tmp as number);
 
   const tempMax = !isNaN(tmx)
-    ? Math.round(Math.max(tmx, temp))
-    : Math.round(Math.max(temp, ...todayUpcomingTemps));
+    ? Math.round(tmx)
+    : Math.round(todayFcstTemps.length ? Math.max(...todayFcstTemps) : temp);
   const tempMin = !isNaN(tmn)
-    ? Math.round(Math.min(tmn, temp))
-    : Math.round(Math.min(temp, ...todayUpcomingTemps));
+    ? Math.round(tmn)
+    : Math.round(todayFcstTemps.length ? Math.min(...todayFcstTemps) : temp);
 
   return {
     condition,

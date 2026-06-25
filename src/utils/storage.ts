@@ -120,7 +120,7 @@ export async function setDndRange(enabled: boolean, start: number, end: number):
 }
 
 // ─── 메시지 히스토리 ────────────────────────────────────
-export type EntryKind = 'message' | 'activity' | 'food';
+export type EntryKind = 'message' | 'activity' | 'food' | 'fortune';
 
 export interface StoredMessage {
   id: string;

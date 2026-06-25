@@ -297,7 +297,11 @@ function MessageCard({ message, showDateHeader, onBookmarkToggle, onShare, t }: 
             {message.kind && message.kind !== 'message' && (
               <View style={styles.kindTag}>
                 <Text style={styles.kindTagText}>
-                  {message.kind === 'activity' ? t('history.tagActivity') : t('history.tagFood')}
+                  {message.kind === 'activity'
+                    ? t('history.tagActivity')
+                    : message.kind === 'food'
+                      ? t('history.tagFood')
+                      : t('history.tagFortune')}
                 </Text>
               </View>
             )}

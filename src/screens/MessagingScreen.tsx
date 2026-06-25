@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
   ActivityIndicator, Modal, Pressable,
@@ -14,6 +14,8 @@ import AppBanner from '../components/AppBanner';
 import NativeAdCard from '../components/NativeAdCard';
 import { COLORS, FONTS, RADII } from '../constants/theme';
 import { useI18n } from '../i18n';
+import { useAuth } from '../contexts/AuthContext';
+import { saveMessage, saveEntry } from '../utils/storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback } from 'react';
 import { setStatusBarStyle } from 'expo-status-bar';
@@ -32,6 +34,7 @@ export default function MessagingScreen() {
   const { food, loading: foodLoading, generate: generateFood } = useFood();
   const { fortune, loading: fortLoading, generate: generateFortune } = useFortune();
   const { t, lang } = useI18n();
+  const { isGuest } = useAuth();
   const [pickerOpen, setPickerOpen] = useState(false);
 
   useFocusEffect(
@@ -39,6 +42,20 @@ export default function MessagingScreen() {
       setStatusBarStyle('dark');
     }, []),
   );
+
+  // 생성된 메시지/활동/음식/운세를 히스토리에 저장 (게스트는 저장 안 함)
+  useEffect(() => {
+    if (message && weather && !isGuest) saveMessage(message, weather.emoji).catch(() => {});
+  }, [message]);
+  useEffect(() => {
+    if (activity && weather && !isGuest) saveEntry(activity.text, weather.emoji, weather.condition, 'activity').catch(() => {});
+  }, [activity]);
+  useEffect(() => {
+    if (food && weather && !isGuest) saveEntry(food.text, weather.emoji, weather.condition, 'food').catch(() => {});
+  }, [food]);
+  useEffect(() => {
+    if (fortune && weather && !isGuest) saveEntry(fortune.text, weather.emoji, weather.condition, 'fortune').catch(() => {});
+  }, [fortune]);
 
   const isEn = lang === 'en';
   const prefLabel = (p: Preference) => (isEn ? PREFERENCE_EN[p] : PREFERENCE_KO[p]);
