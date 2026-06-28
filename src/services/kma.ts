@@ -113,6 +113,21 @@ function vilageBase(): { base_date: string; base_time: string } {
   return { base_date: fmtDate(kst), base_time: pad2(chosen) + '00' };
 }
 
+// 직전 단기예보 발표 기준 (최신 발표가 아직 미제공일 때 재시도용)
+function prevVilageBase(): { base_date: string; base_time: string } {
+  const cur = vilageBase();
+  const times = [2, 5, 8, 11, 14, 17, 20, 23];
+  const h = parseInt(cur.base_time.slice(0, 2), 10);
+  const idx = times.indexOf(h);
+  if (idx > 0) return { base_date: cur.base_date, base_time: pad2(times[idx - 1]) + '00' };
+  // base_time이 0200이면 전날 2300
+  const y = parseInt(cur.base_date.slice(0, 4), 10);
+  const m = parseInt(cur.base_date.slice(4, 6), 10) - 1;
+  const d = parseInt(cur.base_date.slice(6, 8), 10);
+  const prev = new Date(Date.UTC(y, m, d) - 24 * 60 * 60 * 1000);
+  return { base_date: fmtDate(prev), base_time: '2300' };
+}
+
 // 오늘의 TMN(06시)/TMX(15시)을 항상 포함하는 "이른 발표" 기준.
 // 최신 발표는 오후·저녁이 되면 오늘 TMN/TMX가 응답에서 빠지므로(과거 시각),
 // 오늘 0200 발표(자정~02:10엔 전날 2300 발표)를 별도로 조회해 보충한다.
@@ -194,7 +209,7 @@ export async function fetchKmaWeather(
   const vilage = vilageBase();
 
   // 실황(현재) + 단기예보(하늘/강수확률/최저최고/예보) 병렬 호출
-  const [ncstItems, fcstItems] = await Promise.all([
+  const [ncstItems, fcstItemsRaw] = await Promise.all([
     callKma('getUltraSrtNcst', {
       base_date: ncst.base_date,
       base_time: ncst.base_time,
@@ -208,6 +223,18 @@ export async function fetchKmaWeather(
       ny: String(ny),
     }),
   ]);
+
+  // 최신 발표가 아직 안 올라왔으면(빈 응답) 직전 발표로 재시도 → 3h 폴백 빈도↓
+  let fcstItems = fcstItemsRaw;
+  if (!fcstItems || fcstItems.length === 0) {
+    const pv = prevVilageBase();
+    fcstItems = await callKma('getVilageFcst', {
+      base_date: pv.base_date,
+      base_time: pv.base_time,
+      nx: String(nx),
+      ny: String(ny),
+    });
+  }
 
   if (!ncstItems && !fcstItems) return null;
 
@@ -275,6 +302,9 @@ export async function fetchKmaWeather(
     .filter((s) => s.tmp !== undefined)
     .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
 
+  // 예보 슬롯이 전무하면(발표 모두 실패) OpenWeather로 폴백
+  if (sortedSlots.length === 0) return null;
+
   // 현재 시각 이후 가장 가까운 슬롯에서 하늘상태 가져오기
   const nowKey = todayStr + pad2(kstNow().getUTCHours()) + '00';
   const upcoming = sortedSlots.filter((s) => `${s.date}${s.time}` >= nowKey);
@@ -304,7 +334,7 @@ export async function fetchKmaWeather(
     });
   }
 
-  // ── 시간별 예보 (1h 간격, ~24h) ─────────────────────────
+  // ── 시간별 예보 (1h 간격, ~24h) — 맨 앞에 '지금'(실황) 보장 ──
   const hourly: HourlySlot[] = upcoming.slice(0, 24).map((s) => {
     const cond = kmaToCondition(s.pty ?? '0', s.sky ?? '1');
     return {
@@ -315,6 +345,15 @@ export async function fetchKmaWeather(
       pop: (s.pop ?? 0) / 100,
     };
   });
+  // 발표 지연으로 현재 시각 슬롯이 빠지면 실황 기온/날씨로 '지금' 주입
+  const curHour = kstNow().getUTCHours();
+  if (hourly.length === 0 || hourly[0].hour !== curHour) {
+    hourly.unshift({
+      hour: curHour, condition, conditionKo: meta.ko,
+      temp: Math.round(temp), pop: hourly[0]?.pop ?? 0,
+    });
+    if (hourly.length > 24) hourly.length = 24;
+  }
 
   // ── 주간 예보 (날짜별 묶기, 3~4일) ──────────────────────
   const dayMap = new Map<string, { tmps: number[]; pops: number[]; sky: string; pty: string }>();

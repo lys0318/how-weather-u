@@ -215,7 +215,7 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
         };
       });
 
-      // ── 시간별 예보 (3h 간격, ~24h) ───────────────────────
+      // ── 시간별 예보 (3h 간격, ~24h) — 맨 앞에 '지금'(현재) 보장 ──
       owHourly = list.slice(0, 8).map((it: any) => {
         const kstHour = (new Date(it.dt * 1000).getUTCHours() + 9) % 24;
         const cond = getConditionFromId(it.weather[0]?.id ?? 800);
@@ -227,6 +227,13 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
           pop: it.pop ?? 0,
         };
       });
+      const curKstHour = (new Date().getUTCHours() + 9) % 24;
+      if (owHourly.length === 0 || owHourly[0].hour !== curKstHour) {
+        owHourly.unshift({
+          hour: curKstHour, condition, conditionKo: meta.ko,
+          temp: Math.round(data.main.temp), pop: owHourly[0]?.pop ?? 0,
+        });
+      }
 
       // ── 주간 예보 (날짜별 묶기, ~4일) ─────────────────────
       const owDayMap = new Map<string, { tmps: number[]; pops: number[]; cond: ReturnType<typeof getConditionFromId> }>();
