@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   Alert,
+  Linking,
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../i18n';
@@ -14,9 +15,15 @@ import SkyBackground, { getPaperTint } from '../components/SkyBackground';
 
 export default function LoginScreen() {
   const { signInWithGoogle, signInAsGuest } = useAuth();
-  const { t } = useI18n();
+  const { t, lang } = useI18n();
   const [loading, setLoading] = useState(false);
   const [guestLoading, setGuestLoading] = useState(false);
+
+  // 약관 / 개인정보처리방침 — 현재 언어에 맞는 페이지로
+  const openLegal = (doc: 'terms' | 'privacy-policy') => {
+    const url = `https://how-weather-u.pages.dev/${doc}${lang === 'en' ? '-en' : ''}.html`;
+    Linking.openURL(url).catch(() => {});
+  };
 
   const handleGoogleLogin = async () => {
     setLoading(true);
@@ -88,6 +95,15 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             <Text style={styles.fineprint}>{t('login.agree')}</Text>
+            <View style={styles.legalRow}>
+              <Text style={styles.legalLink} onPress={() => openLegal('terms')}>
+                {t('settings.terms')}
+              </Text>
+              <Text style={styles.legalDot}>·</Text>
+              <Text style={styles.legalLink} onPress={() => openLegal('privacy-policy')}>
+                {t('settings.privacy')}
+              </Text>
+            </View>
             <Text style={styles.guestNote}>{t('login.guestNote')}</Text>
           </View>
         </View>
@@ -164,4 +180,7 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
   guestNote: { fontSize: 11, color: COLORS.ink3, textAlign: 'center', marginTop: 8 },
+  legalRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 8 },
+  legalLink: { fontSize: 11, color: COLORS.ink2, textDecorationLine: 'underline' },
+  legalDot: { fontSize: 11, color: COLORS.ink3 },
 });

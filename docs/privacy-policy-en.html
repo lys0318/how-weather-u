@@ -1,0 +1,290 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How Weather You · Privacy Policy</title>
+<style>
+  :root {
+    --bg: #0a1228;
+    --card: rgba(255,255,255,0.04);
+    --border: rgba(255,255,255,0.08);
+    --text: rgba(255,255,255,0.92);
+    --muted: rgba(255,255,255,0.55);
+    --accent: #f0b89e;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: linear-gradient(180deg, #0a1228 0%, #1a2350 35%, #5a3870 65%, #c36c80 90%, #f0b89e 100%);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Pretendard', 'Apple SD Gothic Neo', sans-serif;
+    line-height: 1.7;
+    min-height: 100vh;
+  }
+  .wrap {
+    max-width: 760px;
+    margin: 0 auto;
+    padding: 56px 24px 96px;
+  }
+  header {
+    margin-bottom: 48px;
+  }
+  h1 {
+    font-size: 28px;
+    margin: 0 0 4px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+  }
+  .subtitle {
+    font-size: 14px;
+    color: var(--muted);
+    letter-spacing: 1px;
+  }
+  .meta {
+    margin-top: 16px;
+    font-size: 13px;
+    color: var(--muted);
+  }
+  h2 {
+    font-size: 18px;
+    margin: 40px 0 14px;
+    color: var(--accent);
+    font-weight: 600;
+  }
+  h3 {
+    font-size: 15px;
+    margin: 20px 0 8px;
+    font-weight: 600;
+  }
+  p, li { font-size: 14.5px; color: var(--text); }
+  ul { padding-left: 20px; }
+  li { margin-bottom: 6px; }
+  table {
+    width: 100%;
+    border-collapse: collapse;
+    margin: 12px 0;
+    font-size: 13px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+  th, td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border);
+  }
+  th {
+    background: rgba(255,255,255,0.05);
+    color: var(--accent);
+    font-weight: 600;
+  }
+  tr:last-child td { border-bottom: none; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 20px 22px;
+    margin: 16px 0;
+  }
+  footer {
+    margin-top: 60px;
+    padding-top: 24px;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 13px;
+    text-align: center;
+  }
+  a { color: var(--accent); }
+  .langlink { margin-top: 10px; font-size: 13px; }
+  code {
+    background: rgba(255,255,255,0.08);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 13px;
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <h1>How Weather You · Privacy Policy</h1>
+    <div class="subtitle">하우웨더유 개인정보처리방침</div>
+    <div class="meta">Effective: May 19, 2026 · Last updated: June 1, 2026 (third-party processors current)</div>
+    <div class="langlink"><a href="./privacy-policy.html">한국어로 보기 →</a></div>
+  </header>
+
+  <p>
+    How Weather You ("the App") treats your personal data with care and complies with applicable
+    laws, including the Korean Personal Information Protection Act. This policy explains what
+    information the App collects, how it is used, and how it is protected.
+  </p>
+
+  <h2>1. Personal Data We Collect</h2>
+  <table>
+    <thead><tr><th>Category</th><th>Items</th><th>Method</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Account</td>
+        <td>Email address, name, profile photo URL (on Google sign-in)</td>
+        <td>Google OAuth</td>
+      </tr>
+      <tr>
+        <td>Location</td>
+        <td>Current latitude/longitude (used once at weather lookup, not stored)</td>
+        <td>OS location permission</td>
+      </tr>
+      <tr>
+        <td>Usage records</td>
+        <td>Daily request count (for rate limiting), request timestamps</td>
+        <td>Collected automatically by the App</td>
+      </tr>
+      <tr>
+        <td>Local data</td>
+        <td>Generated messages, bookmarks (stored only on your device)</td>
+        <td>Saved automatically by the App</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>2. Purpose of Use</h2>
+  <ul>
+    <li>User identification and keeping you signed in</li>
+    <li>Looking up weather based on your current location</li>
+    <li>Providing weather-based messages, activity/food suggestions, and fortunes</li>
+    <li>Counting usage to apply a daily request limit (abuse-prevention cap)</li>
+    <li>Sending notifications</li>
+    <li>Showing ads, including personalized ads (Google AdMob)</li>
+    <li>Service usage statistics and quality improvement</li>
+  </ul>
+
+  <h2>3. Third-Party Provision and Processing</h2>
+  <p>The App uses the following external services, each of which follows its own privacy policy.</p>
+  <table>
+    <thead><tr><th>Provider</th><th>Items shared</th><th>Purpose</th></tr></thead>
+    <tbody>
+      <tr>
+        <td>Supabase Inc.</td>
+        <td>Account info, usage records</td>
+        <td>Authentication, database, backend function hosting</td>
+      </tr>
+      <tr>
+        <td>Anthropic, PBC (Claude API)</td>
+        <td>Weather conditions, time of day (no personally identifying info)</td>
+        <td>Generating messages, activity/food suggestions</td>
+      </tr>
+      <tr>
+        <td>Korea Meteorological Administration</td>
+        <td>Latitude/longitude (grid-converted)</td>
+        <td>Domestic (Korea) weather lookup</td>
+      </tr>
+      <tr>
+        <td>OpenWeather Ltd.</td>
+        <td>Latitude/longitude</td>
+        <td>International weather lookup</td>
+      </tr>
+      <tr>
+        <td>Google Inc. (AdMob)</td>
+        <td>Advertising ID, device info</td>
+        <td>Ad delivery and measurement</td>
+      </tr>
+      <tr>
+        <td>Google Inc. (Auth)</td>
+        <td>OAuth authentication info</td>
+        <td>Processing Google sign-in</td>
+      </tr>
+      <tr>
+        <td>Functional Software, Inc. (Sentry)</td>
+        <td>Error logs, anonymous user ID (no email or personal info)</td>
+        <td>Diagnosing app errors and improving stability</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h2>4. Retention and Use Period</h2>
+  <ul>
+    <li><strong>Account info</strong>: Until you delete your account. <em>Tapping [Delete account] in the App deletes it permanently and immediately.</em></li>
+    <li><strong>Usage records (usage_log)</strong>: Kept to apply the daily request limit; deleted immediately together with your account when you delete it.</li>
+    <li><strong>Location</strong>: Not stored (used once at request time, then immediately discarded).</li>
+    <li><strong>Local message history</strong>: Kept on your device for 7 days, then auto-deleted (bookmarked messages are kept indefinitely). Deleting your account also removes data stored on your phone.</li>
+  </ul>
+
+  <h2>5. Advertising</h2>
+  <p>
+    The App shows ads through Google AdMob in order to provide the service for free.
+  </p>
+  <ul>
+    <li>AdMob may collect and use your <strong>Advertising ID (AAID)</strong> and device info to deliver personalized ads.</li>
+    <li>For details on Google's ad data processing, see
+      <a href="https://policies.google.com/technologies/ads" target="_blank">Google Ads Policy</a> and
+      <a href="https://policies.google.com/privacy" target="_blank">Google Privacy Policy</a>.</li>
+    <li><strong>Opting out of personalized ads</strong>: On your phone, go to [Settings → Google → Ads] to
+      "Delete advertising ID" or "Opt out of Ads Personalization."</li>
+    <li>The App is not directed to children under 14 and does not serve child-directed ads.</li>
+  </ul>
+
+  <h2>6. Your Rights</h2>
+  <p>You may exercise the following rights at any time.</p>
+  <ul>
+    <li><strong>Access, correction, deletion</strong>: View and partially change data directly in the App's settings.</li>
+    <li><strong>Account deletion and removal of all data</strong>: See "How to Delete Your Account" below.</li>
+    <li><strong>Withdrawing consent</strong>: Location/notification permissions can be revoked anytime at [Settings → Apps → How Weather You] on your phone.</li>
+  </ul>
+
+  <h3>How to Delete Your Account</h3>
+  <div class="card">
+    <p>You can permanently delete your account and all related data directly in the App, immediately.</p>
+    <ul>
+      <li>Open the App → bottom <strong>[Settings]</strong> tab → tap <strong>[Delete account]</strong> at the bottom.</li>
+      <li>After two confirmations it is <strong>permanently deleted immediately</strong> (within seconds).</li>
+      <li>What is deleted: account (email/name), usage records on the server (usage_log), on-device data (messages/bookmarks/settings).</li>
+      <li>You may sign up again with the same Google account afterward, but previous data cannot be recovered.</li>
+      <li>If you cannot use the App for some reason, email <a href="mailto:tosca0318@gmail.com">tosca0318@gmail.com</a> and we will process it within 7 days.</li>
+    </ul>
+  </div>
+
+  <h2>7. Security Measures</h2>
+  <ul>
+    <li>All communication is encrypted over HTTPS (TLS 1.2+).</li>
+    <li>Sensitive data such as API keys is used only on the backend (Supabase Edge Functions) and never exposed in the client app.</li>
+    <li>User data is accessible only to its owner via Supabase Row Level Security (RLS).</li>
+    <li>Administrative access is limited to a minimal number of people and is logged.</li>
+  </ul>
+
+  <h2>8. Children Under 14</h2>
+  <p>
+    The App does not knowingly collect personal data from children under 14.
+    If such data is found to have been collected, it is deleted immediately.
+  </p>
+
+  <h2>9. Privacy Officer</h2>
+  <div class="card">
+    <p>
+      <strong>Name</strong>: Yunseong Lee<br>
+      <strong>Email</strong>: <a href="mailto:tosca0318@gmail.com">tosca0318@gmail.com</a>
+    </p>
+    <p>For privacy inquiries, complaints, or remedies, contact the address above. We respond within 7 business days.</p>
+  </div>
+
+  <h2>10. Remedies for Rights Violations</h2>
+  <p>You may request dispute resolution or counseling from the following Korean authorities.</p>
+  <ul>
+    <li>Personal Information Dispute Mediation Committee: 1833-6972 (<a href="https://www.kopico.go.kr" target="_blank">www.kopico.go.kr</a>)</li>
+    <li>Privacy Infringement Report Center: 118 (<a href="https://privacy.kisa.or.kr" target="_blank">privacy.kisa.or.kr</a>)</li>
+    <li>Supreme Prosecutors' Office Cybercrime Unit: 1301 (<a href="https://www.spo.go.kr" target="_blank">www.spo.go.kr</a>)</li>
+    <li>National Police Agency Cyber Bureau: 182 (<a href="https://ecrm.police.go.kr" target="_blank">ecrm.police.go.kr</a>)</li>
+  </ul>
+
+  <h2>11. Changes to This Policy</h2>
+  <p>
+    This policy may be amended due to changes in law, policy, or security technology. Any change
+    will be announced in advance through the App's notices or this page.
+  </p>
+
+  <footer>
+    © 2026 How Weather You (하우웨더유)
+  </footer>
+</div>
+</body>
+</html>

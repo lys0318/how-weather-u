@@ -224,6 +224,14 @@ export default function SettingsScreen() {
     }
   };
 
+  // 약관 / 개인정보처리방침 — 현재 언어에 맞는 페이지로 (영어면 -en)
+  const openLegal = (doc: 'terms' | 'privacy-policy') => {
+    const url = `https://how-weather-u.pages.dev/${doc}${lang === 'en' ? '-en' : ''}.html`;
+    Linking.openURL(url).catch(() => {
+      Alert.alert(t('settings.errorTitle'), t('settings.browserFail'));
+    });
+  };
+
   return (
     <View style={[styles.root, { backgroundColor: paper }]}>
       <LinearGradient
@@ -378,6 +386,17 @@ export default function SettingsScreen() {
         </>
       )}
 
+      {/* 약관 / 개인정보처리방침 */}
+      <View style={styles.legalRow}>
+        <Text style={styles.legalLink} onPress={() => openLegal('terms')}>
+          {t('settings.terms')}
+        </Text>
+        <Text style={styles.legalDot}>·</Text>
+        <Text style={styles.legalLink} onPress={() => openLegal('privacy-policy')}>
+          {t('settings.privacy')}
+        </Text>
+      </View>
+
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
@@ -491,7 +510,10 @@ const styles = StyleSheet.create({
   logoutButtonText: { color: COLORS.danger, fontSize: 14, fontWeight: '500' },
   deleteAccountButton: { paddingVertical: 12, alignItems: 'center', marginTop: 2 },
   deleteAccountText: { color: COLORS.ink3, fontSize: 12.5, textDecorationLine: 'underline' },
-  appInfo: { alignItems: 'center', marginTop: 32 },
+  legalRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 28 },
+  legalLink: { color: COLORS.ink3, fontSize: 12, textDecorationLine: 'underline' },
+  legalDot: { color: COLORS.ink3, fontSize: 12 },
+  appInfo: { alignItems: 'center', marginTop: 18 },
   appName: { fontFamily: FONTS.serifKo, color: COLORS.ink3, fontSize: 13, letterSpacing: 2 },
   appVersion: { fontFamily: FONTS.mono, color: COLORS.ink3, fontSize: 11, marginTop: 4, opacity: 0.7 },
 });
