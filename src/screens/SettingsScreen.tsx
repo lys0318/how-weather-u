@@ -31,6 +31,7 @@ import { setStatusBarStyle } from 'expo-status-bar';
 import { COLORS, FONTS, RADII } from '../constants/theme';
 import { useWeather } from '../hooks/useWeather';
 import { getSkyKind, getPaperTint } from '../components/SkyBackground';
+import ProfileEditor from '../components/ProfileEditor';
 
 const SLOT_LABEL_KEY: Record<NotifSlot, string> = {
   morning: 'settings.slotMorning',
@@ -45,6 +46,7 @@ export default function SettingsScreen() {
   const paper = getPaperTint(getSkyKind(weather?.condition ?? null, new Date().getHours()));
   const [deleting, setDeleting] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   // 게스트 → 구글 로그인 (성공 시 세션 전환 → 자동 라우팅)
   const handleGuestUpgrade = async () => {
@@ -255,6 +257,21 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* 내 프로필 (구글 사용자만) */}
+      {!isGuest && (
+        <TouchableOpacity
+          style={styles.profileRow}
+          onPress={() => setProfileOpen(true)}
+          activeOpacity={0.85}
+        >
+          <View style={{ flex: 1 }}>
+            <Text style={styles.profileRowText}>{t('profile.title')}</Text>
+            <Text style={styles.profileRowSub}>{t('profile.intro')}</Text>
+          </View>
+          <Text style={styles.profileRowChevron}>›</Text>
+        </TouchableOpacity>
+      )}
+
       {/* 언어 선택 */}
       <View style={styles.slotsCard}>
         <Text style={styles.slotsTitle}>{t('settings.languageTitle')}</Text>
@@ -403,6 +420,7 @@ export default function SettingsScreen() {
         <Text style={styles.appVersion}>v1.1.4</Text>
       </View>
       </ScrollView>
+      <ProfileEditor visible={profileOpen} onClose={() => setProfileOpen(false)} />
     </View>
   );
 }
@@ -510,6 +528,14 @@ const styles = StyleSheet.create({
   logoutButtonText: { color: COLORS.danger, fontSize: 14, fontWeight: '500' },
   deleteAccountButton: { paddingVertical: 12, alignItems: 'center', marginTop: 2 },
   deleteAccountText: { color: COLORS.ink3, fontSize: 12.5, textDecorationLine: 'underline' },
+  profileRow: {
+    flexDirection: 'row', alignItems: 'center',
+    backgroundColor: COLORS.card, borderRadius: RADII.card,
+    padding: 18, marginBottom: 12, borderWidth: 1, borderColor: COLORS.line, gap: 12,
+  },
+  profileRowText: { color: COLORS.ink, fontSize: 15, fontWeight: '600' },
+  profileRowSub: { color: COLORS.ink3, fontSize: 12, marginTop: 3, lineHeight: 17 },
+  profileRowChevron: { color: COLORS.ink3, fontSize: 22 },
   legalRow: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 8, marginTop: 28 },
   legalLink: { color: COLORS.ink3, fontSize: 12, textDecorationLine: 'underline' },
   legalDot: { color: COLORS.ink3, fontSize: 12 },
