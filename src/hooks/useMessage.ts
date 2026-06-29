@@ -1,13 +1,13 @@
 import { useState, useCallback } from 'react';
 import { generateMessage, GeneratedMessage, MessageContext } from '../services/message';
-import { WeatherInfo, getTimeOfDay, Preference } from '../constants/weather';
+import { WeatherInfo, getTimeOfDay, Preference, MsgInputs } from '../constants/weather';
 import { translate } from '../i18n';
 
 interface UseMessageResult {
   message: GeneratedMessage | null;
   loading: boolean;
   error: string | null;
-  generate: (weather: WeatherInfo, preference: Preference) => Promise<void>;
+  generate: (weather: WeatherInfo, preference: Preference, extras?: MsgInputs) => Promise<void>;
 }
 
 export function useMessage(): UseMessageResult {
@@ -15,7 +15,7 @@ export function useMessage(): UseMessageResult {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const generate = useCallback(async (weather: WeatherInfo, preference: Preference) => {
+  const generate = useCallback(async (weather: WeatherInfo, preference: Preference, extras?: MsgInputs) => {
     setLoading(true);
     setError(null);
 
@@ -25,6 +25,8 @@ export function useMessage(): UseMessageResult {
       timeOfDay: getTimeOfDay(now.getHours()),
       dayOfWeek: now.getDay(),
       preference,
+      mood: extras?.mood,
+      situation: extras?.situation,
     };
 
     try {

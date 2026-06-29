@@ -267,3 +267,25 @@ export function outfitFor(tempC: number): Outfit {
   }
   return OUTFIT_TABLE[OUTFIT_TABLE.length - 1].outfit;
 }
+
+// 생성 시 개인화 입력 (스펙 A)
+export type Place = 'indoor' | 'outdoor' | 'random';
+export type Social = 'solo' | 'group';
+export type Cuisine = 'korean' | 'japanese' | 'chinese' | 'western';
+
+export interface GenPrefs {
+  place: Place;
+  social: Social;
+  cuisine: Cuisine;
+}
+
+export const DEFAULT_GEN_PREFS: GenPrefs = {
+  place: 'random',
+  social: 'solo',
+  cuisine: 'korean',
+};
+
+export interface MsgInputs {
+  mood?: string;
+  situation?: string;
+}

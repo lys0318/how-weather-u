@@ -1,4 +1,4 @@
-import { WeatherInfo, getTimeOfDay } from '../constants/weather';
+import { WeatherInfo, getTimeOfDay, Cuisine } from '../constants/weather';
 import { callFunction } from './backend';
 import { getCurrentLang } from '../i18n';
 
@@ -9,7 +9,10 @@ export interface FoodRecommendation {
   limit?: number;
 }
 
-export async function generateFood(weather: WeatherInfo): Promise<FoodRecommendation> {
+export async function generateFood(
+  weather: WeatherInfo,
+  prefs?: { cuisine: Cuisine },
+): Promise<FoodRecommendation> {
   const hour = new Date().getHours();
   // 향후 12시간 예보도 함께 전달 — condition enum (서버가 언어별 라벨링)
   const forecastPayload = (weather.forecast ?? []).map((f) => ({
@@ -31,6 +34,7 @@ export async function generateFood(weather: WeatherInfo): Promise<FoodRecommenda
     pm10: weather.pm10,
     pm25: weather.pm25,
     rainfall: weather.rainfall,
+    cuisine: prefs?.cuisine,
     lang: getCurrentLang(),
   });
 

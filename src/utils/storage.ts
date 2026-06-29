@@ -1,5 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GeneratedMessage } from '../services/message';
+import { GenPrefs, DEFAULT_GEN_PREFS } from '../constants/weather';
 
 // 키 상수
 const KEYS = {
@@ -14,6 +15,7 @@ const KEYS = {
   NOTIFICATIONS_ENABLED: 'notificationsEnabled', // 푸시 알림 켬/끔
   NOTIF_SLOTS: 'notifSlots',                     // 받을 시간대 (아침/점심/저녁)
   GUIDE_DISMISSED: 'guideDismissedDate',         // 사용 안내 '오늘 하루 안 보기' 날짜
+  GEN_PREFS: 'genPrefs',                          // 생성 시 칩 선택 기본값 (실내외/혼자같이/요리종류)
 } as const;
 
 // ─── 사용 안내 모달: 오늘 하루 안 보기 ───────────────────────
@@ -130,6 +132,8 @@ export interface StoredMessage {
   weatherEmoji: string;
   isBookmarked: boolean;
   kind?: EntryKind; // 없으면 'message'로 간주 (구버전 호환)
+  mood?: string;       // 생성 시 입력한 기분 (로컬 전용, 메시지에만)
+  situation?: string;  // 생성 시 입력한 상황 (로컬 전용, 메시지에만)
 }
 
 // 메시지 자동 보존 기간: 7일 (북마크된 메시지는 무기한 보존)
@@ -157,7 +161,11 @@ export async function getMessages(): Promise<StoredMessage[]> {
   }
 }
 
-export async function saveMessage(msg: GeneratedMessage, emoji: string): Promise<StoredMessage> {
+export async function saveMessage(
+  msg: GeneratedMessage,
+  emoji: string,
+  extras?: { mood?: string; situation?: string },
+): Promise<StoredMessage> {
   const stored: StoredMessage = {
     id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
     text: msg.text,
@@ -166,6 +174,8 @@ export async function saveMessage(msg: GeneratedMessage, emoji: string): Promise
     weatherEmoji: emoji,
     isBookmarked: false,
     kind: 'message',
+    mood: extras?.mood?.trim() || undefined,
+    situation: extras?.situation?.trim() || undefined,
   };
 
   const existing = await getMessages();
@@ -173,6 +183,22 @@ export async function saveMessage(msg: GeneratedMessage, emoji: string): Promise
   const updated = [stored, ...existing].slice(0, 100);
   await AsyncStorage.setItem(KEYS.MESSAGES, JSON.stringify(updated));
   return stored;
+}
+
+// ─── 생성 칩 선호 (로컬 기본값) ──────────────────────────────
+export async function getGenPrefs(): Promise<GenPrefs> {
+  try {
+    const v = await AsyncStorage.getItem(KEYS.GEN_PREFS);
+    if (!v) return DEFAULT_GEN_PREFS;
+    const p = JSON.parse(v) as Partial<GenPrefs>;
+    return { ...DEFAULT_GEN_PREFS, ...p };
+  } catch {
+    return DEFAULT_GEN_PREFS;
+  }
+}
+
+export async function setGenPrefs(p: GenPrefs): Promise<void> {
+  await AsyncStorage.setItem(KEYS.GEN_PREFS, JSON.stringify(p)).catch(() => {});
 }
 
 /**

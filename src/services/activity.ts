@@ -1,4 +1,4 @@
-import { WeatherInfo, getTimeOfDay } from '../constants/weather';
+import { WeatherInfo, getTimeOfDay, Place, Social } from '../constants/weather';
 import { callFunction } from './backend';
 import { getCurrentLang } from '../i18n';
 
@@ -9,7 +9,10 @@ export interface ActivityRecommendation {
   limit?: number;
 }
 
-export async function generateActivity(weather: WeatherInfo): Promise<ActivityRecommendation> {
+export async function generateActivity(
+  weather: WeatherInfo,
+  prefs?: { place: Place; social: Social },
+): Promise<ActivityRecommendation> {
   const hour = new Date().getHours();
   // 향후 12시간 예보 요약 — condition enum으로 전달 (서버가 언어별 라벨링)
   const forecastPayload = (weather.forecast ?? []).map((f) => ({
@@ -31,6 +34,8 @@ export async function generateActivity(weather: WeatherInfo): Promise<ActivityRe
     pm10: weather.pm10,
     pm25: weather.pm25,
     rainfall: weather.rainfall,
+    place: prefs?.place,
+    social: prefs?.social,
     lang: getCurrentLang(),
   });
 
