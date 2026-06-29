@@ -4,7 +4,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { callClaude, MODEL_HAIKU } from '../_shared/claude.ts';
 import { requireUser, checkAndLog, limitExceededResponse } from '../_shared/limit.ts';
 import { getKstContext } from '../_shared/datetime.ts';
-import { Lang, conditionLabel, timeOfDayLabel, metricLines } from '../_shared/labels.ts';
+import { Lang, conditionLabel, timeOfDayLabel, metricLines, cuisineLabel } from '../_shared/labels.ts';
 
 const SYSTEM_PROMPT_KO = `당신은 한국의 날씨에 어울리는 음식을 맛깔나게 추천해주는 친한 친구입니다.
 
@@ -64,6 +64,7 @@ interface RequestBody {
   pm10?: number;
   pm25?: number;
   rainfall?: number;
+  cuisine?: string;
   lang?: Lang;
 }
 
@@ -144,6 +145,11 @@ Deno.serve(async (req) => {
     const pool = CUISINE_POOL[lang];
     const pick = pool[Math.floor(Math.random() * pool.length)];
 
+    const cuisineText = cuisineLabel(lang, body.cuisine);
+    const cuisineLine = cuisineText
+      ? (lang === 'ko' ? `\n- 선호 분류: ${cuisineText} 위주로` : `\n- Preferred cuisine: ${cuisineText}`)
+      : '';
+
     const userPrompt =
       lang === 'ko'
         ? `현재 상황:
@@ -152,9 +158,10 @@ Deno.serve(async (req) => {
 - 시간대: ${todText} (${body.hour}시) — ${meal}
 - 날씨: ${condText}
 - 현재 기온: ${body.temp}°C
-- 오늘 최저/최고: ${body.tempMin}°C / ${body.tempMax}°C${metrics ? '\n' + metrics : ''}${forecastBlock}
+- 오늘 최저/최고: ${body.tempMin}°C / ${body.tempMax}°C${metrics ? '\n' + metrics : ''}${forecastBlock}${cuisineLine}
 
 이 상황에 딱 어울리는 음식 1가지를 침이 고이게 묘사해서 추천해주세요.
+- 사용자가 한/일/중/양식을 골랐으면 그 분류 안에서 추천하세요.
 - 향후 예보가 있으면 반영하세요 (예: 이따 비 올 예정이면 따뜻한 국물요리).
 - 미세먼지가 나쁘면 실내에서 즐길 메뉴, 강수량이 있으면 따뜻한 메뉴를 고려하세요.
 - 제철 재료를 살리면 좋아요. 요일 분위기도 슬쩍 녹여도 좋고요.
@@ -166,9 +173,10 @@ Deno.serve(async (req) => {
 - Time of day: ${todText} (${body.hour}:00) — ${meal}
 - Weather: ${condText}
 - Current temp: ${body.temp}°C
-- Today's low/high: ${body.tempMin}°C / ${body.tempMax}°C${metrics ? '\n' + metrics : ''}${forecastBlock}
+- Today's low/high: ${body.tempMin}°C / ${body.tempMax}°C${metrics ? '\n' + metrics : ''}${forecastBlock}${cuisineLine}
 
 Recommend exactly ONE dish that fits this moment, described to make their mouth water.
+- If the user chose Korean/Japanese/Chinese/Western, recommend within that category.
 - Reflect the forecast if present (e.g., rain coming later → a warm brothy dish).
 - If air quality is bad, prefer something enjoyed indoors; if it's raining, prefer something warm.
 - Lean into seasonal ingredients. A subtle nod to the day's mood is welcome.

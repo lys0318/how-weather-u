@@ -4,7 +4,7 @@ import { corsHeaders } from '../_shared/cors.ts';
 import { callClaude, MODEL_HAIKU } from '../_shared/claude.ts';
 import { requireUser, checkAndLog, limitExceededResponse } from '../_shared/limit.ts';
 import { getKstContext } from '../_shared/datetime.ts';
-import { Lang, conditionLabel, timeOfDayLabel, metricLines } from '../_shared/labels.ts';
+import { Lang, conditionLabel, timeOfDayLabel, metricLines, placeLabel, socialLabel } from '../_shared/labels.ts';
 
 const SYSTEM_PROMPT_KO = `당신은 날씨에 어울리는 활동을 제안해주는 친한 친구입니다.
 
@@ -68,6 +68,8 @@ interface RequestBody {
   pm10?: number;
   pm25?: number;
   rainfall?: number;
+  place?: string;
+  social?: string;
   lang?: Lang;
 }
 
@@ -131,6 +133,13 @@ Deno.serve(async (req) => {
     const pool = ACTIVITY_POOL[lang];
     const pick = pool[Math.floor(Math.random() * pool.length)];
 
+    const placeText = placeLabel(lang, body.place);
+    const socialText = socialLabel(lang, body.social);
+    const prefBits = [placeText, socialText].filter(Boolean).join(lang === 'ko' ? ', ' : ' / ');
+    const prefLine = prefBits
+      ? (lang === 'ko' ? `\n- 선호: ${prefBits} 활동으로` : `\n- Preference: ${prefBits} activity`)
+      : '';
+
     const userPrompt =
       lang === 'ko'
         ? `현재 상황:
@@ -139,9 +148,10 @@ Deno.serve(async (req) => {
 - 시간대: ${todText} (${body.hour}시)
 - 날씨: ${condText}
 - 현재 기온: ${body.temp}°C
-- 오늘 최저/최고: ${body.tempMin}°C / ${body.tempMax}°C${metrics ? '\n' + metrics : ''}${forecastBlock}
+- 오늘 최저/최고: ${body.tempMin}°C / ${body.tempMax}°C${metrics ? '\n' + metrics : ''}${forecastBlock}${prefLine}
 
 이 상황에 딱 어울리는 활동을 하나, 장면이 그려지게 묘사해서 추천해주세요.
+- 사용자가 실내/실외·혼자/같이 선호를 골랐으면 꼭 맞춰주세요.
 - 향후 예보가 있으면 꼭 반영하세요.
 - 자외선/미세먼지/강수량도 고려하세요 (높은 자외선·나쁜 미세먼지·비 → 실내나 대비 제안).
 - 요일·시간 분위기를 살리세요.
@@ -153,9 +163,10 @@ Deno.serve(async (req) => {
 - Time of day: ${todText} (${body.hour}:00)
 - Weather: ${condText}
 - Current temp: ${body.temp}°C
-- Today's low/high: ${body.tempMin}°C / ${body.tempMax}°C${metrics ? '\n' + metrics : ''}${forecastBlock}
+- Today's low/high: ${body.tempMin}°C / ${body.tempMax}°C${metrics ? '\n' + metrics : ''}${forecastBlock}${prefLine}
 
 Recommend ONE activity that fits this moment, described so the scene comes alive.
+- If the user chose indoor/outdoor and solo/with-others, honor it.
 - Reflect the forecast if present.
 - Consider UV / air quality / rainfall (high UV, bad air, or rain → suggest indoor or precautions).
 - Honor the day/time mood.

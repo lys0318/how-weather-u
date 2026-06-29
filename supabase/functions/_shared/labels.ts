@@ -90,3 +90,26 @@ export function metricLines(lang: Lang, m: Metrics): string {
   }
   return lines.join('\n');
 }
+
+// ── 활동/음식 선호 (enum allowlist, 미지값 → '') ──────────────
+const PLACE: Record<Lang, Record<string, string>> = {
+  ko: { indoor: '실내', outdoor: '실외', random: '' },
+  en: { indoor: 'indoor', outdoor: 'outdoor', random: '' },
+};
+const SOCIAL: Record<Lang, Record<string, string>> = {
+  ko: { solo: '혼자', group: '다른 사람과 함께' },
+  en: { solo: 'solo / alone', group: 'with others' },
+};
+const CUISINE: Record<Lang, Record<string, string>> = {
+  ko: { korean: '한식', japanese: '일식', chinese: '중식', western: '양식' },
+  en: { korean: 'Korean food', japanese: 'Japanese food', chinese: 'Chinese food', western: 'Western food' },
+};
+export function placeLabel(lang: Lang, p?: string): string {
+  return p ? (PLACE[lang][p] ?? '') : '';
+}
+export function socialLabel(lang: Lang, s?: string): string {
+  return s ? (SOCIAL[lang][s] ?? '') : '';
+}
+export function cuisineLabel(lang: Lang, c?: string): string {
+  return c ? (CUISINE[lang][c] ?? '') : '';
+}
