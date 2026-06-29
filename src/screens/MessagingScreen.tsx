@@ -1,8 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity,
-  ActivityIndicator, Modal, Pressable,
+  ActivityIndicator, Modal, Pressable, TextInput,
 } from 'react-native';
+import InputSheet from '../components/InputSheet';
 import { useWeather } from '../hooks/useWeather';
 import { useMessage } from '../hooks/useMessage';
 import { useActivity } from '../hooks/useActivity';
@@ -15,7 +16,8 @@ import NativeAdCard from '../components/NativeAdCard';
 import { COLORS, FONTS, RADII } from '../constants/theme';
 import { useI18n } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
-import { saveMessage, saveEntry } from '../utils/storage';
+import { saveMessage, saveEntry, getGenPrefs, setGenPrefs } from '../utils/storage';
+import { GenPrefs, DEFAULT_GEN_PREFS, Place, Social, Cuisine } from '../constants/weather';
 import { useFocusEffect } from '@react-navigation/native';
 import { useCallback } from 'react';
 import { setStatusBarStyle } from 'expo-status-bar';
@@ -36,6 +38,14 @@ export default function MessagingScreen() {
   const { t, lang } = useI18n();
   const { isGuest } = useAuth();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [genPrefs, setGenPrefsState] = useState<GenPrefs>(DEFAULT_GEN_PREFS);
+  const [actSheet, setActSheet] = useState(false);
+  const [foodSheet, setFoodSheet] = useState(false);
+  const [mood, setMood] = useState('');
+  const [situation, setSituation] = useState('');
+  const lastInputs = useRef<{ mood?: string; situation?: string }>({});
+  useEffect(() => { getGenPrefs().then(setGenPrefsState).catch(() => {}); }, []);
+  const persistPrefs = (next: GenPrefs) => { setGenPrefsState(next); setGenPrefs(next).catch(() => {}); };
 
   useFocusEffect(
     useCallback(() => {
@@ -45,7 +55,7 @@ export default function MessagingScreen() {
 
   // 생성된 메시지/활동/음식/운세를 히스토리에 저장 (게스트는 저장 안 함)
   useEffect(() => {
-    if (message && weather && !isGuest) saveMessage(message, weather.emoji).catch(() => {});
+    if (message && weather && !isGuest) saveMessage(message, weather.emoji, lastInputs.current).catch(() => {});
   }, [message]);
   useEffect(() => {
     if (activity && weather && !isGuest) saveEntry(activity.text, weather.emoji, weather.condition, 'activity').catch(() => {});
@@ -63,17 +73,23 @@ export default function MessagingScreen() {
   const handlePickPreference = (pref: Preference) => {
     setPickerOpen(false);
     if (!weather) return;
-    runWithGate(() => generateMsg(weather, pref));
+    lastInputs.current = { mood: mood.trim() || undefined, situation: situation.trim() || undefined };
+    runWithGate(() => generateMsg(weather, pref, lastInputs.current));
+    setMood(''); setSituation('');
   };
 
-  const handleActivity = () => {
-    if (!weather) return;
-    runWithGate(() => generateActivity(weather));
-  };
+  const handleActivity = () => setActSheet(true);
+  const handleFood = () => setFoodSheet(true);
 
-  const handleFood = () => {
+  const submitActivity = () => {
+    setActSheet(false);
     if (!weather) return;
-    runWithGate(() => generateFood(weather));
+    runWithGate(() => generateActivity(weather, { place: genPrefs.place, social: genPrefs.social }));
+  };
+  const submitFood = () => {
+    setFoodSheet(false);
+    if (!weather) return;
+    runWithGate(() => generateFood(weather, { cuisine: genPrefs.cuisine }));
   };
 
   const handleFortune = () => {
@@ -204,6 +220,23 @@ export default function MessagingScreen() {
             <View style={styles.sheetGrip} />
             <Text style={styles.modalTitle}>{t('home.tonePickTitle')}</Text>
             <Text style={styles.modalSubtitle}>{t('home.tonePickSubtitle')}</Text>
+            <TextInput
+              style={styles.input}
+              placeholder={t('gen.moodPh')}
+              placeholderTextColor={COLORS.ink3}
+              value={mood}
+              onChangeText={setMood}
+              maxLength={200}
+            />
+            <TextInput
+              style={[styles.input, styles.inputMultiline]}
+              placeholder={t('gen.situationPh')}
+              placeholderTextColor={COLORS.ink3}
+              value={situation}
+              onChangeText={setSituation}
+              maxLength={200}
+              multiline
+            />
             <View style={styles.modalOptions}>
               {PREF_ORDER.map((key) => (
                 <TouchableOpacity
@@ -227,6 +260,57 @@ export default function MessagingScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <InputSheet
+        visible={actSheet}
+        title={t('gen.titleActivity')}
+        submitLabel={t('gen.submit')}
+        onClose={() => setActSheet(false)}
+        onSubmit={submitActivity}
+      >
+        <View style={styles.chipRow}>
+          {(['indoor', 'outdoor', 'random'] as Place[]).map((p) => (
+            <TouchableOpacity key={p}
+              style={[styles.chip, genPrefs.place === p && styles.chipOn]}
+              onPress={() => persistPrefs({ ...genPrefs, place: p })}>
+              <Text style={[styles.chipText, genPrefs.place === p && styles.chipTextOn]}>
+                {t(p === 'indoor' ? 'gen.placeIndoor' : p === 'outdoor' ? 'gen.placeOutdoor' : 'gen.placeRandom')}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+        <View style={styles.chipRow}>
+          {(['solo', 'group'] as Social[]).map((s) => (
+            <TouchableOpacity key={s}
+              style={[styles.chip, genPrefs.social === s && styles.chipOn]}
+              onPress={() => persistPrefs({ ...genPrefs, social: s })}>
+              <Text style={[styles.chipText, genPrefs.social === s && styles.chipTextOn]}>
+                {t(s === 'solo' ? 'gen.solo' : 'gen.group')}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </InputSheet>
+
+      <InputSheet
+        visible={foodSheet}
+        title={t('gen.titleFood')}
+        submitLabel={t('gen.submit')}
+        onClose={() => setFoodSheet(false)}
+        onSubmit={submitFood}
+      >
+        <View style={styles.chipRow}>
+          {(['korean', 'japanese', 'chinese', 'western'] as Cuisine[]).map((c) => (
+            <TouchableOpacity key={c}
+              style={[styles.chip, genPrefs.cuisine === c && styles.chipOn]}
+              onPress={() => persistPrefs({ ...genPrefs, cuisine: c })}>
+              <Text style={[styles.chipText, genPrefs.cuisine === c && styles.chipTextOn]}>
+                {t(c === 'korean' ? 'gen.cuisineKorean' : c === 'japanese' ? 'gen.cuisineJapanese' : c === 'chinese' ? 'gen.cuisineChinese' : 'gen.cuisineWestern')}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      </InputSheet>
 
       <AppBanner />
     </View>
@@ -322,4 +406,18 @@ const styles = StyleSheet.create({
   optionDesc: { color: COLORS.ink3, fontSize: 12.5, marginTop: 3, lineHeight: 18 },
   modalCancel: { marginTop: 16, paddingVertical: 12, alignItems: 'center' },
   modalCancelText: { color: COLORS.ink3, fontSize: 14 },
+  input: {
+    borderWidth: 1, borderColor: COLORS.line, borderRadius: RADII.card,
+    paddingHorizontal: 14, paddingVertical: 11, fontSize: 14.5,
+    color: COLORS.ink, backgroundColor: COLORS.card, marginBottom: 10,
+  },
+  inputMultiline: { minHeight: 64, textAlignVertical: 'top' },
+  chipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, justifyContent: 'center' },
+  chip: {
+    paddingVertical: 10, paddingHorizontal: 16, borderRadius: 999,
+    borderWidth: 1.5, borderColor: COLORS.line, backgroundColor: COLORS.card,
+  },
+  chipOn: { borderColor: COLORS.ember, backgroundColor: COLORS.emberSoft },
+  chipText: { color: COLORS.ink2, fontSize: 14, fontWeight: '600' },
+  chipTextOn: { color: COLORS.emberD },
 });

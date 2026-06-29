@@ -328,6 +328,11 @@ function MessageCard({ message, showDateHeader, onBookmarkToggle, onShare, t }: 
         </View>
         {/* 메시지 텍스트 */}
         <Text style={styles.messageText}>{message.text}</Text>
+        {(message.mood || message.situation) && (
+          <Text style={styles.moodLine} numberOfLines={2}>
+            {t('history.moodLabel')}: {[message.mood, message.situation].filter(Boolean).join(' · ')}
+          </Text>
+        )}
         <View style={styles.cardFoot}>
           <Text style={styles.letterMark}>SKY LETTER</Text>
           <View style={[styles.bookmarkSeal, message.isBookmarked && styles.bookmarkSealOn]}>
@@ -526,6 +531,7 @@ const styles = StyleSheet.create({
   actionIcon: { fontSize: 15, color: COLORS.ink3 },
   bookmarked: { color: COLORS.ember },
   messageText: { fontFamily: FONTS.serifKo, fontSize: 16, color: COLORS.ink, lineHeight: 28 },
+  moodLine: { color: COLORS.ink3, fontSize: 12, marginTop: 8, fontStyle: 'italic' },
   cardFoot: {
     flexDirection: 'row',
     justifyContent: 'space-between',

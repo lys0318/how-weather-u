@@ -9,6 +9,7 @@ import {
   Share,
   Modal,
   Pressable,
+  TextInput,
   AppState,
   Alert,
   RefreshControl,
@@ -86,6 +87,9 @@ export default function HomeScreen() {
   const { t, lang } = useI18n();
   const { isGuest } = useAuth();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [mood, setMood] = useState('');
+  const [situation, setSituation] = useState('');
+  const lastInputs = useRef<{ mood?: string; situation?: string }>({});
   const [guideOpen, setGuideOpen] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [now, setNow] = useState<Date>(() => new Date());
@@ -195,7 +199,7 @@ export default function HomeScreen() {
 
   useEffect(() => {
     if (message && weather && !isGuest) {
-      saveMessage(message, weather.emoji).catch(() => {});
+      saveMessage(message, weather.emoji, lastInputs.current).catch(() => {});
     }
   }, [message]);
 
@@ -207,7 +211,9 @@ export default function HomeScreen() {
   const handlePickPreference = (pref: Preference) => {
     setPickerOpen(false);
     if (!weather) return;
-    runWithGate(() => generate(weather, pref));
+    lastInputs.current = { mood: mood.trim() || undefined, situation: situation.trim() || undefined };
+    runWithGate(() => generate(weather, pref, lastInputs.current));
+    setMood(''); setSituation('');
   };
 
   const handleRefresh = useCallback(async () => {
@@ -522,6 +528,23 @@ export default function HomeScreen() {
             <View style={styles.sheetGrip} />
             <Text style={styles.modalTitle}>{t('home.tonePickTitle')}</Text>
             <Text style={styles.modalSubtitle}>{t('home.tonePickSubtitle')}</Text>
+            <TextInput
+              style={styles.toneInput}
+              placeholder={t('gen.moodPh')}
+              placeholderTextColor={COLORS.ink3}
+              value={mood}
+              onChangeText={setMood}
+              maxLength={200}
+            />
+            <TextInput
+              style={[styles.toneInput, styles.toneInputMultiline]}
+              placeholder={t('gen.situationPh')}
+              placeholderTextColor={COLORS.ink3}
+              value={situation}
+              onChangeText={setSituation}
+              maxLength={200}
+              multiline
+            />
             <View style={styles.modalOptions}>
               {PREF_ORDER.map((key) => (
                 <TouchableOpacity
@@ -1013,6 +1036,12 @@ const styles = StyleSheet.create({
   },
   modalTitle: { fontFamily: FONTS.serifKo, color: COLORS.ink, fontSize: 21, textAlign: 'center' },
   modalSubtitle: { color: COLORS.ink3, fontSize: 13, textAlign: 'center', marginTop: 8, marginBottom: 22 },
+  toneInput: {
+    borderWidth: 1, borderColor: COLORS.line, borderRadius: RADII.card,
+    paddingHorizontal: 14, paddingVertical: 11, fontSize: 14.5,
+    color: COLORS.ink, backgroundColor: COLORS.card, marginBottom: 10,
+  },
+  toneInputMultiline: { minHeight: 64, textAlignVertical: 'top' },
   modalOptions: { gap: 11 },
   optionRow: {
     flexDirection: 'row',
