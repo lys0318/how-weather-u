@@ -70,6 +70,7 @@ interface RequestBody {
   rainfall?: number;
   place?: string;
   social?: string;
+  tzOffsetMinutes?: number;
   lang?: Lang;
 }
 
@@ -112,7 +113,7 @@ Deno.serve(async (req) => {
     }
 
     const lang: Lang = body.lang === 'en' ? 'en' : 'ko';
-    const kst = getKstContext(lang);
+    const kst = getKstContext(lang, body.tzOffsetMinutes);
     const metrics = metricLines(lang, body);
     const condText = body.condition ? conditionLabel(lang, body.condition) : '';
     const todText = body.timeOfDay ? timeOfDayLabel(lang, body.timeOfDay) : '';

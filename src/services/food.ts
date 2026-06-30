@@ -35,6 +35,7 @@ export async function generateFood(
     pm25: weather.pm25,
     rainfall: weather.rainfall,
     cuisine: prefs?.cuisine,
+    tzOffsetMinutes: -new Date().getTimezoneOffset(), // 현지 UTC offset(분), KST=540
     lang: getCurrentLang(),
   });
 

@@ -392,14 +392,9 @@ function formatDateHeader(iso: string): string {
 
 function formatTime(iso: string): string {
   const d = new Date(iso);
-  const h = d.getHours();
+  const h = String(d.getHours()).padStart(2, '0'); // 24시간제
   const m = String(d.getMinutes()).padStart(2, '0');
-  const hour = h % 12 === 0 ? 12 : h % 12;
-  if (getCurrentLang() === 'en') {
-    return `${hour}:${m} ${h < 12 ? 'AM' : 'PM'}`;
-  }
-  const ampm = h < 12 ? '오전' : '오후';
-  return `${ampm} ${hour}:${m}`;
+  return `${h}:${m}`;
 }
 
 function formatDate(iso: string): string {

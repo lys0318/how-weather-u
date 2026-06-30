@@ -36,6 +36,7 @@ export async function generateActivity(
     rainfall: weather.rainfall,
     place: prefs?.place,
     social: prefs?.social,
+    tzOffsetMinutes: -new Date().getTimezoneOffset(), // 현지 UTC offset(분), KST=540
     lang: getCurrentLang(),
   });
 
