@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, Modal, Pressable,
   ScrollView, TextInput, ActivityIndicator, Alert,
+  KeyboardAvoidingView, Platform,
 } from 'react-native';
 import { COLORS, FONTS, RADII } from '../constants/theme';
 import { useI18n } from '../i18n';
@@ -65,7 +66,11 @@ export default function ProfileEditor({ visible, onClose }: Props) {
 
   return (
     <Modal animationType="slide" transparent visible={visible} onRequestClose={onClose}>
-      <Pressable style={styles.overlay} onPress={onClose}>
+      <KeyboardAvoidingView
+        style={styles.overlay}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <Pressable style={StyleSheet.absoluteFill} onPress={onClose} />
         <Pressable style={styles.sheet} onPress={(e) => e.stopPropagation()}>
           <View style={styles.grip} />
           <Text style={styles.title}>{t('profile.title')}</Text>
@@ -122,7 +127,7 @@ export default function ProfileEditor({ visible, onClose }: Props) {
               : <Text style={styles.saveText}>{t('profile.save')}</Text>}
           </TouchableOpacity>
         </Pressable>
-      </Pressable>
+      </KeyboardAvoidingView>
     </Modal>
   );
 }

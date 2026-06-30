@@ -40,7 +40,9 @@ import OutfitCard from '../components/OutfitCard';
 import LifeIndex from '../components/LifeIndex';
 import AppBanner from '../components/AppBanner';
 import { runWithGate } from '../hooks/useGenerationGate';
-import { saveMessage, isGuideDismissedToday, dismissGuideToday } from '../utils/storage';
+import { saveMessage, isGuideDismissedToday, dismissGuideToday, isProfilePrompted, setProfilePrompted } from '../utils/storage';
+import ProfileEditor from '../components/ProfileEditor';
+import { getMyProfile } from '../services/profile';
 import { useI18n } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
 import { refreshNotificationsIfNeeded } from '../services/notification';
@@ -89,7 +91,23 @@ export default function HomeScreen() {
   const [pickerOpen, setPickerOpen] = useState(false);
   const [mood, setMood] = useState('');
   const [situation, setSituation] = useState('');
+  const [selectedPref, setSelectedPref] = useState<Preference | undefined>(undefined);
   const lastInputs = useRef<{ mood?: string; situation?: string }>({});
+  const [profilePromptOpen, setProfilePromptOpen] = useState(false);
+
+  // 로그인 후 1회: 프로필 미작성이면 작성 유도(선택 — 닫으면 건너뛰기)
+  useEffect(() => {
+    (async () => {
+      if (isGuest) return;
+      if (await isProfilePrompted()) return;
+      try {
+        const p = await getMyProfile();
+        const empty = !p || (!p.nickname && !p.ageBand && !p.occupation && !p.interests && !p.concern);
+        if (empty) setProfilePromptOpen(true);
+      } catch {}
+      await setProfilePrompted();
+    })();
+  }, []);
   const [guideOpen, setGuideOpen] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [now, setNow] = useState<Date>(() => new Date());
@@ -203,7 +221,7 @@ export default function HomeScreen() {
     }
   }, [message]);
 
-  const openPicker = () => setPickerOpen(true);
+  const openPicker = () => { setSelectedPref(undefined); setPickerOpen(true); };
   const cardRef = useRef<View>(null);
   const [sharing, setSharing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -546,22 +564,33 @@ export default function HomeScreen() {
               multiline
             />
             <View style={styles.modalOptions}>
-              {PREF_ORDER.map((key) => (
-                <TouchableOpacity
-                  key={key}
-                  style={styles.optionRow}
-                  onPress={() => handlePickPreference(key)}
-                >
-                  <View style={styles.optionIco}>
-                    <Text style={styles.optionEmoji}>{PREFERENCE_EMOJI[key]}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.optionTitle}>{prefLabel(key)}</Text>
-                    <Text style={styles.optionDesc}>{t(PREF_DESC_KEY[key])}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+              {PREF_ORDER.map((key) => {
+                const on = selectedPref === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[styles.optionRow, on && styles.optionRowOn]}
+                    onPress={() => setSelectedPref(key)}
+                  >
+                    <View style={styles.optionIco}>
+                      <Text style={styles.optionEmoji}>{PREFERENCE_EMOJI[key]}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.optionTitle}>{prefLabel(key)}</Text>
+                      <Text style={styles.optionDesc}>{t(PREF_DESC_KEY[key])}</Text>
+                    </View>
+                    {on && <Text style={styles.optionCheck}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+            <TouchableOpacity
+              style={[styles.modalSubmit, !selectedPref && styles.btnDisabled]}
+              onPress={() => selectedPref && handlePickPreference(selectedPref)}
+              disabled={!selectedPref}
+            >
+              <Text style={styles.modalSubmitText}>{t('gen.submit')}</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.modalCancel} onPress={() => setPickerOpen(false)}>
               <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
@@ -637,6 +666,8 @@ export default function HomeScreen() {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <ProfileEditor visible={profilePromptOpen} onClose={() => setProfilePromptOpen(false)} />
 
       <AppBanner />
     </View>
@@ -1065,7 +1096,11 @@ const styles = StyleSheet.create({
   optionEmoji: { fontSize: 20 },
   optionTitle: { fontFamily: FONTS.serifKoBold, color: COLORS.ink, fontSize: 16 },
   optionDesc: { color: COLORS.ink3, fontSize: 12.5, marginTop: 3, lineHeight: 18 },
-  modalCancel: { marginTop: 16, paddingVertical: 12, alignItems: 'center' },
+  optionRowOn: { borderColor: COLORS.ember, backgroundColor: COLORS.emberSoft },
+  optionCheck: { color: COLORS.ember, fontSize: 18, fontWeight: '700', marginLeft: 8 },
+  modalSubmit: { backgroundColor: COLORS.ember, borderRadius: RADII.btn, paddingVertical: 15, alignItems: 'center', marginTop: 18 },
+  modalSubmitText: { color: COLORS.emberText, fontSize: 15, fontWeight: '600' },
+  modalCancel: { marginTop: 10, paddingVertical: 12, alignItems: 'center' },
   modalCancelText: { color: COLORS.ink3, fontSize: 14 },
 
   fullLetterOverlay: {

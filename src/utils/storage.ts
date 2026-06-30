@@ -16,7 +16,16 @@ const KEYS = {
   NOTIF_SLOTS: 'notifSlots',                     // 받을 시간대 (아침/점심/저녁)
   GUIDE_DISMISSED: 'guideDismissedDate',         // 사용 안내 '오늘 하루 안 보기' 날짜
   GEN_PREFS: 'genPrefs',                          // 생성 시 칩 선택 기본값 (실내외/혼자같이/요리종류)
+  PROFILE_PROMPTED: 'profilePrompted',            // 로그인 후 프로필 작성 1회 유도 여부
 } as const;
+
+// ─── 로그인 후 프로필 작성 유도 (1회) ───────────────────────
+export async function isProfilePrompted(): Promise<boolean> {
+  return (await AsyncStorage.getItem(KEYS.PROFILE_PROMPTED)) === '1';
+}
+export async function setProfilePrompted(): Promise<void> {
+  await AsyncStorage.setItem(KEYS.PROFILE_PROMPTED, '1').catch(() => {});
+}
 
 // ─── 사용 안내 모달: 오늘 하루 안 보기 ───────────────────────
 function kstTodayStr(): string {

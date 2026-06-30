@@ -211,9 +211,9 @@ export function computeUmbrella(weather: WeatherInfo, currentHour: number): Umbr
 /** 빨래 지수 0~2 (0=좋음, 1=보통, 2=나쁨) */
 export function laundryIndex(weather: WeatherInfo): { level: number; ko: string } {
   const rain = ['rain', 'drizzle', 'thunderstorm', 'snow'].includes(weather.condition);
-  if (rain) return { level: 2, ko: '비/눈으로 건조 어려움' };
-  if (weather.humidity > 75) return { level: 1, ko: '습도 높아 건조 오래 걸림' };
-  return { level: 0, ko: '건조하기 좋은 날' };
+  if (rain) return { level: 2, ko: '비·눈엔 실내 건조' };
+  if (weather.humidity > 75) return { level: 1, ko: '습해서 더디게 마름' };
+  return { level: 0, ko: '잘 마르는 날' };
 }
 
 /** 마스크 필요도 0~2 (미세먼지 기반) */

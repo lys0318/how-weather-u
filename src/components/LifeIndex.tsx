@@ -43,7 +43,7 @@ export default function LifeIndex({ weather, currentHour }: Props) {
         <View key={i} style={[styles.card, { borderColor: LEVEL_COLORS[c.level] + '66' }]}>
           <Text style={styles.icon}>{c.icon}</Text>
           <Text style={styles.label}>{c.label}</Text>
-          <Text style={[styles.desc, { color: LEVEL_COLORS[c.level] }]} numberOfLines={2}>
+          <Text style={[styles.desc, { color: LEVEL_COLORS[c.level] }]} numberOfLines={3}>
             {c.desc}
           </Text>
         </View>
@@ -65,5 +65,5 @@ const styles = StyleSheet.create({
   },
   icon: { fontSize: 24 },
   label: { fontFamily: FONTS.mono, fontSize: 12, color: COLORS.ink2 },
-  desc: { fontFamily: FONTS.mono, fontSize: 11, textAlign: 'center' },
+  desc: { fontSize: 11.5, lineHeight: 15, textAlign: 'center' },
 });

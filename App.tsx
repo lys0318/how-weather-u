@@ -4,6 +4,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import * as Notifications from 'expo-notifications';
 import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
@@ -175,10 +176,12 @@ export default function App() {
   }
 
   return (
-    <LanguageProvider>
-      <AuthProvider>
-        <AppNavigator />
-      </AuthProvider>
-    </LanguageProvider>
+    <SafeAreaProvider>
+      <LanguageProvider>
+        <AuthProvider>
+          <AppNavigator />
+        </AuthProvider>
+      </LanguageProvider>
+    </SafeAreaProvider>
   );
 }

@@ -43,6 +43,7 @@ export default function MessagingScreen() {
   const [foodSheet, setFoodSheet] = useState(false);
   const [mood, setMood] = useState('');
   const [situation, setSituation] = useState('');
+  const [selectedPref, setSelectedPref] = useState<Preference | undefined>(undefined);
   const lastInputs = useRef<{ mood?: string; situation?: string }>({});
   useEffect(() => { getGenPrefs().then(setGenPrefsState).catch(() => {}); }, []);
   const persistPrefs = (next: GenPrefs) => { setGenPrefsState(next); setGenPrefs(next).catch(() => {}); };
@@ -115,7 +116,7 @@ export default function MessagingScreen() {
           )}
           <TouchableOpacity
             style={[styles.btn, (msgLoading || noWeather) && styles.btnDisabled]}
-            onPress={() => setPickerOpen(true)}
+            onPress={() => { setSelectedPref(undefined); setPickerOpen(true); }}
             disabled={msgLoading || noWeather}
           >
             {msgLoading ? (
@@ -238,22 +239,33 @@ export default function MessagingScreen() {
               multiline
             />
             <View style={styles.modalOptions}>
-              {PREF_ORDER.map((key) => (
-                <TouchableOpacity
-                  key={key}
-                  style={styles.optionRow}
-                  onPress={() => handlePickPreference(key)}
-                >
-                  <View style={styles.optionIco}>
-                    <Text style={styles.optionEmoji}>{PREFERENCE_EMOJI[key]}</Text>
-                  </View>
-                  <View style={{ flex: 1 }}>
-                    <Text style={styles.optionTitle}>{prefLabel(key)}</Text>
-                    <Text style={styles.optionDesc}>{t(PREF_DESC_KEY[key])}</Text>
-                  </View>
-                </TouchableOpacity>
-              ))}
+              {PREF_ORDER.map((key) => {
+                const on = selectedPref === key;
+                return (
+                  <TouchableOpacity
+                    key={key}
+                    style={[styles.optionRow, on && styles.optionRowOn]}
+                    onPress={() => setSelectedPref(key)}
+                  >
+                    <View style={styles.optionIco}>
+                      <Text style={styles.optionEmoji}>{PREFERENCE_EMOJI[key]}</Text>
+                    </View>
+                    <View style={{ flex: 1 }}>
+                      <Text style={styles.optionTitle}>{prefLabel(key)}</Text>
+                      <Text style={styles.optionDesc}>{t(PREF_DESC_KEY[key])}</Text>
+                    </View>
+                    {on && <Text style={styles.optionCheck}>✓</Text>}
+                  </TouchableOpacity>
+                );
+              })}
             </View>
+            <TouchableOpacity
+              style={[styles.modalSubmit, !selectedPref && styles.btnDisabled]}
+              onPress={() => selectedPref && handlePickPreference(selectedPref)}
+              disabled={!selectedPref}
+            >
+              <Text style={styles.modalSubmitText}>{t('gen.submit')}</Text>
+            </TouchableOpacity>
             <TouchableOpacity style={styles.modalCancel} onPress={() => setPickerOpen(false)}>
               <Text style={styles.modalCancelText}>{t('common.cancel')}</Text>
             </TouchableOpacity>
@@ -402,9 +414,13 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.paper3, alignItems: 'center', justifyContent: 'center',
   },
   optionEmoji: { fontSize: 20 },
+  optionRowOn: { borderColor: COLORS.ember, backgroundColor: COLORS.emberSoft },
+  optionCheck: { color: COLORS.ember, fontSize: 18, fontWeight: '700', marginLeft: 8 },
   optionTitle: { fontFamily: FONTS.serifKoBold, color: COLORS.ink, fontSize: 16 },
   optionDesc: { color: COLORS.ink3, fontSize: 12.5, marginTop: 3, lineHeight: 18 },
-  modalCancel: { marginTop: 16, paddingVertical: 12, alignItems: 'center' },
+  modalSubmit: { backgroundColor: COLORS.ember, borderRadius: RADII.btn, paddingVertical: 15, alignItems: 'center', marginTop: 18 },
+  modalSubmitText: { color: COLORS.emberText, fontSize: 15, fontWeight: '600' },
+  modalCancel: { marginTop: 10, paddingVertical: 12, alignItems: 'center' },
   modalCancelText: { color: COLORS.ink3, fontSize: 14 },
   input: {
     borderWidth: 1, borderColor: COLORS.line, borderRadius: RADII.card,
