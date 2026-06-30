@@ -178,6 +178,10 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
   const condition = getConditionFromId(weatherId);
   const meta = CONDITION_META[condition];
 
+  // 해외 로컬 시간대(초) — OpenWeather가 위치 기준 UTC offset 제공. 없으면 KST(+9).
+  // 시간별/주간/오늘 경계 계산에 사용 (KST 하드코딩 시 해외에서 시간·요일 어긋남)
+  const tzSec = typeof data.timezone === 'number' ? data.timezone : 9 * 3600;
+
   // ── 오늘의 최저/최고 기온 계산 ───────────────────────────
   // OpenWeatherMap의 forecast는 3시간 간격 예보를 줌
   // - "오늘"의 정의: KST 자정 ~ 다음 KST 자정
@@ -203,11 +207,10 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
 
       // ── 향후 12시간 (4슬롯) 예보 요약 — 엣지함수 payload용 ──
       forecastSummary = list.slice(0, 4).map((it) => {
-        const dt = new Date(it.dt * 1000);
-        const kstHour = (dt.getUTCHours() + 9) % 24;
+        const localHour = new Date((it.dt + tzSec) * 1000).getUTCHours();
         const cond = getConditionFromId(it.weather[0]?.id ?? 800);
         return {
-          hour: kstHour,
+          hour: localHour,
           condition: cond,
           conditionKo: CONDITION_META[cond].ko,
           temp: Math.round(it.main.temp),
@@ -217,20 +220,20 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
 
       // ── 시간별 예보 (3h 간격, ~24h) — 맨 앞에 '지금'(현재) 보장 ──
       owHourly = list.slice(0, 8).map((it: any) => {
-        const kstHour = (new Date(it.dt * 1000).getUTCHours() + 9) % 24;
+        const localHour = new Date((it.dt + tzSec) * 1000).getUTCHours();
         const cond = getConditionFromId(it.weather[0]?.id ?? 800);
         return {
-          hour: kstHour,
+          hour: localHour,
           condition: cond,
           conditionKo: CONDITION_META[cond].ko,
           temp: Math.round(it.main?.temp ?? 0),
           pop: it.pop ?? 0,
         };
       });
-      const curKstHour = (new Date().getUTCHours() + 9) % 24;
-      if (owHourly.length === 0 || owHourly[0].hour !== curKstHour) {
+      const curLocalHour = new Date(Date.now() + tzSec * 1000).getUTCHours();
+      if (owHourly.length === 0 || owHourly[0].hour !== curLocalHour) {
         owHourly.unshift({
-          hour: curKstHour, condition, conditionKo: meta.ko,
+          hour: curLocalHour, condition, conditionKo: meta.ko,
           temp: Math.round(data.main.temp), pop: owHourly[0]?.pop ?? 0,
         });
       }
@@ -238,8 +241,8 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
       // ── 주간 예보 (날짜별 묶기, ~4일) ─────────────────────
       const owDayMap = new Map<string, { tmps: number[]; pops: number[]; cond: ReturnType<typeof getConditionFromId> }>();
       for (const it of list as any[]) {
-        const kstD = new Date(it.dt * 1000 + 9 * 3600 * 1000);
-        const key = `${kstD.getUTCFullYear()}${String(kstD.getUTCMonth() + 1).padStart(2, '0')}${String(kstD.getUTCDate()).padStart(2, '0')}`;
+        const localD = new Date((it.dt + tzSec) * 1000);
+        const key = `${localD.getUTCFullYear()}${String(localD.getUTCMonth() + 1).padStart(2, '0')}${String(localD.getUTCDate()).padStart(2, '0')}`;
         if (!owDayMap.has(key)) owDayMap.set(key, { tmps: [], pops: [], cond: getConditionFromId(it.weather[0]?.id ?? 800) });
         const day = owDayMap.get(key)!;
         day.tmps.push(it.main?.temp ?? 0);
@@ -261,16 +264,16 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
         };
       });
 
-      // KST 기준 "오늘 끝(자정)" 계산
-      const nowKst = new Date(Date.now() + 9 * 60 * 60 * 1000);
-      const endOfTodayKstMs = Date.UTC(
-        nowKst.getUTCFullYear(),
-        nowKst.getUTCMonth(),
-        nowKst.getUTCDate() + 1, // 다음 날 자정
-      ) - 9 * 60 * 60 * 1000;
+      // 로컬 기준 "오늘 끝(자정)" 계산 (해외는 현지 자정)
+      const nowLocal = new Date(Date.now() + tzSec * 1000);
+      const endOfTodayMs = Date.UTC(
+        nowLocal.getUTCFullYear(),
+        nowLocal.getUTCMonth(),
+        nowLocal.getUTCDate() + 1, // 다음 날 자정
+      ) - tzSec * 1000;
 
       // 오늘에 해당하는 예보 항목
-      const todayItems = list.filter(item => item.dt * 1000 <= endOfTodayKstMs);
+      const todayItems = list.filter(item => item.dt * 1000 <= endOfTodayMs);
 
       // 사용할 항목 결정: 오늘 데이터가 3개 이상이면 오늘만, 부족하면 다음 24시간(8개)
       const itemsToUse =
