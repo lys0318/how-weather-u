@@ -108,7 +108,7 @@ export const translations = {
     },
     profile: {
       title: '내 프로필',
-      intro: '적어두면 메시지가 더 너에게 맞게 와요. 전부 선택이에요.',
+      intro: '적어두면 메시지가 사용자분께 더 맞게 와요. 하지만 필수는 아니고 선택이에요.',
       nicknameLabel: '뭐라고 불러드릴까요?',
       nicknamePh: '호칭 (예: 윤성, 사장님)',
       ageLabel: '나이대',
@@ -353,7 +353,7 @@ export const translations = {
     },
     profile: {
       title: 'My profile',
-      intro: 'Fill this in and messages fit you better. All optional.',
+      intro: 'Fill it in and your messages fit you better — optional, never required.',
       nicknameLabel: 'What should we call you?',
       nicknamePh: 'Name (e.g. Alex)',
       ageLabel: 'Age range',
