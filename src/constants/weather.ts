@@ -80,6 +80,7 @@ export interface WeatherInfo {
   pm10?: number;         // 미세먼지 PM10 (㎍/㎥)
   pm25?: number;         // 초미세먼지 PM2.5 (㎍/㎥)
   rainfall?: number;     // 1시간 강수량 (mm)
+  lat?: number;          // 위도 (남반구 계절 판별용)
 }
 
 // OpenWeatherMap weather ID → 앱 내부 condition 매핑

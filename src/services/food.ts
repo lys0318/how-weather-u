@@ -36,6 +36,7 @@ export async function generateFood(
     rainfall: weather.rainfall,
     cuisine: prefs?.cuisine,
     tzOffsetMinutes: -new Date().getTimezoneOffset(), // 현지 UTC offset(분), KST=540
+    southern: typeof weather.lat === 'number' ? weather.lat < 0 : false, // 남반구 계절 반전
     lang: getCurrentLang(),
   });
 

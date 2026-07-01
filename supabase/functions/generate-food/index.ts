@@ -66,6 +66,7 @@ interface RequestBody {
   rainfall?: number;
   cuisine?: string;
   tzOffsetMinutes?: number;
+  southern?: boolean;
   lang?: Lang;
 }
 
@@ -123,7 +124,7 @@ Deno.serve(async (req) => {
     }
 
     const lang: Lang = body.lang === 'en' ? 'en' : 'ko';
-    const kst = getKstContext(lang, body.tzOffsetMinutes);
+    const kst = getKstContext(lang, body.tzOffsetMinutes, body.southern);
     const meal = mealHint(lang, body.hour);
     const metrics = metricLines(lang, body);
     const condText = body.condition ? conditionLabel(lang, body.condition) : '';

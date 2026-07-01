@@ -215,6 +215,11 @@ export default function HomeScreen() {
     })();
   }, []);
 
+  // 날씨 로드되면 최신 날씨로 아침 브리핑 알림 본문 갱신 (옷차림+우산)
+  useEffect(() => {
+    if (weather) refreshNotificationsIfNeeded(weather).catch(() => {});
+  }, [weather]);
+
   useEffect(() => {
     if (message && weather && !isGuest) {
       saveMessage(message, weather.emoji, lastInputs.current).catch(() => {});
@@ -239,7 +244,7 @@ export default function HomeScreen() {
     try {
       await refetch();
       setNow(new Date());
-      try { await refreshNotificationsIfNeeded(); } catch {}
+      try { await refreshNotificationsIfNeeded(weather ?? undefined); } catch {}
     } finally {
       setRefreshing(false);
     }

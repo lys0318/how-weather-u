@@ -32,7 +32,8 @@ const SEASON: Record<Lang, Record<string, { name: string; hint: string }>> = {
 };
 
 // offsetMinutes = 현지 UTC offset(분). 기본 540(KST). 국내/구버전 클라는 540으로 동일 동작.
-export function getKstContext(lang: Lang = 'ko', offsetMinutes = 540): KstContext {
+// southern = 남반구면 계절 반전(봄↔가을, 여름↔겨울).
+export function getKstContext(lang: Lang = 'ko', offsetMinutes = 540, southern = false): KstContext {
   const off = typeof offsetMinutes === 'number' && Number.isFinite(offsetMinutes) ? offsetMinutes : 540;
   const local = new Date(Date.now() + off * 60 * 1000);
   const dow = local.getUTCDay();
@@ -41,6 +42,10 @@ export function getKstContext(lang: Lang = 'ko', offsetMinutes = 540): KstContex
   if (month >= 3 && month <= 5) key = 'spring';
   else if (month >= 6 && month <= 8) key = 'summer';
   else if (month >= 9 && month <= 11) key = 'autumn';
+  if (southern) {
+    key = key === 'spring' ? 'autumn' : key === 'autumn' ? 'spring'
+        : key === 'summer' ? 'winter' : 'summer';
+  }
   const s = SEASON[lang][key];
   return {
     weekday: WEEKDAY[lang][dow],

@@ -151,6 +151,7 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
         const result = await reconcileDailyExtremes({
           ...kma,
           city: koPlace || kma.city || '내 위치',
+          lat,
           ...airQuality,
         }, lat, lon);
         weatherCache = { data: result, fetchedAt: Date.now() };
@@ -314,6 +315,7 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
     // 못 잡으면 OpenWeather가 준 city 이름 fallback (예: "Anyang")
     city: koPlace || data.name,
     description: data.weather[0].description,
+    lat,
     forecast: forecastSummary.length > 0 ? forecastSummary : undefined,
     hourly: owHourly.length > 0 ? owHourly : undefined,
     daily: owDaily.length > 0 ? owDaily : undefined,

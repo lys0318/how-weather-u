@@ -179,7 +179,7 @@ export default function SettingsScreen() {
           await setNotifSlots(targetSlots);
           setSlots(targetSlots);
         }
-        await scheduleSlotNotifications(targetSlots);
+        await scheduleSlotNotifications(targetSlots, weather ?? undefined);
         setNotifEnabled(true);
       } else {
         await setNotificationsEnabled(false);
@@ -205,7 +205,7 @@ export default function SettingsScreen() {
     await setNotifSlots(next);
     // 알림 켜져있을 때만 재예약
     if (notifEnabled) {
-      await scheduleSlotNotifications(next);
+      await scheduleSlotNotifications(next, weather ?? undefined);
     }
   };
 
@@ -417,7 +417,7 @@ export default function SettingsScreen() {
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
-        <Text style={styles.appVersion}>v1.1.8</Text>
+        <Text style={styles.appVersion}>v1.1.9</Text>
       </View>
       </ScrollView>
       <ProfileEditor visible={profileOpen} onClose={() => setProfileOpen(false)} />
