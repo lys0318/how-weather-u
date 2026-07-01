@@ -1062,7 +1062,7 @@ const styles = StyleSheet.create({
   },
   errorTextBig: { color: COLORS.danger, fontSize: 14, lineHeight: 21, textAlign: 'center' },
 
-  btnGroup: { gap: 10, marginTop: 2 },
+  btnGroup: { gap: 10, marginTop: 2, marginBottom: 16 },
   primaryBtn: {
     backgroundColor: COLORS.ember,
     borderRadius: RADII.btn,
