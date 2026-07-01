@@ -137,6 +137,9 @@ export const translations = {
       tempRange: '최저 {min}° / 최고 {max}°',
       myLocation: '내 위치',
       noRain: '없음',
+      trendUp: '어제보다 {deg}° 높아요',
+      trendDown: '어제보다 {deg}° 낮아요',
+      trendSame: '어제와 비슷해요',
     },
     home: {
       weatherLoading: '날씨 불러오는 중...',
@@ -382,6 +385,9 @@ export const translations = {
       tempRange: 'L {min}° / H {max}°',
       myLocation: 'My location',
       noRain: 'None',
+      trendUp: '{deg}° warmer than yesterday',
+      trendDown: '{deg}° colder than yesterday',
+      trendSame: 'About the same as yesterday',
     },
     home: {
       weatherLoading: 'Loading weather...',

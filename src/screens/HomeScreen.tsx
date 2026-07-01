@@ -40,7 +40,7 @@ import OutfitCard from '../components/OutfitCard';
 import LifeIndex from '../components/LifeIndex';
 import AppBanner from '../components/AppBanner';
 import { runWithGate } from '../hooks/useGenerationGate';
-import { saveMessage, isGuideDismissedToday, dismissGuideToday, isProfilePrompted, setProfilePrompted } from '../utils/storage';
+import { saveMessage, isGuideDismissedToday, dismissGuideToday, isProfilePrompted, setProfilePrompted, recordTempPoint, getYesterdayTempDelta } from '../utils/storage';
 import ProfileEditor from '../components/ProfileEditor';
 import { getMyProfile } from '../services/profile';
 import { useI18n } from '../i18n';
@@ -89,6 +89,7 @@ export default function HomeScreen() {
   const { t, lang } = useI18n();
   const { isGuest } = useAuth();
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [tempDelta, setTempDelta] = useState<number | null>(null);
   const [mood, setMood] = useState('');
   const [situation, setSituation] = useState('');
   const [selectedPref, setSelectedPref] = useState<Preference | undefined>(undefined);
@@ -215,10 +216,14 @@ export default function HomeScreen() {
     })();
   }, []);
 
-  // 날씨 로드되면 최신 날씨로 아침 브리핑 알림 본문 갱신 (옷차림+우산)
+  // 날씨 로드되면 최신 날씨로 아침 브리핑 알림 본문 갱신 (옷차림+우산) + 어제 대비 온도 기록/계산
   useEffect(() => {
     if (weather) {
       refreshNotificationsIfNeeded(weather).catch(() => {});
+      (async () => {
+        await recordTempPoint(weather.temp);
+        setTempDelta(await getYesterdayTempDelta(weather.temp));
+      })().catch(() => {});
     }
   }, [weather]);
 
@@ -325,6 +330,15 @@ export default function HomeScreen() {
               <Text style={styles.wxRange}>
                 {t('weather.tempRange', { min: weather.tempMin, max: weather.tempMax })}
               </Text>
+              {tempDelta !== null && (
+                <Text style={styles.wxTrend}>
+                  {tempDelta === 0
+                    ? t('weather.trendSame')
+                    : tempDelta > 0
+                    ? t('weather.trendUp', { deg: tempDelta })
+                    : t('weather.trendDown', { deg: Math.abs(tempDelta) })}
+                </Text>
+              )}
               <Text style={styles.wxCond}>{conditionLabel(weather.condition, weather.conditionKo)}</Text>
               <Text style={styles.wxCity}>
                 {weather.city && weather.city !== '내 위치' ? weather.city : t('weather.myLocation')}
@@ -488,6 +502,25 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {/* 오늘의 메시지 받기 — 앱 열자마자 눈에 띄게 시간별 예보 위에 배치 */}
+          {weather && !weatherLoading && (
+            <View style={styles.btnGroup}>
+              <TouchableOpacity
+                style={[styles.primaryBtn, messageLoading && styles.btnDisabled]}
+                onPress={openPicker}
+                disabled={messageLoading}
+              >
+                {messageLoading ? (
+                  <ActivityIndicator color={COLORS.emberText} size="small" />
+                ) : (
+                  <Text style={styles.primaryBtnText}>
+                    {message ? t('home.getAnotherMessage') : t('home.getMessage')}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          )}
+
           {/* 시간별 예보 */}
           {weather?.hourly && weather.hourly.length > 0 && (
             <View style={styles.forecastSection}>
@@ -513,24 +546,6 @@ export default function HomeScreen() {
           {weather && (
             <View style={styles.forecastSection}>
               <LifeIndex weather={weather} currentHour={hour} />
-            </View>
-          )}
-
-          {weather && !weatherLoading && (
-            <View style={styles.btnGroup}>
-              <TouchableOpacity
-                style={[styles.primaryBtn, messageLoading && styles.btnDisabled]}
-                onPress={openPicker}
-                disabled={messageLoading}
-              >
-                {messageLoading ? (
-                  <ActivityIndicator color={COLORS.emberText} size="small" />
-                ) : (
-                  <Text style={styles.primaryBtnText}>
-                    {message ? t('home.getAnotherMessage') : t('home.getMessage')}
-                  </Text>
-                )}
-              </TouchableOpacity>
             </View>
           )}
 
@@ -722,6 +737,13 @@ const styles = StyleSheet.create({
     color: COLORS.skyText2,
     letterSpacing: 0.6,
     marginTop: 6,
+  },
+  wxTrend: {
+    fontFamily: FONTS.mono,
+    fontSize: 12,
+    color: COLORS.skyText2,
+    letterSpacing: 0.3,
+    marginTop: 4,
   },
   wxCond: {
     fontFamily: FONTS.serifKo,

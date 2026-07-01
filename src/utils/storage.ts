@@ -17,6 +17,7 @@ const KEYS = {
   GUIDE_DISMISSED: 'guideDismissedDate',         // 사용 안내 '오늘 하루 안 보기' 날짜
   GEN_PREFS: 'genPrefs',                          // 생성 시 칩 선택 기본값 (실내외/혼자같이/요리종류)
   PROFILE_PROMPTED: 'profilePrompted',            // 로그인 후 프로필 작성 1회 유도 여부
+  TEMP_LOG: 'tempLog',                            // 어제 대비 온도 비교용 최근 기온 로그
 } as const;
 
 // ─── 로그인 후 프로필 작성 유도 (1회) ───────────────────────
@@ -208,6 +209,44 @@ export async function getGenPrefs(): Promise<GenPrefs> {
 
 export async function setGenPrefs(p: GenPrefs): Promise<void> {
   await AsyncStorage.setItem(KEYS.GEN_PREFS, JSON.stringify(p)).catch(() => {});
+}
+
+// ─── 어제 대비 온도 비교 (로컬 기록, 무료 — 하루 지나야 채워짐) ───
+interface TempPoint { ts: number; temp: number; }
+const TEMP_LOG_MAX_MS = 50 * 60 * 60 * 1000; // 50시간 보존
+
+// 현재 기온을 기록. 앱 열 때마다 호출 → 시간대별 포인트가 쌓여 다음날 비교에 사용.
+export async function recordTempPoint(temp: number): Promise<void> {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.TEMP_LOG);
+    const arr: TempPoint[] = raw ? JSON.parse(raw) : [];
+    const now = Date.now();
+    arr.push({ ts: now, temp });
+    const cutoff = now - TEMP_LOG_MAX_MS;
+    await AsyncStorage.setItem(KEYS.TEMP_LOG, JSON.stringify(arr.filter((p) => p.ts >= cutoff)));
+  } catch {
+    // 무시
+  }
+}
+
+// 어제 이맘때(24h 전 ±3h 이내 가장 가까운 기록) 대비 현재 기온 차이(정수). 없으면 null.
+export async function getYesterdayTempDelta(currentTemp: number): Promise<number | null> {
+  try {
+    const raw = await AsyncStorage.getItem(KEYS.TEMP_LOG);
+    if (!raw) return null;
+    const arr: TempPoint[] = JSON.parse(raw);
+    const target = Date.now() - 24 * 60 * 60 * 1000;
+    const window = 3 * 60 * 60 * 1000;
+    let best: TempPoint | null = null;
+    let bestDiff = Infinity;
+    for (const p of arr) {
+      const d = Math.abs(p.ts - target);
+      if (d <= window && d < bestDiff) { best = p; bestDiff = d; }
+    }
+    return best ? Math.round(currentTemp - best.temp) : null;
+  } catch {
+    return null;
+  }
 }
 
 /**
