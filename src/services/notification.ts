@@ -75,6 +75,19 @@ export async function cancelAllNotifications(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
+// 아침 브리핑 미리보기 — 현재 날씨로 브리핑 알림 즉시 발송 (테스트/확인용)
+export async function sendBriefPreview(weather?: WeatherInfo): Promise<void> {
+  const h = new Date().getHours();
+  const slot: NotifSlot = h < 11 ? 'morning' : h < 16 ? 'lunch' : 'evening';
+  const content = weather
+    ? buildBriefContent(weather, slot)
+    : { title: `${translate('common.appName')} 🌤️`, body: translate('notif.testBody') };
+  await Notifications.scheduleNotificationAsync({
+    content: { title: content.title, body: content.body, sound: false },
+    trigger: null, // 즉시
+  });
+}
+
 export async function sendTestNotification(): Promise<void> {
   await Notifications.scheduleNotificationAsync({
     content: {

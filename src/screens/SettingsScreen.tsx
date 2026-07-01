@@ -21,6 +21,7 @@ import {
   scheduleSlotNotifications,
   cancelAllNotifications,
   refreshNotificationsIfNeeded,
+  sendBriefPreview,
   SLOT_CONFIG,
 } from '../services/notification';
 import { useAuth } from '../contexts/AuthContext';
@@ -194,6 +195,24 @@ export default function SettingsScreen() {
     }
   };
 
+  // 알림 미리보기 — 현재 날씨로 브리핑 알림 즉시 발송
+  const handleBriefPreview = async () => {
+    const granted = await requestNotificationPermission();
+    if (!granted) {
+      Alert.alert(t('settings.permTitle'), t('settings.permBody'), [
+        { text: t('settings.openSettings'), onPress: () => Linking.openSettings() },
+        { text: t('common.cancel'), style: 'cancel' },
+      ]);
+      return;
+    }
+    try {
+      await sendBriefPreview(weather ?? undefined);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      Alert.alert(t('settings.errorTitle'), msg);
+    }
+  };
+
   /**
    * 시간대(아침/점심/저녁) 토글
    */
@@ -324,6 +343,11 @@ export default function SettingsScreen() {
         />
       </View>
 
+      {/* 알림 미리보기 (지금 날씨로 브리핑 알림 발송) */}
+      <TouchableOpacity style={styles.previewBtn} onPress={handleBriefPreview} activeOpacity={0.85}>
+        <Text style={styles.previewBtnText}>{t('settings.notifPreview')}</Text>
+      </TouchableOpacity>
+
       {/* 시간대 선택 (알림 켜져있을 때만 활성) */}
       {notifEnabled && (
         <View style={styles.slotsCard}>
@@ -417,7 +441,7 @@ export default function SettingsScreen() {
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
-        <Text style={styles.appVersion}>v1.1.9</Text>
+        <Text style={styles.appVersion}>v1.2.0</Text>
       </View>
       </ScrollView>
       <ProfileEditor visible={profileOpen} onClose={() => setProfileOpen(false)} />
@@ -488,6 +512,12 @@ const styles = StyleSheet.create({
   },
   notifToggleTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '600' },
   notifToggleStatus: { fontSize: 12, marginTop: 4 },
+  previewBtn: {
+    backgroundColor: COLORS.card, borderRadius: RADII.card,
+    paddingVertical: 13, alignItems: 'center', marginBottom: 10,
+    borderWidth: 1, borderColor: COLORS.line,
+  },
+  previewBtnText: { color: COLORS.teal, fontSize: 13.5, fontWeight: '600' },
   slotsCard: {
     backgroundColor: COLORS.card,
     borderRadius: RADII.card,
