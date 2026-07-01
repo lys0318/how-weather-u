@@ -17,7 +17,6 @@ const KEYS = {
   GUIDE_DISMISSED: 'guideDismissedDate',         // 사용 안내 '오늘 하루 안 보기' 날짜
   GEN_PREFS: 'genPrefs',                          // 생성 시 칩 선택 기본값 (실내외/혼자같이/요리종류)
   PROFILE_PROMPTED: 'profilePrompted',            // 로그인 후 프로필 작성 1회 유도 여부
-  WIDGET_LAST: 'widgetLastData',                  // 홈위젯 마지막 렌더 데이터 (앱 미실행 시 헤드리스 태스크가 사용)
 } as const;
 
 // ─── 로그인 후 프로필 작성 유도 (1회) ───────────────────────
@@ -209,27 +208,6 @@ export async function getGenPrefs(): Promise<GenPrefs> {
 
 export async function setGenPrefs(p: GenPrefs): Promise<void> {
   await AsyncStorage.setItem(KEYS.GEN_PREFS, JSON.stringify(p)).catch(() => {});
-}
-
-// ─── 홈위젯 마지막 데이터 (앱 미실행 중 OS가 위젯 갱신 요청할 때 사용) ───
-export interface WidgetCache {
-  emoji: string;
-  temp: string;
-  city: string;
-  line: string;
-}
-
-export async function getWidgetCache(): Promise<WidgetCache | null> {
-  try {
-    const v = await AsyncStorage.getItem(KEYS.WIDGET_LAST);
-    return v ? (JSON.parse(v) as WidgetCache) : null;
-  } catch {
-    return null;
-  }
-}
-
-export async function setWidgetCache(data: WidgetCache): Promise<void> {
-  await AsyncStorage.setItem(KEYS.WIDGET_LAST, JSON.stringify(data)).catch(() => {});
 }
 
 /**

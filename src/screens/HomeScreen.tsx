@@ -46,7 +46,6 @@ import { getMyProfile } from '../services/profile';
 import { useI18n } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
 import { refreshNotificationsIfNeeded } from '../services/notification';
-import { updateWidget } from '../services/widget';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { ShareableCard } from '../components/ShareableCard';
@@ -216,18 +215,16 @@ export default function HomeScreen() {
     })();
   }, []);
 
-  // 날씨 로드되면 최신 날씨로 아침 브리핑 알림 본문 갱신 (옷차림+우산) + 홈위젯 갱신
+  // 날씨 로드되면 최신 날씨로 아침 브리핑 알림 본문 갱신 (옷차림+우산)
   useEffect(() => {
     if (weather) {
       refreshNotificationsIfNeeded(weather).catch(() => {});
-      updateWidget(weather).catch(() => {});
     }
   }, [weather]);
 
   useEffect(() => {
-    if (message && weather) {
-      updateWidget(weather).catch(() => {}); // 위젯 데이터는 로컬 전용 — 게스트도 갱신
-      if (!isGuest) saveMessage(message, weather.emoji, lastInputs.current).catch(() => {});
+    if (message && weather && !isGuest) {
+      saveMessage(message, weather.emoji, lastInputs.current).catch(() => {});
     }
   }, [message]);
 

@@ -26,13 +26,6 @@ initAds();
 import { checkForUpdate } from './src/services/inAppUpdate';
 checkForUpdate();
 
-// 홈위젯 헤드리스 태스크 (앱 미실행 중 OS가 위젯을 그려야 할 때 — iOS는 no-op)
-import { registerWidgetTaskHandler } from 'react-native-android-widget';
-import { renderWidgetFromCache } from './src/services/widget';
-registerWidgetTaskHandler(async (props) => {
-  props.renderWidget(await renderWidgetFromCache());
-});
-
 // 포그라운드 알림 표시 설정
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
