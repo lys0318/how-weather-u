@@ -2,7 +2,8 @@ import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { getNotificationsEnabled, getNotifSlots, NotifSlot } from '../utils/storage';
 import { translate, getCurrentLang } from '../i18n';
-import { WeatherInfo, outfitFor, computeUmbrella } from '../constants/weather';
+import { WeatherInfo } from '../constants/weather';
+import { buildBriefLine } from './brief';
 
 // 시간대별 발송 시각 (문구는 현재 언어로 translate)
 export const SLOT_CONFIG: Record<NotifSlot, { hour: number; minute: number }> = {
@@ -18,26 +19,11 @@ const SLOT_TEXT_KEY: Record<NotifSlot, { title: string; body: string }> = {
   evening: { title: 'notif.eveningTitle', body: 'notif.eveningBody' },
 };
 
-// 날씨 기반 아침 브리핑 본문 (옷차림 + 우산 한 방에)
+// 날씨 기반 아침 브리핑 본문 (옷차림 + 우산 한 방에) — 본문 로직은 위젯과 공유(brief.ts)
 function buildBriefContent(weather: WeatherInfo, slot: NotifSlot): { title: string; body: string } {
-  const en = getCurrentLang() === 'en';
-  const cfg = SLOT_CONFIG[slot];
-  const o = outfitFor(weather.tempMax);
-  const outfitDesc = en ? o.en.desc : o.ko.desc;
-  const u = computeUmbrella(weather, cfg.hour);
-  const pct = Math.round(u.pop * 100);
-  let umb = '';
-  if (u.raining) {
-    umb = en ? ' · Rain now — grab an umbrella ☂️' : ' · 지금 비 와요, 우산 챙겨요 ☂️';
-  } else if (u.needed) {
-    const h = u.hoursUntil ?? 0;
-    umb = en
-      ? ` · Rain in ${h}h${pct > 0 ? ` (${pct}%)` : ''} — umbrella ☂️`
-      : ` · ${h}시간 뒤 비${pct > 0 ? ` ${pct}%` : ''}, 우산 챙겨요 ☂️`;
-  }
-  const range = `${weather.tempMin}~${weather.tempMax}°`;
+  const lang = getCurrentLang();
   const title = `${translate('common.appName')} ${weather.emoji}`;
-  const body = en ? `Today ${range} · ${outfitDesc}${umb}` : `오늘 ${range} · ${outfitDesc}${umb}`;
+  const body = buildBriefLine(weather, lang, SLOT_CONFIG[slot].hour);
   return { title, body };
 }
 
