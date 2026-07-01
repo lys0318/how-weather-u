@@ -102,7 +102,8 @@
           "androidAppId": "ca-app-pub-8051681065734198~5789260751"
         }
       ],
-      "expo-localization"
+      "expo-localization",
+      "react-native-android-widget"
     ],
     "extra": {
       "eas": {
