@@ -40,7 +40,8 @@ import OutfitCard from '../components/OutfitCard';
 import LifeIndex from '../components/LifeIndex';
 import AppBanner from '../components/AppBanner';
 import { runWithGate } from '../hooks/useGenerationGate';
-import { saveMessage, isGuideDismissedToday, dismissGuideToday, isProfilePrompted, setProfilePrompted, recordTempPoint, getYesterdayTempDelta } from '../utils/storage';
+import { saveMessage, isGuideDismissedToday, dismissGuideToday, isProfilePrompted, setProfilePrompted, recordTempPoint, getYesterdayTempDelta, setLastWidgetWeather } from '../utils/storage';
+import { pushWidget } from '../services/widgetContent';
 import ProfileEditor from '../components/ProfileEditor';
 import { getMyProfile } from '../services/profile';
 import { useI18n } from '../i18n';
@@ -216,20 +217,23 @@ export default function HomeScreen() {
     })();
   }, []);
 
-  // 날씨 로드되면 최신 날씨로 아침 브리핑 알림 본문 갱신 (옷차림+우산) + 어제 대비 온도 기록/계산
+  // 날씨 로드되면 아침 브리핑 알림 갱신 + 어제 대비 온도 기록/계산 + 위젯 갱신
   useEffect(() => {
     if (weather) {
       refreshNotificationsIfNeeded(weather).catch(() => {});
       (async () => {
         await recordTempPoint(weather.temp);
         setTempDelta(await getYesterdayTempDelta(weather.temp));
+        await setLastWidgetWeather(weather);
+        await pushWidget();
       })().catch(() => {});
     }
   }, [weather]);
 
   useEffect(() => {
-    if (message && weather && !isGuest) {
-      saveMessage(message, weather.emoji, lastInputs.current).catch(() => {});
+    if (message && weather) {
+      pushWidget().catch(() => {}); // 위젯 라인은 로컬 — 게스트도 갱신
+      if (!isGuest) saveMessage(message, weather.emoji, lastInputs.current).catch(() => {});
     }
   }, [message]);
 
