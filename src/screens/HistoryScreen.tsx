@@ -9,9 +9,12 @@ import {
   ActivityIndicator,
   RefreshControl,
   Alert,
+  Platform,
+  ToastAndroid,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
-import { getMessages, toggleBookmark, StoredMessage } from '../utils/storage';
+import { getMessages, toggleBookmark, setWidgetChoice, StoredMessage } from '../utils/storage';
+import { pushWidget } from '../services/widgetContent';
 import { fetchCloudBookmarks, cloudToStoredMessage } from '../services/bookmarks';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -308,6 +311,19 @@ function MessageCard({ message, showDateHeader, onBookmarkToggle, onShare, t }: 
             <Text style={styles.time}>{formatTime(message.generatedAt)}</Text>
           </View>
           <View style={styles.cardActions}>
+            {Platform.OS === 'android' && (message.kind ?? 'message') === 'message' && (
+              <TouchableOpacity
+                onPress={async () => {
+                  await setWidgetChoice({ kind: 'message', id: message.id, text: message.text });
+                  await pushWidget();
+                  ToastAndroid.show(t('widget.shown'), ToastAndroid.SHORT);
+                }}
+                style={styles.actionBtn}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              >
+                <Text style={styles.actionIcon}>📌</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity
               onPress={() => onShare(message)}
               style={styles.actionBtn}

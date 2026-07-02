@@ -8,6 +8,10 @@ import {
   Alert,
   Linking,
   Switch,
+  Platform,
+  Modal,
+  Pressable,
+  ToastAndroid,
 } from 'react-native';
 import {
   setNotificationsEnabled,
@@ -15,7 +19,14 @@ import {
   getNotifSlots,
   setNotifSlots,
   NotifSlot,
+  getWidgetChoice,
+  setWidgetChoice,
+  getMessages,
+  WidgetChoice,
+  StoredMessage,
 } from '../utils/storage';
+import { pinWidget } from '../services/widget';
+import { pushWidget } from '../services/widgetContent';
 import {
   requestNotificationPermission,
   scheduleSlotNotifications,
@@ -48,6 +59,30 @@ export default function SettingsScreen() {
   const [deleting, setDeleting] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
+
+  // 홈 위젯 (안드로이드)
+  const [widgetChoice, setWidgetChoiceState] = useState<WidgetChoice>({ kind: 'auto' });
+  const [widgetPickerOpen, setWidgetPickerOpen] = useState(false);
+  const [widgetMsgs, setWidgetMsgs] = useState<StoredMessage[]>([]);
+  useEffect(() => {
+    getWidgetChoice().then(setWidgetChoiceState).catch(() => {});
+  }, []);
+
+  const handleAddWidget = async (size: 'medium' | 'small') => {
+    const r = await pinWidget(size);
+    if (r === 'ok') ToastAndroid.show(t('widget.added'), ToastAndroid.LONG);
+    else Alert.alert(t('widget.section'), t('widget.unsupported'));
+  };
+  const openWidgetPicker = async () => {
+    setWidgetMsgs((await getMessages()).filter((m) => (m.kind ?? 'message') === 'message'));
+    setWidgetPickerOpen(true);
+  };
+  const chooseWidget = async (c: WidgetChoice) => {
+    await setWidgetChoice(c);
+    setWidgetChoiceState(c);
+    setWidgetPickerOpen(false);
+    await pushWidget(); // 즉시 위젯 반영
+  };
 
   // 게스트 → 구글 로그인 (성공 시 세션 전환 → 자동 라우팅)
   const handleGuestUpgrade = async () => {
@@ -383,6 +418,33 @@ export default function SettingsScreen() {
         </View>
       )}
 
+      {Platform.OS === 'android' && (
+        <>
+          <View style={styles.divider} />
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>{t('widget.section')}</Text>
+          </View>
+          <View style={styles.widgetRow}>
+            <TouchableOpacity style={styles.widgetBtn} onPress={() => handleAddWidget('medium')} activeOpacity={0.85}>
+              <Text style={styles.widgetBtnText}>{t('widget.addMedium')}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.widgetBtn} onPress={() => handleAddWidget('small')} activeOpacity={0.85}>
+              <Text style={styles.widgetBtnText}>{t('widget.addSmall')}</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity style={styles.widgetPickRow} onPress={openWidgetPicker} activeOpacity={0.7}>
+            <Text style={styles.widgetPickLabel}>{t('widget.pickTitle')}</Text>
+            <Text style={styles.widgetPickValue} numberOfLines={1}>
+              {widgetChoice.kind === 'auto'
+                ? t('widget.optAuto')
+                : widgetChoice.kind === 'brief'
+                ? t('widget.optBrief')
+                : widgetChoice.text}
+            </Text>
+          </TouchableOpacity>
+        </>
+      )}
+
       <View style={styles.divider} />
 
       {/* 피드백 / 버그 신고 */}
@@ -445,6 +507,30 @@ export default function SettingsScreen() {
       </View>
       </ScrollView>
       <ProfileEditor visible={profileOpen} onClose={() => setProfileOpen(false)} />
+
+      <Modal transparent visible={widgetPickerOpen} animationType="fade" onRequestClose={() => setWidgetPickerOpen(false)}>
+        <Pressable style={styles.widgetModalBg} onPress={() => setWidgetPickerOpen(false)}>
+          <View style={styles.widgetModalCard}>
+            <ScrollView>
+              <TouchableOpacity style={styles.widgetOpt} onPress={() => chooseWidget({ kind: 'auto' })}>
+                <Text style={styles.widgetOptText}>{t('widget.optAuto')}</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.widgetOpt} onPress={() => chooseWidget({ kind: 'brief' })}>
+                <Text style={styles.widgetOptText}>{t('widget.optBrief')}</Text>
+              </TouchableOpacity>
+              {widgetMsgs.map((m) => (
+                <TouchableOpacity
+                  key={m.id}
+                  style={styles.widgetOpt}
+                  onPress={() => chooseWidget({ kind: 'message', id: m.id, text: m.text })}
+                >
+                  <Text style={styles.widgetOptText} numberOfLines={2}>{m.text}</Text>
+                </TouchableOpacity>
+              ))}
+            </ScrollView>
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -464,6 +550,16 @@ const styles = StyleSheet.create({
     borderColor: COLORS.line,
   },
   sectionTitle: { color: COLORS.ink, fontSize: 14, fontWeight: '600', marginBottom: 10 },
+  widgetRow: { flexDirection: 'row', gap: 10, marginBottom: 12 },
+  widgetBtn: { flex: 1, backgroundColor: COLORS.ember, borderRadius: RADII.btn, paddingVertical: 13, alignItems: 'center' },
+  widgetBtnText: { color: COLORS.emberText, fontFamily: FONTS.serifKoBold, fontSize: 14 },
+  widgetPickRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: 6 },
+  widgetPickLabel: { color: COLORS.ink, fontSize: 14 },
+  widgetPickValue: { color: COLORS.ink2, fontSize: 13, flex: 1, textAlign: 'right', marginLeft: 12 },
+  widgetModalBg: { flex: 1, backgroundColor: 'rgba(0,0,0,0.35)', justifyContent: 'center', padding: 24 },
+  widgetModalCard: { backgroundColor: COLORS.card, borderRadius: RADII.sheet, padding: 12, maxHeight: '70%' },
+  widgetOpt: { paddingVertical: 14, paddingHorizontal: 12, borderBottomWidth: 1, borderBottomColor: COLORS.line2 },
+  widgetOptText: { color: COLORS.ink, fontSize: 14 },
   desc: { color: COLORS.ink2, fontSize: 13.5, lineHeight: 21, marginBottom: 10 },
   subDesc: { color: COLORS.ink3, fontSize: 12, lineHeight: 19 },
   primaryButton: {
