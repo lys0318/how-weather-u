@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { GeneratedMessage } from '../services/message';
-import { GenPrefs, DEFAULT_GEN_PREFS } from '../constants/weather';
+import { GenPrefs, DEFAULT_GEN_PREFS, WeatherInfo } from '../constants/weather';
 
 // 키 상수
 const KEYS = {
@@ -18,6 +18,8 @@ const KEYS = {
   GEN_PREFS: 'genPrefs',                          // 생성 시 칩 선택 기본값 (실내외/혼자같이/요리종류)
   PROFILE_PROMPTED: 'profilePrompted',            // 로그인 후 프로필 작성 1회 유도 여부
   TEMP_LOG: 'tempLog',                            // 어제 대비 온도 비교용 최근 기온 로그
+  WIDGET_MSG: 'widgetMsgChoice',                  // 홈위젯에 표시할 메시지 선택
+  WIDGET_WEATHER: 'widgetWeather',                // 위젯 즉시 갱신용 마지막 날씨 캐시
 } as const;
 
 // ─── 로그인 후 프로필 작성 유도 (1회) ───────────────────────
@@ -209,6 +211,40 @@ export async function getGenPrefs(): Promise<GenPrefs> {
 
 export async function setGenPrefs(p: GenPrefs): Promise<void> {
   await AsyncStorage.setItem(KEYS.GEN_PREFS, JSON.stringify(p)).catch(() => {});
+}
+
+// ─── 홈위젯 표시 메시지 선택 ───────────────────────────────
+export type WidgetChoice =
+  | { kind: 'auto' }                                // 오늘 생성된 최신 메시지, 없으면 브리핑
+  | { kind: 'brief' }                               // 항상 날씨 브리핑
+  | { kind: 'message'; id: string; text: string };  // 고정 메시지(오늘/히스토리)
+
+export async function getWidgetChoice(): Promise<WidgetChoice> {
+  try {
+    const v = await AsyncStorage.getItem(KEYS.WIDGET_MSG);
+    if (!v) return { kind: 'auto' };
+    return JSON.parse(v) as WidgetChoice;
+  } catch {
+    return { kind: 'auto' };
+  }
+}
+
+export async function setWidgetChoice(c: WidgetChoice): Promise<void> {
+  await AsyncStorage.setItem(KEYS.WIDGET_MSG, JSON.stringify(c)).catch(() => {});
+}
+
+// 위젯을 앱 밖(설정/히스토리)에서 즉시 갱신하려면 마지막 날씨가 필요 → 캐시.
+export async function setLastWidgetWeather(w: WeatherInfo): Promise<void> {
+  await AsyncStorage.setItem(KEYS.WIDGET_WEATHER, JSON.stringify(w)).catch(() => {});
+}
+
+export async function getLastWidgetWeather(): Promise<WeatherInfo | null> {
+  try {
+    const v = await AsyncStorage.getItem(KEYS.WIDGET_WEATHER);
+    return v ? (JSON.parse(v) as WeatherInfo) : null;
+  } catch {
+    return null;
+  }
 }
 
 // ─── 어제 대비 온도 비교 (로컬 기록, 무료 — 하루 지나야 채워짐) ───
