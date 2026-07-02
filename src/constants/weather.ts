@@ -81,6 +81,7 @@ export interface WeatherInfo {
   pm25?: number;         // 초미세먼지 PM2.5 (㎍/㎥)
   rainfall?: number;     // 1시간 강수량 (mm)
   lat?: number;          // 위도 (남반구 계절 판별용)
+  tempYesterday?: number; // 어제 같은 시각 기온 (Open-Meteo past_days) — 어제 대비 표시
 }
 
 // OpenWeatherMap weather ID → 앱 내부 condition 매핑

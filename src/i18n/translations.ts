@@ -110,7 +110,7 @@ export const translations = {
       title: '내 프로필',
       intro: '적어두면 메시지가 사용자분께 더 맞게 와요. 하지만 필수는 아니고 선택이에요.',
       nicknameLabel: '뭐라고 불러드릴까요?',
-      nicknamePh: '호칭 (예: 윤성, 사장님)',
+      nicknamePh: '호칭 (예: 지민, 사장님)',
       ageLabel: '나이대',
       age10s: '10대', age20s: '20대', age30s: '30대', age40s: '40대', age50s: '50대+', agePrivate: '비공개',
       occLabel: '직업·신분',

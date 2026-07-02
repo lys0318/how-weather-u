@@ -24,6 +24,30 @@ interface AirQuality {
   pm25?: number;
 }
 
+// 어제 같은 시각 기온 (Open-Meteo forecast + past_days=1, 무료·무키). 실패 시 undefined.
+const FORECAST_OM_URL = 'https://api.open-meteo.com/v1/forecast';
+async function fetchYesterdayTemp(lat: number, lon: number): Promise<number | undefined> {
+  try {
+    const url = `${FORECAST_OM_URL}?latitude=${lat}&longitude=${lon}&hourly=temperature_2m&past_days=1&forecast_days=1&timezone=auto`;
+    const res = await fetch(url);
+    if (!res.ok) return undefined;
+    const json = await res.json();
+    const times: string[] = json?.hourly?.time ?? [];
+    const temps: number[] = json?.hourly?.temperature_2m ?? [];
+    if (!times.length || times.length !== temps.length) return undefined;
+    // 어제, 지금과 같은 시(hour)의 값. Open-Meteo time 예: "2026-07-02T12:00" (timezone=auto=현지)
+    const now = new Date();
+    const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
+    const p = (n: number) => String(n).padStart(2, '0');
+    const yStr = `${y.getFullYear()}-${p(y.getMonth() + 1)}-${p(y.getDate())}T${p(now.getHours())}:00`;
+    const idx = times.indexOf(yStr);
+    if (idx >= 0 && typeof temps[idx] === 'number') return Math.round(temps[idx]);
+    return undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 async function fetchAirQuality(lat: number, lon: number): Promise<AirQuality> {
   try {
     const url = `${AIR_QUALITY_URL}?latitude=${lat}&longitude=${lon}&current=pm10,pm2_5,uv_index`;
@@ -136,10 +160,11 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
 
   const { lat, lon } = await getCurrentCoords();
 
-  // 행정구역(시/동) + 자외선/미세먼지를 병렬 조회 — 어느 날씨 소스를 쓰든 공통
-  const [koPlace, airQuality] = await Promise.all([
+  // 행정구역(시/동) + 자외선/미세먼지 + 어제 기온을 병렬 조회 — 어느 날씨 소스를 쓰든 공통
+  const [koPlace, airQuality, tempYesterday] = await Promise.all([
     reverseGeocodeKo(lat, lon),
     fetchAirQuality(lat, lon),
+    fetchYesterdayTemp(lat, lon),
   ]);
 
   // ── 1순위: 한국이면 기상청(KMA) — 가장 정확 ──────────────
@@ -152,6 +177,7 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
           ...kma,
           city: koPlace || kma.city || '내 위치',
           lat,
+          tempYesterday,
           ...airQuality,
         }, lat, lon);
         weatherCache = { data: result, fetchedAt: Date.now() };
@@ -320,6 +346,7 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
     hourly: owHourly.length > 0 ? owHourly : undefined,
     daily: owDaily.length > 0 ? owDaily : undefined,
     rainfall,
+    tempYesterday,
     ...airQuality,
   };
 
