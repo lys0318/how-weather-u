@@ -391,9 +391,6 @@ export default function SettingsScreen() {
       {Platform.OS === 'android' && (
         <>
           <View style={styles.divider} />
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('widget.section')}</Text>
-          </View>
           <TouchableOpacity style={styles.widgetBtn} onPress={() => setWidgetSetupOpen(true)} activeOpacity={0.85}>
             <Text style={styles.widgetBtnText}>{t('widget.addBtn')}</Text>
           </TouchableOpacity>
