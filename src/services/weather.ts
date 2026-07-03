@@ -90,21 +90,28 @@ export async function requestLocationPermission(): Promise<boolean> {
 }
 
 export async function getCurrentCoords(): Promise<{ lat: number; lon: number }> {
-  // 신선한 GPS fix(High)를 시도하되, 8초 넘게 걸리면 '마지막 알려진 위치'로 폴백.
-  // → 실내·첫 실행·신호 약할 때 "날씨 불러오는 중"이 무한정 멈추는 것 방지.
+  // 1) 최근(10분 내) 마지막 위치가 있으면 즉시 사용 → GPS fix 대기 없이 바로 로드.
+  //    (두 번째 실행부터 대부분 여기서 즉시 반환 → 로딩 빠름)
+  try {
+    const recent = await Location.getLastKnownPositionAsync({ maxAge: 10 * 60 * 1000 });
+    if (recent) return { lat: recent.coords.latitude, lon: recent.coords.longitude };
+  } catch {
+    // 아래로
+  }
+  // 2) 최근 위치 없으면 신선한 fix(Balanced=빠름) 시도, 8초 타임아웃.
   try {
     const fresh = await Promise.race([
-      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced }),
       new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
     ]);
     if (fresh) return { lat: fresh.coords.latitude, lon: fresh.coords.longitude };
   } catch {
-    // 아래 폴백으로
+    // 아래로
   }
-  // 타임아웃/실패 → OS가 캐시한 마지막 위치(즉시). 대개 충분히 정확.
+  // 3) 타임아웃 → 오래된 마지막 위치라도 사용(무한대기 방지).
   const last = await Location.getLastKnownPositionAsync();
   if (last) return { lat: last.coords.latitude, lon: last.coords.longitude };
-  // 마지막 위치도 없으면(진짜 첫 실행 등) Balanced로 한 번 더 — High보다 빠르게 fix.
+  // 4) 그것도 없으면(진짜 첫 실행) 결국 한 번 기다림.
   const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
   return { lat: loc.coords.latitude, lon: loc.coords.longitude };
 }
