@@ -29,7 +29,11 @@ const FORECAST_OM_URL = 'https://api.open-meteo.com/v1/forecast';
 async function fetchYesterdayTemp(lat: number, lon: number): Promise<number | undefined> {
   try {
     const url = `${FORECAST_OM_URL}?latitude=${lat}&longitude=${lon}&hourly=temperature_2m&past_days=1&forecast_days=1&timezone=auto`;
-    const res = await fetch(url);
+    // 4초 타임아웃 — 어제 기온은 부가정보라 느리면 그냥 생략(날씨 로딩을 막지 않음).
+    const res = await Promise.race([
+      fetch(url),
+      new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
+    ]);
     if (!res.ok) return undefined;
     const json = await res.json();
     const times: string[] = json?.hourly?.time ?? [];
@@ -86,15 +90,23 @@ export async function requestLocationPermission(): Promise<boolean> {
 }
 
 export async function getCurrentCoords(): Promise<{ lat: number; lon: number }> {
-  // High 정확도(GPS): 약 10m 오차. Balanced(100m)보다 정확하지만 배터리 약간 더 씀.
-  // 날씨 앱 특성상 시/동을 정확히 구분해야 해서 High 사용.
-  const location = await Location.getCurrentPositionAsync({
-    accuracy: Location.Accuracy.High,
-  });
-  return {
-    lat: location.coords.latitude,
-    lon: location.coords.longitude,
-  };
+  // 신선한 GPS fix(High)를 시도하되, 8초 넘게 걸리면 '마지막 알려진 위치'로 폴백.
+  // → 실내·첫 실행·신호 약할 때 "날씨 불러오는 중"이 무한정 멈추는 것 방지.
+  try {
+    const fresh = await Promise.race([
+      Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.High }),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 8000)),
+    ]);
+    if (fresh) return { lat: fresh.coords.latitude, lon: fresh.coords.longitude };
+  } catch {
+    // 아래 폴백으로
+  }
+  // 타임아웃/실패 → OS가 캐시한 마지막 위치(즉시). 대개 충분히 정확.
+  const last = await Location.getLastKnownPositionAsync();
+  if (last) return { lat: last.coords.latitude, lon: last.coords.longitude };
+  // 마지막 위치도 없으면(진짜 첫 실행 등) Balanced로 한 번 더 — High보다 빠르게 fix.
+  const loc = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
+  return { lat: loc.coords.latitude, lon: loc.coords.longitude };
 }
 
 /**
