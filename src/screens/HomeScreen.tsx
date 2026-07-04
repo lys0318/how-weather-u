@@ -46,7 +46,7 @@ import ProfileEditor from '../components/ProfileEditor';
 import { getMyProfile } from '../services/profile';
 import { useI18n } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
-import { refreshNotificationsIfNeeded } from '../services/notification';
+import { refreshNotificationsIfNeeded, updateLockNotification } from '../services/notification';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { ShareableCard } from '../components/ShareableCard';
@@ -223,6 +223,7 @@ export default function HomeScreen() {
       (async () => {
         await setLastWidgetWeather(weather);
         await pushWidget();
+        await updateLockNotification(weather);
       })().catch(() => {});
     }
   }, [weather]);
@@ -236,6 +237,7 @@ export default function HomeScreen() {
   useEffect(() => {
     if (message && weather) {
       pushWidget().catch(() => {}); // 위젯 라인은 로컬 — 게스트도 갱신
+      updateLockNotification(weather).catch(() => {});
       if (!isGuest) saveMessage(message, weather.emoji, lastInputs.current).catch(() => {});
     }
   }, [message]);
