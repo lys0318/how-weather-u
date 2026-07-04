@@ -51,6 +51,10 @@ export async function getNotificationsEnabled(): Promise<boolean> {
 export async function setNotificationsEnabled(value: boolean): Promise<void> {
   await AsyncStorage.setItem(KEYS.NOTIFICATIONS_ENABLED, value ? 'true' : 'false');
 }
+// 알림 on/off가 한 번이라도 지정된 적 있는지(첫 허용 자동 활성화 판단용)
+export async function isNotificationsEnabledSet(): Promise<boolean> {
+  return (await AsyncStorage.getItem(KEYS.NOTIFICATIONS_ENABLED)) !== null;
+}
 
 // ─── 알림 시간대 선택 (아침/점심/저녁) ───────────────────
 export type NotifSlot = 'morning' | 'lunch' | 'evening';
