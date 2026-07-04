@@ -16,8 +16,6 @@ import {
   getNotifSlots,
   setNotifSlots,
   NotifSlot,
-  getLockNotifEnabled,
-  setLockNotifEnabled,
 } from '../utils/storage';
 import WidgetSetupModal from '../components/WidgetSetupModal';
 import {
@@ -27,8 +25,6 @@ import {
   refreshNotificationsIfNeeded,
   sendBriefPreview,
   SLOT_CONFIG,
-  updateLockNotification,
-  clearLockNotification,
 } from '../services/notification';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../i18n';
@@ -57,24 +53,6 @@ export default function SettingsScreen() {
 
   // 홈 위젯 (안드로이드) — 추가/미리보기/메시지선택 모두 모달에서
   const [widgetSetupOpen, setWidgetSetupOpen] = useState(false);
-
-  // 잠금화면 상시 알림 토글
-  const [lockNotifOn, setLockNotifOn] = useState(false);
-  useEffect(() => { getLockNotifEnabled().then(setLockNotifOn); }, []);
-
-  const toggleLockNotif = async (v: boolean) => {
-    if (v) {
-      const granted = await requestNotificationPermission();
-      if (!granted) { Alert.alert(t('lockNotif.title'), t('lockNotif.permDenied')); return; }
-      await setLockNotifEnabled(true);
-      setLockNotifOn(true);
-      await updateLockNotification(weather ?? undefined);
-    } else {
-      await setLockNotifEnabled(false);
-      setLockNotifOn(false);
-      await clearLockNotification();
-    }
-  };
 
   // 게스트 → 구글 로그인 (성공 시 세션 전환 → 자동 라우팅)
   const handleGuestUpgrade = async () => {
@@ -417,19 +395,6 @@ export default function SettingsScreen() {
             <Text style={styles.widgetBtnText}>{t('widget.addBtn')}</Text>
           </TouchableOpacity>
           <Text style={styles.widgetHint}>{t('widget.addHint')}</Text>
-
-          <View style={styles.lockRow}>
-            <View style={{ flex: 1, paddingRight: 12 }}>
-              <Text style={styles.lockTitle}>{t('lockNotif.title')}</Text>
-              <Text style={styles.lockDesc}>{t('lockNotif.desc')}</Text>
-            </View>
-            <Switch
-              value={lockNotifOn}
-              onValueChange={toggleLockNotif}
-              trackColor={{ false: COLORS.paper3, true: COLORS.ember }}
-              thumbColor={'#ffffff'}
-            />
-          </View>
         </>
       )}
 
@@ -491,7 +456,7 @@ export default function SettingsScreen() {
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
-        <Text style={styles.appVersion}>v1.2.6</Text>
+        <Text style={styles.appVersion}>v1.2.5</Text>
       </View>
       </ScrollView>
       <ProfileEditor visible={profileOpen} onClose={() => setProfileOpen(false)} />
@@ -519,9 +484,6 @@ const styles = StyleSheet.create({
   widgetBtn: { backgroundColor: COLORS.ember, borderRadius: RADII.btn, paddingVertical: 14, alignItems: 'center' },
   widgetBtnText: { color: COLORS.emberText, fontFamily: FONTS.serifKoBold, fontSize: 15 },
   widgetHint: { color: COLORS.ink3, fontSize: 12, marginTop: 8, textAlign: 'center' },
-  lockRow: { flexDirection: 'row', alignItems: 'center', marginTop: 16 },
-  lockTitle: { color: COLORS.ink, fontSize: 15, fontWeight: '600' },
-  lockDesc: { color: COLORS.ink3, fontSize: 12, marginTop: 3, lineHeight: 17 },
   desc: { color: COLORS.ink2, fontSize: 13.5, lineHeight: 21, marginBottom: 10 },
   subDesc: { color: COLORS.ink3, fontSize: 12, lineHeight: 19 },
   primaryButton: {

@@ -8,8 +8,8 @@ import {
 } from 'react-native';
 import { useAuth } from '../contexts/AuthContext';
 import { requestLocationPermission } from '../services/weather';
-import { requestNotificationPermission, scheduleSlotNotifications } from '../services/notification';
-import { setHasOnboarded, isNotificationsEnabledSet, setNotificationsEnabled, getNotifSlots, setLockNotifEnabled } from '../utils/storage';
+import { requestNotificationPermission } from '../services/notification';
+import { setHasOnboarded } from '../utils/storage';
 import { useI18n } from '../i18n';
 import { COLORS, FONTS, RADII } from '../constants/theme';
 import SkyBackground, { getPaperTint } from '../components/SkyBackground';
@@ -32,13 +32,7 @@ export default function PermissionSetupScreen({ onDone }: Props) {
     setLoading(true);
     try {
       await requestLocationPermission();
-      const notifGranted = await requestNotificationPermission();
-      // 알림을 한 번도 지정 안 한 상태(첫 설치/재설치)에서 허용하면 자동 ON
-      if (notifGranted && !(await isNotificationsEnabledSet())) {
-        await setNotificationsEnabled(true);
-        await scheduleSlotNotifications(await getNotifSlots());
-        await setLockNotifEnabled(true);
-      }
+      await requestNotificationPermission();
       await setHasOnboarded(true);
       onDone();
     } catch (e) {

@@ -19,7 +19,6 @@ const KEYS = {
   PROFILE_PROMPTED: 'profilePrompted',            // 로그인 후 프로필 작성 1회 유도 여부
   WIDGET_MSG: 'widgetMsgChoice',                  // 홈위젯에 표시할 메시지 선택
   WIDGET_WEATHER: 'widgetWeather',                // 위젯 즉시 갱신용 마지막 날씨 캐시
-  LOCK_NOTIF: 'lockNotifEnabled',                 // 잠금화면 상시 알림 on/off
 } as const;
 
 // ─── 로그인 후 프로필 작성 유도 (1회) ───────────────────────
@@ -231,18 +230,6 @@ export async function getWidgetChoice(): Promise<WidgetChoice> {
 
 export async function setWidgetChoice(c: WidgetChoice): Promise<void> {
   await AsyncStorage.setItem(KEYS.WIDGET_MSG, JSON.stringify(c)).catch(() => {});
-}
-
-// ─── 잠금화면 상시 알림 ─────────────────────────────────────
-export async function getLockNotifEnabled(): Promise<boolean> {
-  return (await AsyncStorage.getItem(KEYS.LOCK_NOTIF)) === 'true';
-}
-export async function setLockNotifEnabled(v: boolean): Promise<void> {
-  await AsyncStorage.setItem(KEYS.LOCK_NOTIF, v ? 'true' : 'false').catch(() => {});
-}
-// 알림 on/off가 한 번이라도 지정된 적 있는지 (첫 허용 자동 활성화 판단용)
-export async function isNotificationsEnabledSet(): Promise<boolean> {
-  return (await AsyncStorage.getItem(KEYS.NOTIFICATIONS_ENABLED)) !== null;
 }
 
 // 위젯을 앱 밖(설정/히스토리)에서 즉시 갱신하려면 마지막 날씨가 필요 → 캐시.

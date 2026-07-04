@@ -156,12 +156,6 @@ export const translations = {
       unsupported: '홈 화면을 길게 눌러 위젯 목록에서 하우웨더유를 추가해주세요.',
       added: '위젯을 추가했어요. 홈 화면을 확인하세요.',
     },
-    lockNotif: {
-      channelName: '잠금화면 날씨',
-      title: '잠금화면에 날씨·메시지 표시',
-      desc: '폰을 켜면 잠금화면에서 바로 확인해요',
-      permDenied: '알림 권한이 필요해요',
-    },
     home: {
       weatherLoading: '날씨 불러오는 중...',
       getMessage: '오늘의 메시지 받기',
@@ -424,12 +418,6 @@ export const translations = {
       shown: 'Added to your widget',
       unsupported: 'Long-press your home screen and add How Weather You from the widget list.',
       added: 'Widget added. Check your home screen.',
-    },
-    lockNotif: {
-      channelName: 'Lock screen weather',
-      title: 'Show weather & message on lock screen',
-      desc: 'See it right on your lock screen',
-      permDenied: 'Notification permission is required',
     },
     home: {
       weatherLoading: 'Loading weather...',
