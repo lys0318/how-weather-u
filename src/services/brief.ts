@@ -12,9 +12,15 @@ export function buildBriefLine(weather: WeatherInfo, lang: 'ko' | 'en', hour: nu
     umb = en ? ' · Rain now, umbrella ☂️' : ' · 지금 비, 우산 챙겨요 ☂️';
   } else if (u.needed) {
     const h = u.hoursUntil ?? 0;
-    umb = en
-      ? ` · Rain in ${h}h${pct > 0 ? ` (${pct}%)` : ''} ☂️`
-      : ` · ${h}시간 뒤 비${pct > 0 ? ` ${pct}%` : ''}, 우산 ☂️`;
+    const pctStr = pct > 0 ? ` ${pct}%` : '';
+    if (h === 0) {
+      // "0시간 뒤"는 어색 → "곧"
+      umb = en ? ` · Rain soon${pctStr}, umbrella ☂️` : ` · 곧 비${pctStr}, 우산 ☂️`;
+    } else {
+      umb = en
+        ? ` · Rain in ${h}h${pctStr} ☂️`
+        : ` · ${h}시간 뒤 비${pctStr}, 우산 ☂️`;
+    }
   }
   const range = `${weather.tempMin}~${weather.tempMax}°`;
   return en ? `Today ${range} · ${outfitDesc}${umb}` : `오늘 ${range} · ${outfitDesc}${umb}`;
