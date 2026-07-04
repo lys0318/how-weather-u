@@ -43,6 +43,7 @@ import { runWithGate } from '../hooks/useGenerationGate';
 import { saveMessage, isGuideDismissedToday, dismissGuideToday, isProfilePrompted, setProfilePrompted, setLastWidgetWeather } from '../utils/storage';
 import { pushWidget } from '../services/widgetContent';
 import { syncWidgetRefreshTask } from '../tasks/backgroundTask';
+import { maybeAskReview } from '../services/review';
 import ProfileEditor from '../components/ProfileEditor';
 import { getMyProfile } from '../services/profile';
 import { useI18n } from '../i18n';
@@ -238,6 +239,7 @@ export default function HomeScreen() {
   useEffect(() => {
     if (message && weather) {
       pushWidget().catch(() => {}); // 위젯 라인은 로컬 — 게스트도 갱신
+      maybeAskReview().catch(() => {}); // 누적 3회 생성 시 인앱 리뷰 1회
       if (!isGuest) saveMessage(message, weather.emoji, lastInputs.current).catch(() => {});
     }
   }, [message]);

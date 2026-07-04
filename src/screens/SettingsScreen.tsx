@@ -26,6 +26,7 @@ import {
   sendBriefPreview,
   SLOT_CONFIG,
 } from '../services/notification';
+import { openStoreListing } from '../services/review';
 import { useAuth } from '../contexts/AuthContext';
 import { useI18n } from '../i18n';
 import { useFocusEffect } from '@react-navigation/native';
@@ -405,6 +406,14 @@ export default function SettingsScreen() {
         <Text style={styles.feedbackButtonText}>{t('settings.feedbackButton')}</Text>
       </TouchableOpacity>
       <Text style={styles.feedbackHint}>{t('settings.feedbackHint')}</Text>
+
+      {/* 스토어 리뷰 */}
+      <TouchableOpacity
+        style={[styles.feedbackButton, { marginTop: 10 }]}
+        onPress={() => { openStoreListing().catch(() => {}); }}
+      >
+        <Text style={styles.feedbackButtonText}>{t('settings.reviewButton')}</Text>
+      </TouchableOpacity>
 
       <View style={styles.divider} />
 
