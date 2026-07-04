@@ -1,9 +1,10 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
-import { getNotificationsEnabled, getNotifSlots, NotifSlot } from '../utils/storage';
+import { getNotificationsEnabled, getNotifSlots, NotifSlot, getMessages, getLockNotifEnabled } from '../utils/storage';
 import { translate, getCurrentLang } from '../i18n';
 import { WeatherInfo } from '../constants/weather';
 import { buildBriefLine } from './brief';
+import { resolveWidgetLine } from './widgetContent';
 
 // 시간대별 발송 시각 (문구는 현재 언어로 translate)
 export const SLOT_CONFIG: Record<NotifSlot, { hour: number; minute: number }> = {
@@ -153,4 +154,47 @@ export async function refreshNotificationsIfNeeded(weather?: WeatherInfo): Promi
   if (scheduled.length < slots.length) {
     await scheduleSlotNotifications(slots);
   }
+}
+
+// ─── 잠금화면 상시 알림 ─────────────────────────────────────
+const LOCK_NOTIF_ID = 'lock-weather';
+const LOCK_CHANNEL = 'lock-weather';
+
+async function ensureLockChannel(): Promise<void> {
+  if (Platform.OS !== 'android') return;
+  await Notifications.setNotificationChannelAsync(LOCK_CHANNEL, {
+    name: translate('lockNotif.channelName'),
+    importance: Notifications.AndroidImportance.LOW, // 무음·헤드업 없음
+    lockscreenVisibility: Notifications.AndroidNotificationVisibility.PUBLIC,
+    vibrationPattern: [0],
+    showBadge: false,
+  });
+}
+
+// 잠금화면 상시 알림 게시/갱신 (같은 identifier 재게시 = 내용 갱신).
+export async function updateLockNotification(weather?: WeatherInfo): Promise<void> {
+  if (Platform.OS !== 'android' || !weather) return;
+  if (!(await getLockNotifEnabled())) return;
+  const perm = await Notifications.getPermissionsAsync();
+  if (perm.status !== 'granted') return;
+  await ensureLockChannel();
+  const lang = getCurrentLang();
+  const city = weather.city && weather.city !== '내 위치' ? weather.city : translate('weather.myLocation');
+  const title = `${weather.emoji} ${weather.temp}° ${city}`;
+  let body = resolveWidgetLine(weather, { kind: 'auto' }, await getMessages(), lang, new Date().getHours());
+  if (body.length > 100) body = body.slice(0, 98) + '…';
+  try {
+    await Notifications.scheduleNotificationAsync({
+      identifier: LOCK_NOTIF_ID,
+      content: { title, body, sticky: true, autoDismiss: false, sound: false },
+      trigger: { channelId: LOCK_CHANNEL }, // ChannelAwareTrigger: 즉시 + 지정 채널(LOW)
+    });
+  } catch {
+    // 무시
+  }
+}
+
+export async function clearLockNotification(): Promise<void> {
+  try { await Notifications.dismissNotificationAsync(LOCK_NOTIF_ID); } catch {}
+  try { await Notifications.cancelScheduledNotificationAsync(LOCK_NOTIF_ID); } catch {}
 }
