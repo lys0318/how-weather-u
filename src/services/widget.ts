@@ -10,8 +10,19 @@ export interface WidgetPayload {
 interface WidgetBridgeSpec {
   setData(json: string): void;
   requestPin(size: string): Promise<string>;
+  hasWidgets(): Promise<boolean>;
 }
 const Bridge: WidgetBridgeSpec | undefined = NativeModules.WidgetBridge;
+
+// 홈 화면에 위젯이 하나라도 있는지 (백그라운드 갱신 등록 판단).
+export async function hasWidgets(): Promise<boolean> {
+  if (Platform.OS !== 'android' || !Bridge?.hasWidgets) return false;
+  try {
+    return await Bridge.hasWidgets();
+  } catch {
+    return false;
+  }
+}
 
 // 위젯 데이터 갱신 (안드로이드/브리지 없으면 no-op).
 export async function updateWidgetData(p: WidgetPayload): Promise<void> {

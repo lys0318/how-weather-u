@@ -42,6 +42,7 @@ import AppBanner from '../components/AppBanner';
 import { runWithGate } from '../hooks/useGenerationGate';
 import { saveMessage, isGuideDismissedToday, dismissGuideToday, isProfilePrompted, setProfilePrompted, setLastWidgetWeather } from '../utils/storage';
 import { pushWidget } from '../services/widgetContent';
+import { syncWidgetRefreshTask } from '../tasks/backgroundTask';
 import ProfileEditor from '../components/ProfileEditor';
 import { getMyProfile } from '../services/profile';
 import { useI18n } from '../i18n';
@@ -223,6 +224,7 @@ export default function HomeScreen() {
       (async () => {
         await setLastWidgetWeather(weather);
         await pushWidget();
+        await syncWidgetRefreshTask(); // 위젯 추가/제거 반영해 백그라운드 갱신 등록·해제
       })().catch(() => {});
     }
   }, [weather]);

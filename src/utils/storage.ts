@@ -19,6 +19,9 @@ const KEYS = {
   PROFILE_PROMPTED: 'profilePrompted',            // 로그인 후 프로필 작성 1회 유도 여부
   WIDGET_MSG: 'widgetMsgChoice',                  // 홈위젯에 표시할 메시지 선택
   WIDGET_WEATHER: 'widgetWeather',                // 위젯 즉시 갱신용 마지막 날씨 캐시
+  LAST_COORDS: 'lastCoords',                      // 위젯 백그라운드 갱신용 마지막 좌표
+  GEN_COUNT: 'genCount',                          // 누적 생성 횟수 (인앱 리뷰 트리거)
+  REVIEW_PROMPTED: 'reviewPrompted',              // 인앱 리뷰 노출 완료 여부
 } as const;
 
 // ─── 로그인 후 프로필 작성 유도 (1회) ───────────────────────
@@ -248,6 +251,34 @@ export async function getLastWidgetWeather(): Promise<WeatherInfo | null> {
   } catch {
     return null;
   }
+}
+
+// 백그라운드(위젯 갱신)에선 위치 API 호출 불가 → 포그라운드에서 잡은 마지막 좌표 재사용.
+export async function setLastCoords(lat: number, lon: number): Promise<void> {
+  await AsyncStorage.setItem(KEYS.LAST_COORDS, JSON.stringify({ lat, lon })).catch(() => {});
+}
+export async function getLastCoords(): Promise<{ lat: number; lon: number } | null> {
+  try {
+    const v = await AsyncStorage.getItem(KEYS.LAST_COORDS);
+    const c = v ? (JSON.parse(v) as { lat: number; lon: number }) : null;
+    return c && typeof c.lat === 'number' && typeof c.lon === 'number' ? c : null;
+  } catch {
+    return null;
+  }
+}
+
+// ─── 인앱 리뷰 (누적 생성 N회 도달 시 1회 노출) ──────────────
+export async function bumpGenCount(): Promise<number> {
+  const n = Number(await AsyncStorage.getItem(KEYS.GEN_COUNT)) || 0;
+  const next = n + 1;
+  await AsyncStorage.setItem(KEYS.GEN_COUNT, String(next)).catch(() => {});
+  return next;
+}
+export async function isReviewPrompted(): Promise<boolean> {
+  return (await AsyncStorage.getItem(KEYS.REVIEW_PROMPTED)) === '1';
+}
+export async function setReviewPrompted(): Promise<void> {
+  await AsyncStorage.setItem(KEYS.REVIEW_PROMPTED, '1').catch(() => {});
 }
 
 /**

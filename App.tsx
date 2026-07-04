@@ -10,9 +10,9 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import { COLORS } from './src/constants/theme';
 
-// 백그라운드 태스크 정의 (구버전 호환용)
-import { unregisterBackgroundTask } from './src/tasks/backgroundTask';
-unregisterBackgroundTask();
+// 위젯 백그라운드 갱신 태스크 (위젯 있으면 등록, 없으면 해제)
+import { syncWidgetRefreshTask } from './src/tasks/backgroundTask';
+syncWidgetRefreshTask();
 
 // Sentry 에러 모니터링 (DSN 없으면 skip)
 import { initSentry } from './src/lib/sentry';

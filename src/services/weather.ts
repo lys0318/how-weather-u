@@ -10,6 +10,7 @@ import {
 } from '../constants/weather';
 import { fetchKmaWeather, isInKorea } from './kma';
 import { translate } from '../i18n';
+import { setLastCoords } from '../utils/storage';
 
 const API_KEY = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
 const BASE_URL = 'https://api.openweathermap.org/data/2.5';
@@ -178,7 +179,12 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
   }
 
   const { lat, lon } = await getCurrentCoords();
+  setLastCoords(lat, lon).catch(() => {}); // 위젯 백그라운드 갱신용
+  return fetchWeatherByCoords(lat, lon);
+}
 
+// 좌표 기반 조회 — 위치 권한/GPS 없이 재사용 가능 (위젯 백그라운드 갱신용).
+export async function fetchWeatherByCoords(lat: number, lon: number): Promise<WeatherInfo> {
   // 행정구역(시/동) + 자외선/미세먼지 + 어제 기온을 병렬 조회 — 어느 날씨 소스를 쓰든 공통
   const [koPlace, airQuality, tempYesterday] = await Promise.all([
     reverseGeocodeKo(lat, lon),
