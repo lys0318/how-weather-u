@@ -1,19 +1,25 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { DailySlot, CONDITION_META, DAY_OF_WEEK_KO } from '../constants/weather';
+import { DailySlot, CONDITION_META, DAY_OF_WEEK_KO, DAY_OF_WEEK_EN_SHORT } from '../constants/weather';
 import { COLORS, FONTS } from '../constants/theme';
+import { useI18n } from '../i18n';
 
 interface Props {
   days: DailySlot[];
 }
 
 export default function WeeklyForecast({ days }: Props) {
+  const { t, lang } = useI18n();
   return (
     <View style={styles.wrap}>
       {days.map((d, i) => (
         <View key={i} style={styles.row}>
           <Text style={[styles.day, i === 0 && styles.today]}>
-            {i === 0 ? '오늘' : DAY_OF_WEEK_KO[d.weekdayIdx].slice(0, 1) + '요일'}
+            {i === 0
+              ? t('forecast.today')
+              : lang === 'en'
+                ? DAY_OF_WEEK_EN_SHORT[d.weekdayIdx]
+                : DAY_OF_WEEK_KO[d.weekdayIdx]}
           </Text>
           <Text style={styles.icon}>{CONDITION_META[d.condition].emoji}</Text>
           {d.pop > 0.1 ? (

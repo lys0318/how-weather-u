@@ -2,6 +2,7 @@ import React from 'react';
 import { ScrollView, View, Text, StyleSheet } from 'react-native';
 import { HourlySlot, CONDITION_META } from '../constants/weather';
 import { COLORS, FONTS } from '../constants/theme';
+import { useI18n } from '../i18n';
 
 interface Props {
   slots: HourlySlot[];
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export default function HourlyForecast({ slots, currentHour }: Props) {
+  const { t } = useI18n();
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.container}>
       {slots.map((s, i) => {
@@ -16,7 +18,7 @@ export default function HourlyForecast({ slots, currentHour }: Props) {
         return (
           <View key={i} style={[styles.cell, isCurrent && styles.current]}>
             <Text style={[styles.time, isCurrent && styles.timeActive]}>
-              {isCurrent ? '지금' : `${s.hour}시`}
+              {isCurrent ? t('forecast.now') : t('forecast.hour', { h: s.hour })}
             </Text>
             <Text style={styles.icon}>{CONDITION_META[s.condition].emoji}</Text>
             <Text style={[styles.temp, isCurrent && styles.tempActive]}>{s.temp}°</Text>

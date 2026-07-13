@@ -141,6 +141,9 @@ export const translations = {
       trendDown: '어제보다 {deg}° 낮아요',
       trendSame: '어제와 비슷해요',
     },
+    forecast: {
+      now: '지금', today: '오늘', hour: '{h}시',
+    },
     sports: {
       title: '스포츠 지수',
       cycling: '자전거', running: '러닝', basketball: '농구', soccer: '축구', hiking: '등산',
@@ -414,6 +417,9 @@ export const translations = {
       trendUp: '{deg}° warmer than yesterday',
       trendDown: '{deg}° colder than yesterday',
       trendSame: 'About the same as yesterday',
+    },
+    forecast: {
+      now: 'Now', today: 'Today', hour: '{h}:00',
     },
     sports: {
       title: 'Sports',
