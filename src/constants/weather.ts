@@ -210,21 +210,23 @@ export function computeUmbrella(weather: WeatherInfo, currentHour: number): Umbr
   return { needed: false, raining: false, hoursUntil: null, pop: 0 };
 }
 
-/** 빨래 지수 0~2 (0=좋음, 1=보통, 2=나쁨) */
-export function laundryIndex(weather: WeatherInfo): { level: number; ko: string } {
+/** 빨래 지수 0~2 (0=좋음, 1=보통, 2=나쁨). reason = i18n 키(life.l*) */
+export type LaundryReason = 'rainSnow' | 'humid' | 'good';
+export function laundryIndex(weather: WeatherInfo): { level: number; reason: LaundryReason } {
   const rain = ['rain', 'drizzle', 'thunderstorm', 'snow'].includes(weather.condition);
-  if (rain) return { level: 2, ko: '비·눈엔 실내 건조' };
-  if (weather.humidity > 75) return { level: 1, ko: '습해서 더디게 마름' };
-  return { level: 0, ko: '잘 마르는 날' };
+  if (rain) return { level: 2, reason: 'rainSnow' };
+  if (weather.humidity > 75) return { level: 1, reason: 'humid' };
+  return { level: 0, reason: 'good' };
 }
 
-/** 마스크 필요도 0~2 (미세먼지 기반) */
-export function maskIndex(weather: WeatherInfo): { level: number; ko: string } {
+/** 마스크 필요도 0~2 (미세먼지 기반). reason = i18n 키(life.m*) */
+export type MaskReason = 'must' | 'rec' | 'no' | 'nodata';
+export function maskIndex(weather: WeatherInfo): { level: number; reason: MaskReason } {
   const aq = airQualityGrade(weather.pm10, weather.pm25);
-  if (!aq) return { level: 0, ko: '정보 없음' };
-  if (aq.level >= 3) return { level: 2, ko: '마스크 필수' };
-  if (aq.level >= 2) return { level: 1, ko: '마스크 권장' };
-  return { level: 0, ko: '마스크 불필요' };
+  if (!aq) return { level: 0, reason: 'nodata' };
+  if (aq.level >= 3) return { level: 2, reason: 'must' };
+  if (aq.level >= 2) return { level: 1, reason: 'rec' };
+  return { level: 0, reason: 'no' };
 }
 
 // ── 옷차림 추천 (기상청 체감온도 기준, 8단계) ─────────────────
@@ -268,6 +270,58 @@ export function outfitFor(tempC: number): Outfit {
     if (tempC >= entry.min) return entry.outfit;
   }
   return OUTFIT_TABLE[OUTFIT_TABLE.length - 1].outfit;
+}
+
+// ── 스포츠 지수 (야외 운동 적합도) ──────────────────────────
+export type SportKey = 'cycling' | 'running' | 'basketball' | 'soccer' | 'hiking';
+export const SPORT_KEYS: SportKey[] = ['cycling', 'running', 'basketball', 'soccer', 'hiking'];
+export const SPORT_EMOJI: Record<SportKey, string> = {
+  cycling: '🚴', running: '🏃', basketball: '🏀', soccer: '⚽', hiking: '🥾',
+};
+
+export type SportReason =
+  | 'good' | 'rain' | 'thunder' | 'snow' | 'hot' | 'cold' | 'wind' | 'dust' | 'uv';
+export interface SportEval { level: 0 | 1 | 2; reason: SportReason }
+
+// 한 종목 평가 — 여러 악조건 후보 중 가장 나쁜 것을 채택(동점이면 우선순위 먼저).
+function evalSport(sport: SportKey, w: WeatherInfo): SportEval {
+  const cands: SportEval[] = [{ level: 0, reason: 'good' }];
+  const c = w.condition;
+  if (c === 'thunderstorm') cands.push({ level: 2, reason: 'thunder' });
+  if (c === 'snow') cands.push({ level: 2, reason: 'snow' });
+  if (c === 'rain' || c === 'drizzle' || (w.rainfall ?? 0) > 0)
+    cands.push({ level: 2, reason: 'rain' });
+
+  const aq = airQualityGrade(w.pm10, w.pm25);
+  if (aq) {
+    if (aq.level >= 3) cands.push({ level: 2, reason: 'dust' });
+    else if (aq.level >= 2) cands.push({ level: 1, reason: 'dust' });
+  }
+
+  const f = w.feelsLike;
+  if (f >= 32) cands.push({ level: 2, reason: 'hot' });
+  else if (f >= 29) cands.push({ level: 1, reason: 'hot' });
+  if (f <= -1) cands.push({ level: 2, reason: 'cold' });
+  else if (f <= 3) cands.push({ level: 1, reason: 'cold' });
+
+  // 바람: 자전거가 가장 민감. m/s 기준.
+  const windBad = sport === 'cycling' ? 9 : 11;
+  const windOk = sport === 'cycling' ? 6 : 8;
+  if (w.windSpeed >= windBad) cands.push({ level: 2, reason: 'wind' });
+  else if (w.windSpeed >= windOk) cands.push({ level: 1, reason: 'wind' });
+
+  if (w.uvIndex !== undefined && uvGrade(w.uvIndex).level >= 4)
+    cands.push({ level: 1, reason: 'uv' });
+
+  // 가장 나쁜 레벨 채택. reduce는 strict > 라 동점 시 먼저 push된 후보(우선순위) 유지.
+  return cands.reduce((a, b) => (b.level > a.level ? b : a));
+}
+
+/** 5개 야외 종목별 적합도 (좋음0 / 보통1 / 나쁨2) */
+export function sportsIndex(w: WeatherInfo): Record<SportKey, SportEval> {
+  const out = {} as Record<SportKey, SportEval>;
+  for (const k of SPORT_KEYS) out[k] = evalSport(k, w);
+  return out;
 }
 
 // 생성 시 개인화 입력 (스펙 A)

@@ -46,3 +46,6 @@ store-shots/
 
 # Supabase CLI 임시 파일
 supabase/.temp/
+
+# IntelliJ / Android Studio
+.idea/

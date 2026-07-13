@@ -35,6 +35,9 @@ export const COLORS = {
   skyText3: 'rgba(255,255,255,0.72)',
   skyGlass: 'rgba(255,255,255,0.16)',
   skyGlassLine: 'rgba(255,255,255,0.24)',
+  // 밝은 낮 하늘에서도 흰 글씨 대비 확보용 어두운 스크림
+  skyScrim: 'rgba(38,33,26,0.30)',
+  skyScrimLine: 'rgba(255,255,255,0.30)',
 } as const;
 
 // expo-font useFonts 에 등록하는 패밀리 키와 동일하게 사용

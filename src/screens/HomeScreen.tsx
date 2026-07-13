@@ -38,6 +38,7 @@ import HourlyForecast from '../components/HourlyForecast';
 import WeeklyForecast from '../components/WeeklyForecast';
 import OutfitCard from '../components/OutfitCard';
 import LifeIndex from '../components/LifeIndex';
+import SportsIndex from '../components/SportsIndex';
 import AppBanner from '../components/AppBanner';
 import { runWithGate } from '../hooks/useGenerationGate';
 import { saveMessage, isGuideDismissedToday, dismissGuideToday, isProfilePrompted, setProfilePrompted, setLastWidgetWeather } from '../utils/storage';
@@ -560,6 +561,13 @@ export default function HomeScreen() {
             </View>
           )}
 
+          {/* 스포츠 지수 */}
+          {weather && (
+            <View style={styles.forecastSection}>
+              <SportsIndex weather={weather} />
+            </View>
+          )}
+
           <View style={styles.appNameArea}>
             <Text style={styles.appName}>{t('common.appName')}</Text>
             <Text style={styles.appNameEn}>HOW WEATHER YOU</Text>
@@ -774,20 +782,30 @@ const styles = StyleSheet.create({
     alignItems: 'stretch',
     alignSelf: 'stretch',
     marginTop: 22,
-    backgroundColor: COLORS.skyGlass,
+    backgroundColor: COLORS.skyScrim,
     borderWidth: 1,
-    borderColor: COLORS.skyGlassLine,
+    borderColor: COLORS.skyScrimLine,
     borderRadius: 14,
     overflow: 'hidden',
   },
   glassCell: { flex: 1, alignItems: 'center', paddingVertical: 11, paddingHorizontal: 4 },
-  glassDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.2)' },
-  glassK: { fontSize: 10.5, color: COLORS.skyText3, letterSpacing: 0.4 },
+  glassDivider: { width: 1, backgroundColor: 'rgba(255,255,255,0.22)' },
+  glassK: {
+    fontSize: 10.5,
+    color: COLORS.skyText2,
+    letterSpacing: 0.4,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+  },
   glassV: {
     fontFamily: FONTS.monoMedium,
     fontSize: 15,
     color: COLORS.skyText,
     marginTop: 3,
+    textShadowColor: 'rgba(0,0,0,0.35)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
   },
 
   // BODY

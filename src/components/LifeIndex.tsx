@@ -7,8 +7,12 @@ import {
   maskIndex,
 } from '../constants/weather';
 import { COLORS, FONTS, RADII } from '../constants/theme';
+import { useI18n } from '../i18n';
 
 const LEVEL_COLORS = [COLORS.ember, '#F59E0B', '#EF4444'];
+
+// reason 키 → i18n 키 (life.lRainSnow / life.mMust ...)
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 interface Props {
   weather: WeatherInfo;
@@ -16,25 +20,26 @@ interface Props {
 }
 
 export default function LifeIndex({ weather, currentHour }: Props) {
+  const { t } = useI18n();
   const laundry = laundryIndex(weather);
   const umbrella = computeUmbrella(weather, currentHour);
   const mask = maskIndex(weather);
 
   const umbrellaPct = Math.round(umbrella.pop * 100);
   const umbrellaDesc = umbrella.raining
-    ? '지금 비 와요'
+    ? t('life.uNow')
     : !umbrella.needed
-      ? '우산 불필요'
+      ? t('life.uNo')
       : umbrella.hoursUntil && umbrella.hoursUntil >= 1
         ? umbrellaPct > 0
-          ? `${umbrella.hoursUntil}시간 뒤 비 ${umbrellaPct}%`
-          : `${umbrella.hoursUntil}시간 뒤 비`
-        : '곧 비 소식';
+          ? t('life.uHpct', { hours: umbrella.hoursUntil, pct: umbrellaPct })
+          : t('life.uH', { hours: umbrella.hoursUntil })
+        : t('life.uSoon');
 
   const cards = [
-    { icon: '👕', label: '빨래', desc: laundry.ko, level: laundry.level },
-    { icon: '☂️', label: '우산', desc: umbrellaDesc, level: umbrella.needed ? 2 : 0 },
-    { icon: '😷', label: '마스크', desc: mask.ko, level: mask.level },
+    { icon: '👕', label: t('life.laundry'), desc: t(`life.l${cap(laundry.reason)}`), level: laundry.level },
+    { icon: '☂️', label: t('life.umbrella'), desc: umbrellaDesc, level: umbrella.needed ? 2 : 0 },
+    { icon: '😷', label: t('life.mask'), desc: t(`life.m${cap(mask.reason)}`), level: mask.level },
   ];
 
   return (
