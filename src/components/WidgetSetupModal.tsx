@@ -88,7 +88,7 @@ export default function WidgetSetupModal({ visible, onClose, weather }: Props) {
       : t('weather.myLocation')
     : '';
   const range = weather ? t('weather.tempRange', { min: weather.tempMin, max: weather.tempMax }) : '';
-  let message = weather ? resolveWidgetLine(weather, choice, msgs, lang, new Date().getHours()) : '';
+  let message = weather ? resolveWidgetLine(weather, choice, msgs, new Date().getHours()) : '';
   if (message.length > 90) message = message.slice(0, 88) + '…';
 
   const choose = async (c: WidgetChoice) => {

@@ -324,6 +324,61 @@ export function sportsIndex(w: WeatherInfo): Record<SportKey, SportEval> {
   return out;
 }
 
+// ── 오늘의 브리핑 판정 (문구 조립은 services/brief.ts) ───────
+
+/** 오늘 남은 시간대의 시간별 슬롯 (현재 시각 포함, 자정 넘어가면 제외) */
+export function todaySlots(weather: WeatherInfo, currentHour: number): HourlySlot[] {
+  return (weather.hourly ?? []).filter((s) => {
+    const offset = (s.hour - currentHour + 24) % 24;
+    return currentHour + offset <= 23;
+  });
+}
+
+export type DayPartKey = 'morning' | 'afternoon' | 'night';
+const DAY_PARTS: { key: DayPartKey; hour: number }[] = [
+  { key: 'morning', hour: 8 },
+  { key: 'afternoon', hour: 14 },
+  { key: 'night', hour: 21 },
+];
+
+/**
+ * 아침/낮/밤 대표 기온. 이미 지난 시간대는 빼서 "남은 하루"만 알려줌.
+ * 해외는 예보가 3시간 간격이라 최대 3시간 오차까지 대표값으로 인정.
+ */
+export function pickDayParts(
+  weather: WeatherInfo,
+  currentHour: number,
+): { key: DayPartKey; temp: number }[] {
+  const slots = todaySlots(weather, currentHour);
+  const out: { key: DayPartKey; temp: number }[] = [];
+  for (const part of DAY_PARTS) {
+    if (part.hour < currentHour) continue; // 이미 지난 시간대
+    let best: HourlySlot | null = null;
+    let bestDist = Infinity;
+    for (const s of slots) {
+      const d = Math.abs(s.hour - part.hour);
+      if (d < bestDist) {
+        bestDist = d;
+        best = s;
+      }
+    }
+    if (best && bestDist <= 3) out.push({ key: part.key, temp: best.temp });
+  }
+  return out;
+}
+
+export type AlertKey = 'uv' | 'dust' | 'wind';
+
+/** 임계를 넘은 주의 항목만. 평범한 날엔 빈 배열(노이즈 방지). */
+export function collectAlerts(weather: WeatherInfo): AlertKey[] {
+  const out: AlertKey[] = [];
+  if (weather.uvIndex !== undefined && uvGrade(weather.uvIndex).level >= 2) out.push('uv');
+  const aq = airQualityGrade(weather.pm10, weather.pm25);
+  if (aq && aq.level >= 2) out.push('dust');
+  if (weather.windSpeed >= 8) out.push('wind');
+  return out;
+}
+
 // 생성 시 개인화 입력 (스펙 A)
 export type Place = 'indoor' | 'outdoor' | 'random';
 export type Social = 'solo' | 'group';

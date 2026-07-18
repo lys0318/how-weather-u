@@ -32,13 +32,13 @@ import {
   CONDITION_META,
   uvGrade,
   airQualityGrade,
-  computeUmbrella,
 } from '../constants/weather';
 import HourlyForecast from '../components/HourlyForecast';
 import WeeklyForecast from '../components/WeeklyForecast';
 import OutfitCard from '../components/OutfitCard';
 import LifeIndex from '../components/LifeIndex';
 import SportsIndex from '../components/SportsIndex';
+import DailyBrief from '../components/DailyBrief';
 import AppBanner from '../components/AppBanner';
 import { runWithGate } from '../hooks/useGenerationGate';
 import { saveMessage, isGuideDismissedToday, dismissGuideToday, isProfilePrompted, setProfilePrompted, setLastWidgetWeather } from '../utils/storage';
@@ -197,21 +197,6 @@ export default function HomeScreen() {
 
   const skyKind = getSkyKind(weather?.condition ?? null, hour);
   const paper = getPaperTint(skyKind);
-
-  const umbrella = weather ? computeUmbrella(weather, hour) : null;
-  let umbrellaText: string | null = null;
-  if (umbrella?.needed) {
-    const pct = Math.round(umbrella.pop * 100);
-    if (umbrella.raining) {
-      umbrellaText = t('home.umbrellaNow');
-    } else if (umbrella.hoursUntil && umbrella.hoursUntil >= 1) {
-      umbrellaText = pct > 0
-        ? t('home.umbrellaH', { hours: umbrella.hoursUntil, pct })
-        : t('home.umbrellaHNoPct', { hours: umbrella.hoursUntil });
-    } else {
-      umbrellaText = pct > 0 ? t('home.umbrellaSoon', { pct }) : t('home.umbrellaSoonNoPct');
-    }
-  }
 
   useEffect(() => {
     (async () => {
@@ -411,9 +396,9 @@ export default function HomeScreen() {
 
         {/* BODY */}
         <View style={[styles.body, { backgroundColor: paper }]}>
-          {umbrellaText && (
-            <View style={styles.umbrella}>
-              <Text style={styles.umbrellaText}>{umbrellaText}</Text>
+          {weather && (
+            <View style={styles.briefSection}>
+              <DailyBrief weather={weather} currentHour={hour} />
             </View>
           )}
 
@@ -811,22 +796,7 @@ const styles = StyleSheet.create({
   // BODY
   body: { paddingHorizontal: 26, paddingTop: 4 },
 
-  umbrella: {
-    backgroundColor: COLORS.emberSoft,
-    borderRadius: RADII.card,
-    paddingVertical: 12,
-    paddingHorizontal: 16,
-    marginBottom: 14,
-    borderWidth: 1,
-    borderColor: 'rgba(194,104,63,0.25)',
-  },
-  umbrellaText: {
-    color: COLORS.emberD,
-    fontSize: 13.5,
-    fontWeight: '600',
-    textAlign: 'center',
-    lineHeight: 20,
-  },
+  briefSection: { marginBottom: 14 },
   guestBanner: {
     backgroundColor: COLORS.card,
     borderRadius: RADII.card,

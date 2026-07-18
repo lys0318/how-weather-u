@@ -1,7 +1,7 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { getNotificationsEnabled, getNotifSlots, NotifSlot } from '../utils/storage';
-import { translate, getCurrentLang } from '../i18n';
+import { translate } from '../i18n';
 import { WeatherInfo } from '../constants/weather';
 import { buildBriefLine } from './brief';
 
@@ -21,9 +21,8 @@ const SLOT_TEXT_KEY: Record<NotifSlot, { title: string; body: string }> = {
 
 // 날씨 기반 아침 브리핑 본문 (옷차림 + 우산 한 방에) — 본문 로직은 위젯과 공유(brief.ts)
 function buildBriefContent(weather: WeatherInfo, slot: NotifSlot): { title: string; body: string } {
-  const lang = getCurrentLang();
   const title = `${translate('common.appName')} ${weather.emoji}`;
-  const body = buildBriefLine(weather, lang, SLOT_CONFIG[slot].hour);
+  const body = buildBriefLine(weather, SLOT_CONFIG[slot].hour);
   return { title, body };
 }
 

@@ -13,7 +13,6 @@ export function resolveWidgetLine(
   weather: WeatherInfo,
   choice: WidgetChoice,
   messages: StoredMessage[],
-  lang: 'ko' | 'en',
   hour: number,
 ): string {
   if (choice.kind === 'message') return choice.text;
@@ -23,14 +22,13 @@ export function resolveWidgetLine(
     );
     if (todayMsg) return todayMsg.text;
   }
-  return buildBriefLine(weather, lang, hour);
+  return buildBriefLine(weather, hour);
 }
 
 // 네이티브에 넘길 표시-준비 문자열 조립 (i18n은 여기서 처리).
 export async function buildWidgetPayload(weather: WeatherInfo): Promise<WidgetPayload> {
-  const lang = getCurrentLang();
   const [choice, messages] = await Promise.all([getWidgetChoice(), getMessages()]);
-  let message = resolveWidgetLine(weather, choice, messages, lang, new Date().getHours());
+  let message = resolveWidgetLine(weather, choice, messages, new Date().getHours());
   if (message.length > 90) message = message.slice(0, 88) + '…';
   const city = weather.city && weather.city !== '내 위치' ? weather.city : translate('weather.myLocation');
   return {
