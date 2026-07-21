@@ -49,6 +49,7 @@ import ProfileEditor from '../components/ProfileEditor';
 import { getMyProfile } from '../services/profile';
 import { useI18n } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
+import { usePremium } from '../contexts/PremiumContext';
 import { refreshNotificationsIfNeeded } from '../services/notification';
 import { captureRef } from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
@@ -92,6 +93,7 @@ export default function HomeScreen() {
   const { message, loading: messageLoading, error: messageError, generate } = useMessage();
   const { t, lang } = useI18n();
   const { isGuest } = useAuth();
+  const { isPremium } = usePremium();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [mood, setMood] = useState('');
   const [situation, setSituation] = useState('');
@@ -239,7 +241,7 @@ export default function HomeScreen() {
     setPickerOpen(false);
     if (!weather) return;
     lastInputs.current = { mood: mood.trim() || undefined, situation: situation.trim() || undefined };
-    runWithGate(() => generate(weather, pref, lastInputs.current));
+    runWithGate(() => generate(weather, pref, lastInputs.current), undefined, isPremium);
     setMood(''); setSituation('');
   };
 

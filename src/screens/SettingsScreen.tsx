@@ -9,6 +9,7 @@ import {
   Linking,
   Switch,
   Platform,
+  ActivityIndicator,
 } from 'react-native';
 import {
   setNotificationsEnabled,
@@ -28,6 +29,9 @@ import {
 } from '../services/notification';
 import { openStoreListing } from '../services/review';
 import { useAuth } from '../contexts/AuthContext';
+import { usePremium } from '../contexts/PremiumContext';
+import { getMonthlyPackage, purchasePackage, restorePurchases } from '../services/purchases';
+import type { PurchasesPackage } from 'react-native-purchases';
 import { useI18n } from '../i18n';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -48,6 +52,9 @@ export default function SettingsScreen() {
   const { t, lang, setLang } = useI18n();
   const { weather } = useWeather();
   const paper = getPaperTint(getSkyKind(weather?.condition ?? null, new Date().getHours()));
+  const { isPremium, billingAvailable, refresh: refreshPremium } = usePremium();
+  const [monthly, setMonthly] = useState<PurchasesPackage | null>(null);
+  const [subBusy, setSubBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [upgrading, setUpgrading] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
@@ -136,6 +143,48 @@ export default function SettingsScreen() {
         },
       ],
     );
+  };
+
+  // 판매 중인 월 구독 상품 로드 (구독자면 불필요)
+  useEffect(() => {
+    if (!billingAvailable || isPremium) return;
+    getMonthlyPackage().then(setMonthly).catch(() => {});
+  }, [billingAvailable, isPremium]);
+
+  const handleSubscribe = async () => {
+    if (!monthly) return;
+    setSubBusy(true);
+    try {
+      const result = await purchasePackage(monthly);
+      if (result === 'purchased') {
+        await refreshPremium();
+        Alert.alert(t('sub.thanksTitle'), t('sub.thanksBody'));
+      } else if (result === 'failed') {
+        Alert.alert(t('sub.failTitle'), t('sub.failBody'));
+      }
+      // 'cancelled'는 사용자가 스스로 닫은 것 — 알럿 띄우지 않음
+    } finally {
+      setSubBusy(false);
+    }
+  };
+
+  const handleRestore = async () => {
+    setSubBusy(true);
+    try {
+      const ok = await restorePurchases();
+      await refreshPremium();
+      Alert.alert(
+        ok ? t('sub.restoredTitle') : t('sub.noneTitle'),
+        ok ? t('sub.restoredBody') : t('sub.noneBody'),
+      );
+    } finally {
+      setSubBusy(false);
+    }
+  };
+
+  // 해지·결제수단 변경은 Play 스토어에서만 가능 (정책상 경로 안내 필수)
+  const openManage = () => {
+    Linking.openURL('https://play.google.com/store/account/subscriptions').catch(() => {});
   };
 
   // 진입 시 알림 자동 보충 + Switch/슬롯 초기 상태 로드
@@ -320,6 +369,43 @@ export default function SettingsScreen() {
         </View>
       </View>
 
+      {/* 구독 (광고 제거) — 결제 설정이 없으면 섹션 자체를 숨김 */}
+      {billingAvailable && (
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>{t('sub.title')}</Text>
+          {isPremium ? (
+            <>
+              <Text style={styles.desc}>{t('sub.activeDesc')}</Text>
+              <TouchableOpacity onPress={openManage} style={styles.subManageBtn}>
+                <Text style={styles.subManageText}>{t('sub.manage')}</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <>
+              <Text style={styles.desc}>{t('sub.pitch')}</Text>
+              <TouchableOpacity
+                onPress={handleSubscribe}
+                disabled={subBusy || !monthly}
+                style={[styles.subBtn, (subBusy || !monthly) && styles.subBtnDisabled]}
+              >
+                {subBusy ? (
+                  <ActivityIndicator color={COLORS.emberText} size="small" />
+                ) : (
+                  <Text style={styles.subBtnText}>
+                    {monthly
+                      ? t('sub.subscribeWithPrice', { price: monthly.product.priceString })
+                      : t('sub.loading')}
+                  </Text>
+                )}
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleRestore} disabled={subBusy}>
+                <Text style={styles.subRestore}>{t('sub.restore')}</Text>
+              </TouchableOpacity>
+            </>
+          )}
+        </View>
+      )}
+
       {/* 알림 안내 */}
       <View style={styles.section}>
         <Text style={styles.sectionTitle}>{t('settings.notifTitle')}</Text>
@@ -490,6 +576,31 @@ const styles = StyleSheet.create({
     borderColor: COLORS.line,
   },
   sectionTitle: { color: COLORS.ink, fontSize: 14, fontWeight: '600', marginBottom: 10 },
+  subBtn: {
+    backgroundColor: COLORS.ember,
+    borderRadius: RADII.btn,
+    paddingVertical: 13,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  subBtnDisabled: { opacity: 0.5 },
+  subBtnText: { color: COLORS.emberText, fontSize: 14, fontWeight: '600' },
+  subRestore: {
+    color: COLORS.ink3,
+    fontSize: 12.5,
+    textAlign: 'center',
+    marginTop: 12,
+    textDecorationLine: 'underline',
+  },
+  subManageBtn: {
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    borderRadius: RADII.btn,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 12,
+  },
+  subManageText: { color: COLORS.ink2, fontSize: 13.5 },
   widgetBtn: { backgroundColor: COLORS.ember, borderRadius: RADII.btn, paddingVertical: 14, alignItems: 'center' },
   widgetBtnText: { color: COLORS.emberText, fontFamily: FONTS.serifKoBold, fontSize: 15 },
   widgetHint: { color: COLORS.ink3, fontSize: 12, marginTop: 8, textAlign: 'center' },

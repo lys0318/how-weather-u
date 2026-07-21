@@ -16,6 +16,7 @@ import NativeAdCard from '../components/NativeAdCard';
 import { COLORS, FONTS, RADII } from '../constants/theme';
 import { useI18n } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
+import { usePremium } from '../contexts/PremiumContext';
 import { saveMessage, saveEntry, getGenPrefs, setGenPrefs } from '../utils/storage';
 import { GenPrefs, DEFAULT_GEN_PREFS, Place, Social, Cuisine } from '../constants/weather';
 import { useFocusEffect } from '@react-navigation/native';
@@ -37,6 +38,7 @@ export default function MessagingScreen() {
   const { fortune, loading: fortLoading, generate: generateFortune } = useFortune();
   const { t, lang } = useI18n();
   const { isGuest } = useAuth();
+  const { isPremium } = usePremium();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [genPrefs, setGenPrefsState] = useState<GenPrefs>(DEFAULT_GEN_PREFS);
   const [actSheet, setActSheet] = useState(false);
@@ -75,7 +77,7 @@ export default function MessagingScreen() {
     setPickerOpen(false);
     if (!weather) return;
     lastInputs.current = { mood: mood.trim() || undefined, situation: situation.trim() || undefined };
-    runWithGate(() => generateMsg(weather, pref, lastInputs.current));
+    runWithGate(() => generateMsg(weather, pref, lastInputs.current), undefined, isPremium);
     setMood(''); setSituation('');
   };
 
@@ -85,17 +87,17 @@ export default function MessagingScreen() {
   const submitActivity = () => {
     setActSheet(false);
     if (!weather) return;
-    runWithGate(() => generateActivity(weather, { place: genPrefs.place, social: genPrefs.social }));
+    runWithGate(() => generateActivity(weather, { place: genPrefs.place, social: genPrefs.social }), undefined, isPremium);
   };
   const submitFood = () => {
     setFoodSheet(false);
     if (!weather) return;
-    runWithGate(() => generateFood(weather, { cuisine: genPrefs.cuisine }));
+    runWithGate(() => generateFood(weather, { cuisine: genPrefs.cuisine }), undefined, isPremium);
   };
 
   const handleFortune = () => {
     if (!weather) return;
-    runWithGate(() => generateFortune(weather));
+    runWithGate(() => generateFortune(weather), undefined, isPremium);
   };
 
   const noWeather = !weather;

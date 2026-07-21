@@ -22,15 +22,17 @@ export async function checkGenerationGate(): Promise<{
 /**
  * 게이팅 체크 → (필요 시) 전면광고 → callback 실행
  * 남용 상한 도달 시 onCapped 호출 후 종료.
+ * isPremium=true(구독자)면 광고 없이 바로 실행.
  */
 export async function runWithGate(
   callback: () => Promise<void> | void,
   onCapped?: () => void,
+  isPremium = false,
 ): Promise<void> {
   const { canGenerate, skipAd } = await checkGenerationGate();
   if (!canGenerate) {
     onCapped?.();
     return;
   }
-  await showInterstitialThenRun(() => { callback(); }, skipAd);
+  await showInterstitialThenRun(() => { callback(); }, isPremium || skipAd);
 }

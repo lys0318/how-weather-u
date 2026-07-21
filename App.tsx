@@ -45,6 +45,7 @@ import LoginScreen from './src/screens/LoginScreen';
 import PermissionSetupScreen from './src/screens/PermissionSetupScreen';
 import { getHasOnboarded } from './src/utils/storage';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
+import { PremiumProvider } from './src/contexts/PremiumContext';
 import { LanguageProvider, useI18n } from './src/i18n';
 
 export type RootStackParamList = {
@@ -179,7 +180,9 @@ export default function App() {
     <SafeAreaProvider>
       <LanguageProvider>
         <AuthProvider>
-          <AppNavigator />
+          <PremiumProvider>
+            <AppNavigator />
+          </PremiumProvider>
         </AuthProvider>
       </LanguageProvider>
     </SafeAreaProvider>

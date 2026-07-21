@@ -6,17 +6,20 @@ import { View, Text, Image, StyleSheet } from 'react-native';
 import { getNativeUnitId } from '../services/ads';
 import { COLORS, FONTS, RADII } from '../constants/theme';
 import { useI18n } from '../i18n';
+import { usePremium } from '../contexts/PremiumContext';
 
 let admob: any = null;
 try { admob = require('react-native-google-mobile-ads'); } catch {}
 
 export default function NativeAdCard() {
   const { t } = useI18n();
+  const { isPremium } = usePremium();
   const [nativeAd, setNativeAd] = useState<any>(null);
   const unitId = getNativeUnitId();
 
   useEffect(() => {
-    if (!admob || !unitId) return;
+    // 구독자는 광고를 아예 요청하지 않음 (데이터·배터리 절약)
+    if (isPremium || !admob || !unitId) return;
     let mounted = true;
     let loaded: any = null;
     admob.NativeAd.createForAdRequest(unitId, { requestNonPersonalizedAdsOnly: true })
@@ -29,9 +32,9 @@ export default function NativeAdCard() {
       mounted = false;
       if (loaded) loaded.destroy();
     };
-  }, [unitId]);
+  }, [unitId, isPremium]);
 
-  if (!admob || !nativeAd) return null;
+  if (isPremium || !admob || !nativeAd) return null;
   const { NativeAdView, NativeAsset, NativeAssetType, NativeMediaView } = admob;
   const iconUrl = nativeAd.icon?.url;
 
