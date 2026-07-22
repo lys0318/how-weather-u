@@ -152,7 +152,8 @@ export default function SettingsScreen() {
   }, [billingAvailable, isPremium]);
 
   const handleSubscribe = async () => {
-    if (!monthly) return;
+    // 게스트는 구독을 되찾을 수 없으므로 UI뿐 아니라 여기서도 차단
+    if (!monthly || isGuest) return;
     setSubBusy(true);
     try {
       const result = await purchasePackage(monthly);
@@ -380,6 +381,15 @@ export default function SettingsScreen() {
                 <Text style={styles.subManageText}>{t('sub.manage')}</Text>
               </TouchableOpacity>
             </>
+          ) : isGuest ? (
+            /* 게스트는 익명 계정이라 재설치·기기변경 시 구독을 잃음 → 구매 자체를 막고 로그인 유도 */
+            <>
+              <Text style={styles.desc}>{t('sub.pitch')}</Text>
+              <Text style={styles.subGuestNote}>{t('sub.guestNote')}</Text>
+              <TouchableOpacity onPress={signInWithGoogle} style={styles.subBtn}>
+                <Text style={styles.subBtnText}>{t('sub.guestSignIn')}</Text>
+              </TouchableOpacity>
+            </>
           ) : (
             <>
               <Text style={styles.desc}>{t('sub.pitch')}</Text>
@@ -551,7 +561,7 @@ export default function SettingsScreen() {
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
-        <Text style={styles.appVersion}>v1.3.1</Text>
+        <Text style={styles.appVersion}>v1.3.2</Text>
       </View>
       </ScrollView>
       <ProfileEditor visible={profileOpen} onClose={() => setProfileOpen(false)} />
@@ -584,6 +594,12 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   subBtnDisabled: { opacity: 0.5 },
+  subGuestNote: {
+    color: COLORS.emberD,
+    fontSize: 12.5,
+    lineHeight: 18,
+    marginTop: 8,
+  },
   subBtnText: { color: COLORS.emberText, fontSize: 14, fontWeight: '600' },
   subRestore: {
     color: COLORS.ink3,
