@@ -79,7 +79,11 @@ export default function ProfileEditor({ visible, onClose }: Props) {
           {loading ? (
             <ActivityIndicator color={COLORS.ember} style={{ marginVertical: 30 }} />
           ) : (
-            <ScrollView style={{ maxHeight: 440 }} keyboardShouldPersistTaps="handled">
+            <ScrollView
+              style={styles.scroll}
+              contentContainerStyle={styles.scrollContent}
+              keyboardShouldPersistTaps="handled"
+            >
               <Text style={styles.label}>{t('profile.nicknameLabel')}</Text>
               <TextInput
                 style={styles.input} value={nickname} onChangeText={setNickname}
@@ -138,7 +142,12 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.paper,
     borderTopLeftRadius: RADII.sheet, borderTopRightRadius: RADII.sheet,
     paddingHorizontal: 24, paddingTop: 12, paddingBottom: 30,
+    // 화면 비율로 제한 — 고정 높이는 작은 기기에서 입력칸이 잘림
+    maxHeight: '90%',
   },
+  // flexShrink로 남은 공간만 차지 → 제목/저장버튼은 항상 보이고 본문만 스크롤
+  scroll: { flexShrink: 1 },
+  scrollContent: { paddingBottom: 8 },
   grip: { width: 38, height: 4, borderRadius: 4, backgroundColor: COLORS.line, alignSelf: 'center', marginBottom: 14 },
   title: { fontFamily: FONTS.serifKo, color: COLORS.ink, fontSize: 21, textAlign: 'center' },
   intro: { color: COLORS.ink3, fontSize: 12.5, textAlign: 'center', marginTop: 6, marginBottom: 16, lineHeight: 18 },

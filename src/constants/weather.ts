@@ -367,6 +367,62 @@ export function pickDayParts(
   return out;
 }
 
+/** 시간대별 대표 슬롯 — 브리핑에서 "아침 8시 22°"처럼 시각까지 말할 때 사용 */
+export function pickDayPartSlots(
+  weather: WeatherInfo,
+  currentHour: number,
+): { key: DayPartKey; hour: number; temp: number }[] {
+  const slots = todaySlots(weather, currentHour);
+  const out: { key: DayPartKey; hour: number; temp: number }[] = [];
+  for (const part of DAY_PARTS) {
+    if (part.hour < currentHour) continue;
+    let best: HourlySlot | null = null;
+    let bestDist = Infinity;
+    for (const s of slots) {
+      const d = Math.abs(s.hour - part.hour);
+      if (d < bestDist) {
+        bestDist = d;
+        best = s;
+      }
+    }
+    if (best && bestDist <= 3) out.push({ key: part.key, hour: best.hour, temp: best.temp });
+  }
+  return out;
+}
+
+/** 하루 전반의 하늘 상태 — 시간별 예보에서 가장 잦은 컨디션 */
+export function dominantCondition(
+  weather: WeatherInfo,
+  currentHour: number,
+): { condition: WeatherCondition; ratio: number } {
+  const slots = todaySlots(weather, currentHour);
+  if (slots.length === 0) return { condition: weather.condition, ratio: 1 };
+  const count = new Map<WeatherCondition, number>();
+  for (const s of slots) count.set(s.condition, (count.get(s.condition) ?? 0) + 1);
+  let top: WeatherCondition = weather.condition;
+  let max = 0;
+  for (const [c, n] of count) {
+    if (n > max) {
+      max = n;
+      top = c;
+    }
+  }
+  return { condition: top, ratio: max / slots.length };
+}
+
+/** 습도 체감 단계 — 0 건조 / 1 쾌적 / 2 다소습함 / 3 매우습함 */
+export function humidityLevel(humidity: number): 0 | 1 | 2 | 3 {
+  if (humidity < 30) return 0;
+  if (humidity < 60) return 1;
+  if (humidity < 80) return 2;
+  return 3;
+}
+
+/** 하루 기온 폭이 큰지 (일교차 주의) */
+export function isWideTempRange(weather: WeatherInfo): boolean {
+  return weather.tempMax - weather.tempMin >= 10;
+}
+
 export type AlertKey = 'uv' | 'dust' | 'wind';
 
 /** 임계를 넘은 주의 항목만. 평범한 날엔 빈 배열(노이즈 방지). */

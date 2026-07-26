@@ -117,7 +117,11 @@ export default function WidgetSetupModal({ visible, onClose, weather }: Props) {
             </TouchableOpacity>
           </View>
 
-          <ScrollView showsVerticalScrollIndicator={false}>
+          <ScrollView
+            style={styles.scroll}
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+          >
             {/* 미리보기 + 추가 */}
             <Text style={styles.sectionLabel}>{t('widget.previewLabel')}</Text>
 
@@ -183,6 +187,9 @@ const styles = StyleSheet.create({
     paddingBottom: 20,
     maxHeight: '88%',
   },
+  // 높이 제약이 없으면 메시지 목록이 길 때 스크롤 대신 잘려버림
+  scroll: { flexShrink: 1 },
+  scrollContent: { paddingBottom: 4 },
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 },
   title: { color: COLORS.ink, fontFamily: FONTS.serifKoBold, fontSize: 18 },
   close: { color: COLORS.ink3, fontSize: 20, paddingHorizontal: 4 },
