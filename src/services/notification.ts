@@ -7,7 +7,7 @@ import { buildBriefLine } from './brief';
 
 // 시간대별 발송 시각 (문구는 현재 언어로 translate)
 export const SLOT_CONFIG: Record<NotifSlot, { hour: number; minute: number }> = {
-  morning: { hour: 8, minute: 0 },
+  morning: { hour: 7, minute: 0 },
   lunch: { hour: 12, minute: 30 },
   evening: { hour: 19, minute: 0 },
 };

@@ -119,6 +119,9 @@ export const translations = {
       interestsPh: '예: 러닝, 영화, 고양이',
       concernLabel: '요즘 고민이나 위로받고 싶은 것',
       concernPh: '예: 이직 준비로 지쳐요',
+      fortuneHint: '아래는 오늘의 운세를 더 맞춤으로 받기 위한 항목이에요. 생년월일은 받지 않고, 원하는 것만 골라주시면 됩니다.',
+      zodiacLabel: '띠 (선택)',
+      signLabel: '별자리 (선택)',
       save: '저장',
       saved: '저장했어요',
       saveFail: '저장 실패: {msg}',
@@ -178,6 +181,15 @@ export const translations = {
       alertDust: '미세먼지',
       alertWind: '강한 바람',
       alertLine: '{list} 주의하세요',
+    },
+    zodiac: {
+      rat: '쥐', ox: '소', tiger: '호랑이', rabbit: '토끼', dragon: '용', snake: '뱀',
+      horse: '말', goat: '양', monkey: '원숭이', rooster: '닭', dog: '개', pig: '돼지',
+    },
+    sign: {
+      aries: '양자리', taurus: '황소자리', gemini: '쌍둥이', cancer: '게자리',
+      leo: '사자자리', virgo: '처녀자리', libra: '천칭자리', scorpio: '전갈자리',
+      sagittarius: '궁수자리', capricorn: '염소자리', aquarius: '물병자리', pisces: '물고기',
     },
     caster: {
       // {mood}는 '무더위·쌀쌀·한파'처럼 명사라 "~한"이 아니라 뒤에 붙여 씀
@@ -291,7 +303,7 @@ export const translations = {
       langEn: 'English',
       notifTitle: '알림',
       notifDesc: '푸시 알림을 켜면 원하는 시간대에\n메시지를 받으러 오라고 살짝 알려드려요.',
-      notifSubDesc: '• 아침 08:00 / 점심 12:30 / 저녁 19:00\n• 원하는 시간대만 선택해서 받을 수 있어요',
+      notifSubDesc: '• 아침 07:00 / 점심 12:30 / 저녁 19:00\n• 원하는 시간대만 선택해서 받을 수 있어요',
       pushTitle: '푸시 알림',
       pushOn: '알림이 활성화됨',
       pushOff: '알림이 해제됨',
@@ -447,6 +459,9 @@ export const translations = {
       interestsPh: 'e.g. running, films, cats',
       concernLabel: 'Anything on your mind lately',
       concernPh: 'e.g. worn out from job hunting',
+      fortuneHint: "These help tailor today's fortune. We never ask for your birth date — pick only what you'd like to share.",
+      zodiacLabel: 'Zodiac animal (optional)',
+      signLabel: 'Star sign (optional)',
       save: 'Save',
       saved: 'Saved',
       saveFail: 'Save failed: {msg}',
@@ -506,6 +521,15 @@ export const translations = {
       alertDust: 'fine dust',
       alertWind: 'strong wind',
       alertLine: 'Watch out for {list}',
+    },
+    zodiac: {
+      rat: 'Rat', ox: 'Ox', tiger: 'Tiger', rabbit: 'Rabbit', dragon: 'Dragon', snake: 'Snake',
+      horse: 'Horse', goat: 'Goat', monkey: 'Monkey', rooster: 'Rooster', dog: 'Dog', pig: 'Pig',
+    },
+    sign: {
+      aries: 'Aries', taurus: 'Taurus', gemini: 'Gemini', cancer: 'Cancer',
+      leo: 'Leo', virgo: 'Virgo', libra: 'Libra', scorpio: 'Scorpio',
+      sagittarius: 'Sagittarius', capricorn: 'Capricorn', aquarius: 'Aquarius', pisces: 'Pisces',
     },
     caster: {
       partMorning: 'Around {hour}:00 this morning it will be {temp}° and {mood},',
@@ -620,7 +644,7 @@ export const translations = {
       notifDesc:
         'Turn on push notifications and we’ll gently nudge you\nto come grab a message at your chosen times.',
       notifSubDesc:
-        '• Morning 08:00 / Noon 12:30 / Evening 19:00\n• Pick only the times you want',
+        '• Morning 07:00 / Noon 12:30 / Evening 19:00\n• Pick only the times you want',
       pushTitle: 'Push notifications',
       pushOn: 'Notifications on',
       pushOff: 'Notifications off',

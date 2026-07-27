@@ -7,6 +7,9 @@ import {
 import { COLORS, FONTS, RADII } from '../constants/theme';
 import { useI18n } from '../i18n';
 import { getMyProfile, upsertMyProfile } from '../services/profile';
+import {
+  ZODIAC_ANIMALS, ANIMAL_EMOJI, STAR_SIGNS, SIGN_EMOJI,
+} from '../constants/zodiac';
 
 interface Props {
   visible: boolean;
@@ -31,6 +34,8 @@ export default function ProfileEditor({ visible, onClose }: Props) {
   const [occupation, setOccupation] = useState<string | undefined>();
   const [interests, setInterests] = useState('');
   const [concern, setConcern] = useState('');
+  const [zodiacAnimal, setZodiacAnimal] = useState<string | undefined>();
+  const [starSign, setStarSign] = useState<string | undefined>();
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
 
@@ -44,6 +49,8 @@ export default function ProfileEditor({ visible, onClose }: Props) {
         setOccupation(p?.occupation);
         setInterests(p?.interests ?? '');
         setConcern(p?.concern ?? '');
+        setZodiacAnimal(p?.zodiacAnimal);
+        setStarSign(p?.starSign);
       })
       .finally(() => setLoading(false));
   }, [visible]);
@@ -54,7 +61,9 @@ export default function ProfileEditor({ visible, onClose }: Props) {
   const handleSave = async () => {
     setSaving(true);
     try {
-      await upsertMyProfile({ nickname, ageBand, occupation, interests, concern });
+      await upsertMyProfile({
+        nickname, ageBand, occupation, interests, concern, zodiacAnimal, starSign,
+      });
       onClose();
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -123,6 +132,35 @@ export default function ProfileEditor({ visible, onClose }: Props) {
                 style={[styles.input, styles.multiline]} value={concern} onChangeText={setConcern}
                 placeholder={t('profile.concernPh')} placeholderTextColor={COLORS.ink3} maxLength={200} multiline
               />
+
+              {/* 운세 개인화 — 생년월일 대신 직접 선택 */}
+              <Text style={styles.sectionHint}>{t('profile.fortuneHint')}</Text>
+
+              <Text style={styles.label}>{t('profile.zodiacLabel')}</Text>
+              <View style={styles.chipRow}>
+                {ZODIAC_ANIMALS.map((a) => (
+                  <TouchableOpacity key={a}
+                    style={[styles.chip, zodiacAnimal === a && styles.chipOn]}
+                    onPress={() => toggle(zodiacAnimal, a, setZodiacAnimal)}>
+                    <Text style={[styles.chipText, zodiacAnimal === a && styles.chipTextOn]}>
+                      {ANIMAL_EMOJI[a]} {t(`zodiac.${a}`)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+
+              <Text style={styles.label}>{t('profile.signLabel')}</Text>
+              <View style={styles.chipRow}>
+                {STAR_SIGNS.map((s) => (
+                  <TouchableOpacity key={s}
+                    style={[styles.chip, starSign === s && styles.chipOn]}
+                    onPress={() => toggle(starSign, s, setStarSign)}>
+                    <Text style={[styles.chipText, starSign === s && styles.chipTextOn]}>
+                      {SIGN_EMOJI[s]} {t(`sign.${s}`)}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </ScrollView>
           )}
 
@@ -152,6 +190,16 @@ const styles = StyleSheet.create({
   title: { fontFamily: FONTS.serifKo, color: COLORS.ink, fontSize: 21, textAlign: 'center' },
   intro: { color: COLORS.ink3, fontSize: 12.5, textAlign: 'center', marginTop: 6, marginBottom: 16, lineHeight: 18 },
   label: { color: COLORS.ink2, fontSize: 13, fontWeight: '600', marginTop: 14, marginBottom: 8 },
+  // 운세 섹션 진입 안내 — 위쪽 입력들과 시각적으로 구분
+  sectionHint: {
+    color: COLORS.ink3,
+    fontSize: 12,
+    lineHeight: 17,
+    marginTop: 22,
+    paddingTop: 16,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.line,
+  },
   input: {
     borderWidth: 1, borderColor: COLORS.line, borderRadius: RADII.card,
     paddingHorizontal: 14, paddingVertical: 11, fontSize: 14.5,

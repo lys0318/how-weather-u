@@ -9,6 +9,9 @@ export interface Profile {
   occupation?: string;   // 'student'|'worker'|'homemaker'|'jobseeker'|'etc'
   interests?: string;    // 관심사·취미 (자유)
   concern?: string;      // 요즘 고민·위로받고싶은 주제 (자유)
+  // 운세 개인화용 — 생년월일 대신 12개 중 선택 (개인 식별성 낮음)
+  zodiacAnimal?: string; // 'rat'|'ox'|...|'pig'
+  starSign?: string;     // 'aries'|'taurus'|...|'pisces'
 }
 
 // 'none' = 아직 조회 안 함, null = 조회했으나 없음/게스트
@@ -21,6 +24,8 @@ function rowToProfile(r: Record<string, unknown>): Profile {
     occupation: (r.occupation as string) ?? undefined,
     interests: (r.interests as string) ?? undefined,
     concern: (r.concern as string) ?? undefined,
+    zodiacAnimal: (r.zodiac_animal as string) ?? undefined,
+    starSign: (r.star_sign as string) ?? undefined,
   };
 }
 
@@ -64,6 +69,8 @@ export async function upsertMyProfile(p: Profile): Promise<void> {
     occupation: p.occupation || null,
     interests: p.interests?.trim() || null,
     concern: p.concern?.trim() || null,
+    zodiac_animal: p.zodiacAnimal || null,
+    star_sign: p.starSign || null,
     updated_at: new Date().toISOString(),
   };
   const { error } = await supabase.from('profiles').upsert(row, { onConflict: 'user_id' });
