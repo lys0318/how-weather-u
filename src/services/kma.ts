@@ -155,10 +155,52 @@ function kmaToCondition(pty: string | number, sky: string | number): WeatherCond
 }
 
 // 호주식 체감온도 근사 (KMA는 체감온도 직접 제공 안 함)
+// ── 체감온도 (기상청 공식 산출식, 2022.6.2~ 적용) ─────────────
+// 출처: 기상자료개방포털 기후통계분석 > 응용기상분석 > 체감온도
+// https://data.kma.go.kr/climate/windChill/selectWindChillChart.do
+//
+// 여름철(5~9월)과 겨울철(10~4월)이 서로 다른 공식을 쓰고, 겨울철은
+// "기온 10도 이하 · 풍속 1.3m/s 이상"일 때만 별도 산출한다.
+// 그 외 구간은 기상청도 체감온도를 따로 계산하지 않고 실제 기온을 쓴다.
+
+// Stull(2011) 습구온도 근사식. atan은 라디안(JS Math.atan 그대로) —
+// 도(degree) 단위로 잘못 쓰면 결과가 수천 도로 튀어 바로 드러남.
+function stullWetBulb(tempC: number, humidity: number): number {
+  const rh = humidity;
+  return (
+    tempC * Math.atan(0.151977 * Math.sqrt(rh + 8.313659)) +
+    Math.atan(tempC + rh) -
+    Math.atan(rh - 1.67633) +
+    0.00391838 * Math.pow(rh, 1.5) * Math.atan(0.023101 * rh) -
+    4.686035
+  );
+}
+
+// 여름철(5~9월) — 기온+습구온도 기반. 풍속은 쓰지 않음(공식에 없음).
+function summerFeelsLike(tempC: number, humidity: number): number {
+  const tw = stullWetBulb(tempC, humidity);
+  return -0.2442 + 0.55399 * tw + 0.45535 * tempC - 0.0022 * tw * tw + 0.00278 * tw * tempC + 3.0;
+}
+
+// 겨울철(10~4월) 바람냉각 — V는 km/h (조건 판정은 m/s 기준이라 변환 필요).
+function winterFeelsLike(tempC: number, windMs: number): number {
+  const vKmh = windMs * 3.6;
+  const v016 = Math.pow(vKmh, 0.16);
+  return 13.12 + 0.6215 * tempC - 11.37 * v016 + 0.3965 * v016 * tempC;
+}
+
 function apparentTemp(temp: number, humidity: number, windMs: number): number {
-  const e = (humidity / 100) * 6.105 * Math.exp((17.27 * temp) / (237.7 + temp));
-  const at = temp + 0.33 * e - 0.7 * windMs - 4.0;
-  return Math.round(at);
+  const month = new Date().getMonth() + 1; // 1~12, 기기 로컬 기준(국내 전용 함수라 KST와 사실상 동일)
+  const isSummer = month >= 5 && month <= 9;
+  if (isSummer) {
+    return Math.round(summerFeelsLike(temp, humidity));
+  }
+  const isWinterConditionMet = temp <= 10 && windMs >= 1.3;
+  if (isWinterConditionMet) {
+    return Math.round(winterFeelsLike(temp, windMs));
+  }
+  // 적용 조건 밖 — 기상청도 별도 체감온도를 산출하지 않고 실제 기온을 그대로 씀
+  return Math.round(temp);
 }
 
 interface KmaItem {
