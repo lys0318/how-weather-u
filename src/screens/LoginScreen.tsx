@@ -14,10 +14,12 @@ import { COLORS, FONTS, RADII } from '../constants/theme';
 import SkyBackground, { getPaperTint } from '../components/SkyBackground';
 
 export default function LoginScreen() {
-  const { signInWithGoogle, signInAsGuest } = useAuth();
+  const { signInWithGoogle, signInWithKakao, signInAsGuest } = useAuth();
   const { t, lang } = useI18n();
   const [loading, setLoading] = useState(false);
+  const [kakaoLoading, setKakaoLoading] = useState(false);
   const [guestLoading, setGuestLoading] = useState(false);
+  const anyLoading = loading || kakaoLoading || guestLoading;
 
   // 약관 / 개인정보처리방침 — 현재 언어에 맞는 페이지로
   const openLegal = (doc: 'terms' | 'privacy-policy') => {
@@ -34,6 +36,18 @@ export default function LoginScreen() {
       Alert.alert(t('login.failTitle'), msg);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleKakaoLogin = async () => {
+    setKakaoLoading(true);
+    try {
+      await signInWithKakao();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : t('login.genericError');
+      Alert.alert(t('login.failTitle'), msg);
+    } finally {
+      setKakaoLoading(false);
     }
   };
 
@@ -68,9 +82,24 @@ export default function LoginScreen() {
 
           <View style={styles.actions}>
             <TouchableOpacity
-              style={[styles.googleButton, loading && styles.disabled]}
+              style={[styles.kakaoButton, anyLoading && styles.disabled]}
+              onPress={handleKakaoLogin}
+              disabled={anyLoading}
+            >
+              {kakaoLoading ? (
+                <ActivityIndicator color="#191919" size="small" />
+              ) : (
+                <>
+                  <Text style={styles.kakaoMark}>K</Text>
+                  <Text style={styles.kakaoButtonText}>{t('login.kakaoStart')}</Text>
+                </>
+              )}
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.googleButton, styles.googleSpacing, anyLoading && styles.disabled]}
               onPress={handleGoogleLogin}
-              disabled={loading}
+              disabled={anyLoading}
             >
               {loading ? (
                 <ActivityIndicator color={COLORS.ink} size="small" />
@@ -83,9 +112,9 @@ export default function LoginScreen() {
             </TouchableOpacity>
 
             <TouchableOpacity
-              style={[styles.guestButton, guestLoading && styles.disabled]}
+              style={[styles.guestButton, anyLoading && styles.disabled]}
               onPress={handleGuest}
-              disabled={guestLoading || loading}
+              disabled={anyLoading}
             >
               {guestLoading ? (
                 <ActivityIndicator color={COLORS.ink2} size="small" />
@@ -149,6 +178,20 @@ const styles = StyleSheet.create({
     marginBottom: 30,
   },
   actions: { alignItems: 'center' },
+  kakaoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#FEE500',
+    borderRadius: RADII.btn,
+    paddingVertical: 17,
+    paddingHorizontal: 24,
+    width: '100%',
+    gap: 11,
+  },
+  kakaoMark: { fontFamily: FONTS.serifEn, fontSize: 19, color: '#191919', fontWeight: '500' },
+  kakaoButtonText: { fontSize: 15.5, color: '#191919', fontWeight: '600' },
+  googleSpacing: { marginTop: 12 },
   googleButton: {
     flexDirection: 'row',
     alignItems: 'center',

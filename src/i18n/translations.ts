@@ -50,6 +50,7 @@ export const translations = {
     login: {
       tagline: '오늘의 날씨가\n당신에게 건네는 한마디',
       googleStart: '구글로 시작하기',
+      kakaoStart: '카카오로 시작하기',
       agree: '로그인하시면 이용약관 및\n개인정보처리방침에 동의하게 돼요',
       failTitle: '로그인 실패',
       genericError: '로그인 중 오류가 발생했어요.',
@@ -390,6 +391,7 @@ export const translations = {
     login: {
       tagline: 'A word from today’s weather,\njust for you',
       googleStart: 'Continue with Google',
+      kakaoStart: 'Continue with Kakao',
       agree: 'By signing in, you agree to the Terms\nand Privacy Policy',
       failTitle: 'Sign-in failed',
       genericError: 'Something went wrong while signing in.',
