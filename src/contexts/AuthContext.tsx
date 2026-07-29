@@ -17,6 +17,7 @@ interface AuthContextValue {
   loading: boolean;
   isGuest: boolean; // 익명(로그인 없이 둘러보기) 세션 여부
   signInWithGoogle: () => Promise<void>;
+  signInWithKakao: () => Promise<void>;
   signInAsGuest: () => Promise<void>;
   signOut: () => Promise<void>;
   deleteAccount: () => Promise<void>;
@@ -108,26 +109,26 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     };
   }, [log]);
 
-  const signInWithGoogle = useCallback(async () => {
+  const runOAuthFlow = useCallback(async (provider: 'google' | 'kakao') => {
     const redirectUrl = AuthSession.makeRedirectUri({
       scheme: 'howweateryou',
     });
-    log(`[start] redirect=${redirectUrl}`);
+    log(`[start:${provider}] redirect=${redirectUrl}`);
 
     const { data, error } = await supabase.auth.signInWithOAuth({
-      provider: 'google',
+      provider,
       options: {
         redirectTo: redirectUrl,
         skipBrowserRedirect: true,
       },
     });
     if (error) {
-      log(`[oauth-err] ${error.message}`);
+      log(`[oauth-err:${provider}] ${error.message}`);
       throw error;
     }
     if (!data?.url) throw new Error('OAuth URL 생성 실패');
 
-    log(`[oauth-url-len] ${data.url.length}`);
+    log(`[oauth-url-len:${provider}] ${data.url.length}`);
 
     // Linking 리스너 promise (브라우저 닫기 전에 deep link로 들어올 수도)
     let linkResolve: ((url: string) => void) | null = null;
@@ -139,7 +140,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         (url.includes('code=') || url.includes('access_token') || url.includes('error')) &&
         linkResolve
       ) {
-        log(`[link-race-hit] ${url.slice(0, 80)}`);
+        log(`[link-race-hit:${provider}] ${url.slice(0, 80)}`);
         linkResolve(url);
         linkResolve = null;
       }
@@ -150,7 +151,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       (r) => ({ source: 'browser' as const, result: r }),
     );
 
-    log(`[opening browser]`);
+    log(`[opening browser:${provider}]`);
     const winner = (await Promise.race([browserPromise, linkPromise])) as
       | { source: 'browser'; result: WebBrowser.WebBrowserAuthSessionResult }
       | { source: 'link'; url: string };
@@ -158,20 +159,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     tempLinkSub.remove();
 
     if (winner.source === 'link') {
-      log(`[winner=link]`);
+      log(`[winner=link:${provider}]`);
       // dismissAuthSession은 iOS 전용 — Android에서 호출하면 throw
       // Android는 deep link 시 브라우저가 자동으로 닫히므로 명시적 호출 불필요
       try { WebBrowser.dismissAuthSession(); } catch {}
       const sess = await createSessionFromUrl(winner.url);
-      log(`[link-result-session] ${!!sess}`);
+      log(`[link-result-session:${provider}] ${!!sess}`);
       return;
     }
 
-    log(`[winner=browser] type=${winner.result.type}` + ('url' in winner.result ? ` url=${winner.result.url?.slice(0, 80)}` : ''));
+    log(`[winner=browser:${provider}] type=${winner.result.type}` + ('url' in winner.result ? ` url=${winner.result.url?.slice(0, 80)}` : ''));
 
     if (winner.result.type === 'success' && winner.result.url) {
       const sess = await createSessionFromUrl(winner.result.url);
-      log(`[browser-result-session] ${!!sess}`);
+      log(`[browser-result-session:${provider}] ${!!sess}`);
     } else if (winner.result.type === 'cancel') {
       return;
     } else if (winner.result.type === 'dismiss') {
@@ -183,6 +184,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       throw new Error(`로그인 실패: ${winner.result.type}`);
     }
   }, [log]);
+
+  const signInWithGoogle = useCallback(() => runOAuthFlow('google'), [runOAuthFlow]);
+  const signInWithKakao = useCallback(() => runOAuthFlow('kakao'), [runOAuthFlow]);
 
   // 게스트(익명) 로그인 — Supabase Anonymous Auth
   // ⚠️ Supabase 대시보드에서 Authentication → Anonymous sign-ins 활성화 필요
@@ -247,6 +251,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         loading,
         isGuest: session?.user?.is_anonymous ?? false,
         signInWithGoogle,
+        signInWithKakao,
         signInAsGuest,
         signOut,
         deleteAccount,
