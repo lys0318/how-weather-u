@@ -156,9 +156,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       | { source: 'browser'; result: WebBrowser.WebBrowserAuthSessionResult }
       | { source: 'link'; url: string };
 
-    tempLinkSub.remove();
-
     if (winner.source === 'link') {
+      tempLinkSub.remove();
       log(`[winner=link:${provider}]`);
       // dismissAuthSession은 iOS 전용 — Android에서 호출하면 throw
       // Android는 deep link 시 브라우저가 자동으로 닫히므로 명시적 호출 불필요
@@ -171,16 +170,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     log(`[winner=browser:${provider}] type=${winner.result.type}` + ('url' in winner.result ? ` url=${winner.result.url?.slice(0, 80)}` : ''));
 
     if (winner.result.type === 'success' && winner.result.url) {
+      tempLinkSub.remove();
       const sess = await createSessionFromUrl(winner.result.url);
       log(`[browser-result-session:${provider}] ${!!sess}`);
     } else if (winner.result.type === 'cancel') {
+      tempLinkSub.remove();
       return;
     } else if (winner.result.type === 'dismiss') {
-      // 사용자가 직접 닫았거나, 콜백 URL이 앱으로 라우팅 안 됨
+      // 카카오톡 등 외부 앱으로 전환되는 로그인은 앱 전환 시점에 브라우저가
+      // 먼저 dismiss로 뜨고, 실제 딥링크는 뒤늦게 들어올 수 있다.
+      // 바로 실패 처리하지 않고 짧은 유예 시간을 한 번 더 준다.
+      log(`[dismiss-grace-wait:${provider}]`);
+      const graceUrl = await Promise.race([
+        linkPromise.then((r) => r.url),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
+      ]);
+      tempLinkSub.remove();
+      if (graceUrl) {
+        log(`[dismiss-grace-caught:${provider}]`);
+        const sess = await createSessionFromUrl(graceUrl);
+        log(`[dismiss-grace-session:${provider}] ${!!sess}`);
+        return;
+      }
       throw new Error(
         '로그인이 완료되지 않았어요. 잠시 후 다시 시도해보시거나, 진단 정보를 확인해주세요.'
       );
     } else {
+      tempLinkSub.remove();
       throw new Error(`로그인 실패: ${winner.result.type}`);
     }
   }, [log]);
