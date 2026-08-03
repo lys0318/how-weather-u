@@ -25,11 +25,11 @@ const KEYS = {
 } as const;
 
 // ─── 로그인 후 프로필 작성 유도 (1회) ───────────────────────
-export async function isProfilePrompted(): Promise<boolean> {
-  return (await AsyncStorage.getItem(KEYS.PROFILE_PROMPTED)) === '1';
+export async function isProfilePrompted(userId: string): Promise<boolean> {
+  return (await AsyncStorage.getItem(`${KEYS.PROFILE_PROMPTED}:${userId}`)) === '1';
 }
-export async function setProfilePrompted(): Promise<void> {
-  await AsyncStorage.setItem(KEYS.PROFILE_PROMPTED, '1').catch(() => {});
+export async function setProfilePrompted(userId: string): Promise<void> {
+  await AsyncStorage.setItem(`${KEYS.PROFILE_PROMPTED}:${userId}`, '1').catch(() => {});
 }
 
 // ─── 사용 안내 모달: 오늘 하루 안 보기 ───────────────────────

@@ -92,7 +92,7 @@ export default function HomeScreen() {
   const { weather, loading: weatherLoading, error: weatherError, refetch } = useWeather();
   const { message, loading: messageLoading, error: messageError, generate } = useMessage();
   const { t, lang } = useI18n();
-  const { isGuest } = useAuth();
+  const { isGuest, user } = useAuth();
   const { isPremium } = usePremium();
   const [pickerOpen, setPickerOpen] = useState(false);
   const [mood, setMood] = useState('');
@@ -104,16 +104,16 @@ export default function HomeScreen() {
   // 로그인 후 1회: 프로필 미작성이면 작성 유도(선택 — 닫으면 건너뛰기)
   useEffect(() => {
     (async () => {
-      if (isGuest) return;
-      if (await isProfilePrompted()) return;
+      if (isGuest || !user) return;
+      if (await isProfilePrompted(user.id)) return;
       try {
         const p = await getMyProfile();
         const empty = !p || (!p.nickname && !p.ageBand && !p.occupation && !p.interests && !p.concern);
         if (empty) setProfilePromptOpen(true);
       } catch {}
-      await setProfilePrompted();
+      await setProfilePrompted(user.id);
     })();
-  }, []);
+  }, [user?.id]);
   const [guideOpen, setGuideOpen] = useState(false);
   const [loadingMsgIdx, setLoadingMsgIdx] = useState(0);
   const [now, setNow] = useState<Date>(() => new Date());
