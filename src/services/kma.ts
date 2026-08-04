@@ -270,7 +270,15 @@ async function callKmaPage(
   } catch (e) {
     return noteFail(endpoint, `body read fail (${e instanceof Error ? e.message : String(e)})`);
   }
-  if (!res.ok) return noteFail(endpoint, `http ${res.status} ${snippet(text)}`);
+  if (!res.ok) {
+    // 폰 브라우저로는 같은 URL이 정상인데 앱에서만 400이 나는 상태.
+    // 응답 주체를 가리기 위해 server/content-type도 같이 남긴다
+    // (중간 프록시·캡티브포털이 가로챈 경우 여기서 정체가 드러남).
+    const via = [res.headers.get('server'), res.headers.get('content-type')]
+      .filter(Boolean)
+      .join(' | ');
+    return noteFail(endpoint, `http ${res.status} [${via || 'no server hdr'}] ${snippet(text)}`);
+  }
   let json: any;
   try {
     json = JSON.parse(text);
