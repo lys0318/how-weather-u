@@ -228,6 +228,12 @@ function noteFail(endpoint: string, reason: string): null {
   return null;
 }
 
+/** 오류 본문 앞부분만 태그 제거해 요약 — 원인 파악용, 리포트 비대화 방지. */
+function snippet(text: string): string {
+  const clean = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  return clean ? `«${clean.slice(0, 200)}»` : '«empty body»';
+}
+
 async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), ms);
@@ -256,13 +262,20 @@ async function callKmaPage(
     const msg = e instanceof Error ? e.message : String(e);
     return noteFail(endpoint, msg.includes('abort') ? `timeout(${KMA_TIMEOUT_MS}ms)` : `network(${msg})`);
   }
-  if (!res.ok) return noteFail(endpoint, `http ${res.status}`);
+  // 본문은 한 번만 읽을 수 있으므로 text로 받아두고 파싱한다.
+  // (data.go.kr은 4xx·오류 시 JSON이 아니라 XML/HTML로 진짜 사유를 담아 보냄)
+  let text: string;
+  try {
+    text = await res.text();
+  } catch (e) {
+    return noteFail(endpoint, `body read fail (${e instanceof Error ? e.message : String(e)})`);
+  }
+  if (!res.ok) return noteFail(endpoint, `http ${res.status} ${snippet(text)}`);
   let json: any;
   try {
-    json = await res.json();
+    json = JSON.parse(text);
   } catch {
-    // dataType=JSON이어도 키 오류 등에선 XML 에러 페이지가 오는 경우가 있음
-    return noteFail(endpoint, 'non-json response');
+    return noteFail(endpoint, `non-json response ${snippet(text)}`);
   }
   const code = json?.response?.header?.resultCode;
   if (code !== '00') {

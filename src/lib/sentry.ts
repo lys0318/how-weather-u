@@ -35,6 +35,14 @@ export function initSentry(): void {
       sendDefaultPii: false,
       // 환경 구분
       environment: __DEV__ ? 'development' : 'production',
+      // XHR 브레드크럼 URL에 API 키가 그대로 실려 리포트에 남는 걸 방지
+      beforeBreadcrumb(crumb: any) {
+        const url = crumb?.data?.url;
+        if (typeof url === 'string' && url.includes('serviceKey=')) {
+          crumb.data.url = url.replace(/serviceKey=[^&]*/i, 'serviceKey=***');
+        }
+        return crumb;
+      },
     });
     initialized = true;
     console.log('[sentry] 초기화 완료');
