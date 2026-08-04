@@ -54,6 +54,27 @@ export function captureException(err: unknown, context?: Record<string, unknown>
 }
 
 /**
+ * 수동 메시지 보고 — 예외는 아니지만 추적이 필요한 상황(무음 폴백 등)
+ * 같은 key는 throttleMs 안에 한 번만 보냄 (반복 이벤트로 쿼터 소모 방지)
+ */
+const lastSentAt = new Map<string, number>();
+export function captureMessage(
+  message: string,
+  context?: Record<string, unknown>,
+  opts?: { key?: string; throttleMs?: number },
+): void {
+  if (!Sentry || !initialized) return;
+  const key = opts?.key ?? message;
+  const throttleMs = opts?.throttleMs ?? 10 * 60 * 1000;
+  const prev = lastSentAt.get(key);
+  if (prev !== undefined && Date.now() - prev < throttleMs) return;
+  lastSentAt.set(key, Date.now());
+  try {
+    Sentry.captureMessage(message, { level: 'warning', extra: context });
+  } catch {}
+}
+
+/**
  * 사용자 컨텍스트 설정 (로그인 후 호출)
  * - 개인정보 최소화: 이메일은 보내지 않고 익명 user id만 사용
  *   (에러를 사용자 단위로 묶기엔 id로 충분)

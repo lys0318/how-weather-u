@@ -8,7 +8,8 @@ import {
   getConditionFromId,
   CONDITION_META,
 } from '../constants/weather';
-import { fetchKmaWeather, isInKorea } from './kma';
+import { fetchKmaWeather, isInKorea, takeKmaFailReason } from './kma';
+import { captureMessage } from '../lib/sentry';
 import { translate } from '../i18n';
 import { setLastCoords } from '../utils/storage';
 
@@ -194,6 +195,7 @@ export async function fetchWeatherByCoords(lat: number, lon: number): Promise<We
 
   // ── 1순위: 한국이면 기상청(KMA) — 가장 정확 ──────────────
   if (isInKorea(lat, lon)) {
+    let kmaThrew: unknown = null;
     try {
       const kma = await fetchKmaWeather(lat, lon);
       if (kma) {
@@ -208,9 +210,18 @@ export async function fetchWeatherByCoords(lat: number, lon: number): Promise<We
         weatherCache = { data: result, fetchedAt: Date.now() };
         return result;
       }
-    } catch {
-      // 기상청 실패 → OpenWeather로 폴백
+    } catch (e) {
+      kmaThrew = e;
     }
+    // 여기 도달 = 기상청 실패 → OpenWeather 폴백.
+    // 한국에서 OpenWeather는 기상청보다 몇 도씩 어긋나므로(관측: 실황 35.1도 vs OW 30.9도)
+    // 폴백 사실과 사유를 반드시 남긴다. 예전엔 무음이라 폴백된 줄도 몰랐음.
+    const reason = takeKmaFailReason() ?? (kmaThrew instanceof Error ? kmaThrew.message : '알 수 없음');
+    console.warn('[weather] 기상청 실패 → OpenWeather 폴백:', reason);
+    captureMessage('KMA fallback to OpenWeather', { reason, lat, lon }, {
+      key: 'kma-fallback',
+      throttleMs: 30 * 60 * 1000,
+    });
   }
 
   // ── 2순위: OpenWeather (해외 또는 기상청 실패 시) ─────────
