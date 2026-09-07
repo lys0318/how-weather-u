@@ -255,12 +255,18 @@ export async function getLastWidgetWeather(): Promise<WeatherInfo | null> {
 
 // 백그라운드(위젯 갱신)에선 위치 API 호출 불가 → 포그라운드에서 잡은 마지막 좌표 재사용.
 export async function setLastCoords(lat: number, lon: number): Promise<void> {
-  await AsyncStorage.setItem(KEYS.LAST_COORDS, JSON.stringify({ lat, lon })).catch(() => {});
+  // savedAt을 같이 남긴다 — 위치 권한이 꺼지면 이 좌표를 무기한 재사용하게 되는데,
+  // 얼마나 오래된 좌표로 돌고 있는지 알 수 없으면 "엉뚱한 지역 날씨"를 진단할 방법이 없다.
+  await AsyncStorage.setItem(
+    KEYS.LAST_COORDS,
+    JSON.stringify({ lat, lon, savedAt: Date.now() }),
+  ).catch(() => {});
 }
-export async function getLastCoords(): Promise<{ lat: number; lon: number } | null> {
+// savedAt은 구버전에 저장된 값엔 없으므로 optional
+export async function getLastCoords(): Promise<{ lat: number; lon: number; savedAt?: number } | null> {
   try {
     const v = await AsyncStorage.getItem(KEYS.LAST_COORDS);
-    const c = v ? (JSON.parse(v) as { lat: number; lon: number }) : null;
+    const c = v ? (JSON.parse(v) as { lat: number; lon: number; savedAt?: number }) : null;
     return c && typeof c.lat === 'number' && typeof c.lon === 'number' ? c : null;
   } catch {
     return null;

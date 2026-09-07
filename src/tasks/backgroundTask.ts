@@ -11,6 +11,7 @@ import { buildWidgetPayload } from '../services/widgetContent';
 import { updateWidgetData, hasWidgets } from '../services/widget';
 import { refreshNotificationsIfNeeded } from '../services/notification';
 import { getNotificationsEnabled, getLastCoords, setLastWidgetWeather } from '../utils/storage';
+import { captureMessage } from '../lib/sentry';
 
 const WIDGET_REFRESH_TASK = 'widget-refresh-task';
 const LEGACY_TASK_NAME = 'weather-message-task'; // 구버전 잔재 — 발견 시 해제
@@ -35,6 +36,17 @@ TaskManager.defineTask(WIDGET_REFRESH_TASK, async () => {
 
     const coords = await getLastCoords();
     if (!coords) return BackgroundFetch.BackgroundFetchResult.NoData;
+
+    // 위치 권한이 꺼지면 좌표가 갱신되지 않아, 위젯·알림이 사용자가 떠난 지역의
+    // 날씨를 무기한 보여주게 된다. 화면에 드러나지 않는 문제라 관측만 남긴다.
+    const ageDays = coords.savedAt ? (Date.now() - coords.savedAt) / 86400000 : null;
+    if (ageDays !== null && ageDays >= 7) {
+      captureMessage('stale coords in background refresh', { ageDays: Math.round(ageDays) }, {
+        key: 'stale-coords',
+        throttleMs: 12 * 60 * 60 * 1000,
+      });
+    }
+
     const weather = await fetchWeatherByCoords(coords.lat, coords.lon);
     await setLastWidgetWeather(weather);
 

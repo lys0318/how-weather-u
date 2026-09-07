@@ -14,6 +14,7 @@ import {
   Alert,
   RefreshControl,
   Animated,
+  Linking,
 } from 'react-native';
 import { useWeather } from '../hooks/useWeather';
 import { useMessage } from '../hooks/useMessage';
@@ -89,7 +90,13 @@ function prettifyError(raw: string | null, t: TFn): string | null {
 }
 
 export default function HomeScreen() {
-  const { weather, loading: weatherLoading, error: weatherError, refetch } = useWeather();
+  const {
+    weather,
+    loading: weatherLoading,
+    error: weatherError,
+    permissionDenied,
+    refetch,
+  } = useWeather();
   const { message, loading: messageLoading, error: messageError, generate } = useMessage();
   const { t, lang } = useI18n();
   const { isGuest, user } = useAuth();
@@ -316,9 +323,25 @@ export default function HomeScreen() {
           {weatherError && (
             <View style={styles.errorArea}>
               <Text style={styles.errorTextSky}>{weatherError}</Text>
-              <TouchableOpacity onPress={refetch} style={styles.retryBtn}>
-                <Text style={styles.retryText}>{t('common.retry')}</Text>
-              </TouchableOpacity>
+              {/* 권한이 영구 거부되면 재요청 다이얼로그가 뜨지 않아 '다시 시도'가 무반응이 된다.
+                  그 경우엔 설정 앱으로 직접 보내야 앱에서 빠져나올 길이 생긴다. */}
+              {permissionDenied && !permissionDenied.canAskAgain ? (
+                <>
+                  <Text style={styles.errorTextSky}>{t('common.locationDeniedBody')}</Text>
+                  <TouchableOpacity
+                    onPress={() => Linking.openSettings().catch(() => {})}
+                    style={styles.retryBtn}
+                  >
+                    <Text style={styles.retryText}>{t('common.openSettings')}</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <TouchableOpacity onPress={refetch} style={styles.retryBtn}>
+                  <Text style={styles.retryText}>
+                    {permissionDenied ? t('common.allowLocation') : t('common.retry')}
+                  </Text>
+                </TouchableOpacity>
+              )}
             </View>
           )}
 

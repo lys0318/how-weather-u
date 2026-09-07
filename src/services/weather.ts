@@ -11,7 +11,7 @@ import {
 import { fetchKmaWeather, isInKorea, takeKmaFail } from './kma';
 import { captureMessage } from '../lib/sentry';
 import { translate } from '../i18n';
-import { setLastCoords } from '../utils/storage';
+import { setLastCoords, getLastCoords } from '../utils/storage';
 
 const API_KEY = process.env.EXPO_PUBLIC_OPENWEATHER_API_KEY;
 const BASE_URL = 'https://api.openweathermap.org/data/2.5';
@@ -83,12 +83,35 @@ export function clearWeatherCache(): void {
   weatherCache = null;
 }
 
-export async function requestLocationPermission(): Promise<boolean> {
+/**
+ * 위치 권한 거부 에러.
+ * instanceof는 번들러/트랜스파일 조합에 따라 Error 상속이 깨질 수 있어 플래그로 판별한다.
+ *
+ * canAskAgain=false면 안드로이드가 시스템 권한 다이얼로그를 더 이상 띄우지 않는다.
+ * 이때 "다시 시도"만 제공하면 눌러도 아무 일이 없어 앱이 영구 먹통이 되므로,
+ * 호출부(UI)는 이 값을 보고 설정 앱으로 보내야 한다.
+ */
+export interface LocationPermissionError extends Error {
+  isLocationPermission: true;
+  canAskAgain: boolean;
+}
+export function isLocationPermissionError(e: unknown): e is LocationPermissionError {
+  return !!e && typeof e === 'object' && (e as LocationPermissionError).isLocationPermission === true;
+}
+function locationPermissionError(canAskAgain: boolean): LocationPermissionError {
+  const err = new Error(translate('common.locationNeeded')) as LocationPermissionError;
+  err.isLocationPermission = true;
+  err.canAskAgain = canAskAgain;
+  return err;
+}
+
+/** 권한 상태 조회 — 거부 시 재요청 가능 여부까지 같이 돌려준다. */
+export async function requestLocationPermission(): Promise<{ granted: boolean; canAskAgain: boolean }> {
   // 이미 권한이 있으면 재요청하지 않음
-  const { status: existing } = await Location.getForegroundPermissionsAsync();
-  if (existing === 'granted') return true;
-  const { status } = await Location.requestForegroundPermissionsAsync();
-  return status === 'granted';
+  const existing = await Location.getForegroundPermissionsAsync();
+  if (existing.status === 'granted') return { granted: true, canAskAgain: true };
+  const res = await Location.requestForegroundPermissionsAsync();
+  return { granted: res.status === 'granted', canAskAgain: res.canAskAgain };
 }
 
 export async function getCurrentCoords(): Promise<{ lat: number; lon: number }> {
@@ -174,9 +197,22 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
     return weatherCache.data;
   }
 
-  const granted = await requestLocationPermission();
-  if (!granted) {
-    throw new Error(translate('common.locationNeeded'));
+  const perm = await requestLocationPermission();
+  if (!perm.granted) {
+    // 지금까지 이 에러는 화면 문자열로만 소비되고 어디에도 보고되지 않아,
+    // 몇 명이 권한 거부 상태로 갇혀 있는지 관측 자체가 불가능했다.
+    const stale = await getLastCoords();
+    captureMessage(
+      `location permission denied${perm.canAskAgain ? '' : ' (permanent)'}`,
+      {
+        canAskAgain: perm.canAskAgain,
+        lastCoordsAgeDays: stale?.savedAt
+          ? Math.round((Date.now() - stale.savedAt) / 86400000)
+          : stale ? 'unknown(pre-1.4.0)' : 'none',
+      },
+      { key: `loc-denied:${perm.canAskAgain}`, throttleMs: 60 * 60 * 1000 },
+    );
+    throw locationPermissionError(perm.canAskAgain);
   }
 
   const { lat, lon } = await getCurrentCoords();
