@@ -217,15 +217,34 @@ const ROWS_PER_PAGE = 1000;
 
 // 기상청 실패 사유 — weather.ts가 폴백 시 Sentry로 올려 원인을 남긴다.
 // (지금까지 catch로 삼켜져서 폴백된 사실조차 관측 불가였음)
-let lastFailReason: string | null = null;
-export function takeKmaFailReason(): string | null {
-  const r = lastFailReason;
-  lastFailReason = null;
-  return r;
+//
+// kind는 값이 한정된 짧은 분류 토큰이라 Sentry 메시지 제목에 그대로 실을 수 있다.
+// detail이 스크러빙으로 가려지더라도 최소한 실패 유형은 남는다.
+// (실제로 detail을 통째로 [Filtered] 당해 한 달치 리포트가 무용지물이었음)
+export interface KmaFail {
+  kind: string;
+  detail: string;
 }
-function noteFail(endpoint: string, reason: string): null {
-  lastFailReason = `${endpoint}: ${reason}`;
+let lastFail: KmaFail | null = null;
+export function takeKmaFail(): KmaFail | null {
+  const f = lastFail;
+  lastFail = null;
+  return f;
+}
+function noteFail(endpoint: string, kind: string, detail?: string): null {
+  lastFail = { kind, detail: sanitizeDiag(`${endpoint}: ${detail ?? kind}`) };
   return null;
+}
+
+/**
+ * 진단 문자열에서 자격증명처럼 보이는 부분 제거.
+ * data.go.kr은 오류 본문에 요청 URL을 그대로 되돌려주기도 해서 serviceKey가 섞일 수 있고,
+ * 그런 값이 섞이면 Sentry가 필드를 통째로 가려버려 진단 자체가 불가능해진다.
+ */
+function sanitizeDiag(s: string): string {
+  return s
+    .replace(/(serviceKey|authKey|apikey|api_key)=[^&\s»]*/gi, '$1=***')
+    .replace(/\b[A-Za-z0-9+/=_-]{20,}\b/g, '***');
 }
 
 /** 오류 본문 앞부분만 태그 제거해 요약 — 원인 파악용, 리포트 비대화 방지. */
@@ -260,7 +279,9 @@ async function callKmaPage(
     res = await fetchWithTimeout(url, KMA_TIMEOUT_MS);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return noteFail(endpoint, msg.includes('abort') ? `timeout(${KMA_TIMEOUT_MS}ms)` : `network(${msg})`);
+    return msg.includes('abort')
+      ? noteFail(endpoint, 'timeout', `timeout after ${KMA_TIMEOUT_MS}ms`)
+      : noteFail(endpoint, 'network', `network(${msg})`);
   }
   // 본문은 한 번만 읽을 수 있으므로 text로 받아두고 파싱한다.
   // (data.go.kr은 4xx·오류 시 JSON이 아니라 XML/HTML로 진짜 사유를 담아 보냄)
@@ -268,7 +289,7 @@ async function callKmaPage(
   try {
     text = await res.text();
   } catch (e) {
-    return noteFail(endpoint, `body read fail (${e instanceof Error ? e.message : String(e)})`);
+    return noteFail(endpoint, 'body read fail', `body read fail (${e instanceof Error ? e.message : String(e)})`);
   }
   if (!res.ok) {
     // 폰 브라우저로는 같은 URL이 정상인데 앱에서만 400이 나는 상태.
@@ -277,20 +298,20 @@ async function callKmaPage(
     const via = [res.headers.get('server'), res.headers.get('content-type')]
       .filter(Boolean)
       .join(' | ');
-    return noteFail(endpoint, `http ${res.status} [${via || 'no server hdr'}] ${snippet(text)}`);
+    return noteFail(endpoint, `http ${res.status}`, `http ${res.status} [${via || 'no server hdr'}] ${snippet(text)}`);
   }
   let json: any;
   try {
     json = JSON.parse(text);
   } catch {
-    return noteFail(endpoint, `non-json response ${snippet(text)}`);
+    return noteFail(endpoint, 'non-json', `non-json response ${snippet(text)}`);
   }
   const code = json?.response?.header?.resultCode;
   if (code !== '00') {
-    return noteFail(endpoint, `resultCode ${code} (${json?.response?.header?.resultMsg ?? '?'})`);
+    return noteFail(endpoint, `resultCode ${code}`, `resultCode ${code} (${json?.response?.header?.resultMsg ?? '?'})`);
   }
   const items = json?.response?.body?.items?.item;
-  if (!Array.isArray(items)) return noteFail(endpoint, 'items missing');
+  if (!Array.isArray(items)) return noteFail(endpoint, 'items missing', 'items missing');
   const totalCount = Number(json?.response?.body?.totalCount ?? items.length);
   return { items: items as KmaItem[], totalCount: isNaN(totalCount) ? items.length : totalCount };
 }
@@ -304,7 +325,7 @@ async function callKma(
   endpoint: string,
   params: Record<string, string>,
 ): Promise<KmaItem[] | null> {
-  if (!KMA_KEY) return noteFail(endpoint, 'no api key');
+  if (!KMA_KEY) return noteFail(endpoint, 'no api key', 'no api key');
 
   let first = await callKmaPage(endpoint, params, 1);
   if (!first) {
@@ -332,7 +353,7 @@ export async function fetchKmaWeather(
   lat: number,
   lon: number,
 ): Promise<WeatherInfo | null> {
-  if (!KMA_KEY) return noteFail('fetchKmaWeather', 'no api key');
+  if (!KMA_KEY) return noteFail('fetchKmaWeather', 'no api key', 'no api key');
   if (!isInKorea(lat, lon)) return null; // 해외 — 실패가 아니라 정상 분기
 
   const { nx, ny } = dfsXyConv(lat, lon);
@@ -367,7 +388,12 @@ export async function fetchKmaWeather(
     });
   }
 
-  if (!ncstItems && !fcstItems) return noteFail('fetchKmaWeather', `실황·예보 모두 실패 (${lastFailReason ?? '?'})`);
+  if (!ncstItems && !fcstItems) {
+    // 마지막 엔드포인트 실패 사유를 그대로 승계 — 여기서 덮어쓰면 진짜 원인이 사라진다
+    const inner = lastFail;
+    return noteFail('fetchKmaWeather', inner?.kind ?? 'all endpoints failed',
+      `실황·예보 모두 실패 (${inner?.detail ?? '?'})`);
+  }
 
   // ── 실황 파싱 (현재 기온/습도/풍속/강수형태) ──────────────
   let temp = NaN;
@@ -434,7 +460,7 @@ export async function fetchKmaWeather(
     .sort((a, b) => `${a.date}${a.time}`.localeCompare(`${b.date}${b.time}`));
 
   // 예보 슬롯이 전무하면(발표 모두 실패) OpenWeather로 폴백
-  if (sortedSlots.length === 0) return noteFail('fetchKmaWeather', 'TMP 예보 슬롯 0개');
+  if (sortedSlots.length === 0) return noteFail('fetchKmaWeather', 'no forecast slots', 'TMP 예보 슬롯 0개');
 
   // 현재 시각 이후 가장 가까운 슬롯에서 하늘상태 가져오기
   const nowKey = todayStr + pad2(kstNow().getUTCHours()) + '00';
@@ -444,7 +470,7 @@ export async function fetchKmaWeather(
 
   // 실황에 기온 없으면 예보 기온으로 대체
   if (isNaN(temp) && nearest?.tmp !== undefined) temp = nearest.tmp;
-  if (isNaN(temp)) return noteFail('fetchKmaWeather', '기온 없음(실황·예보 모두)'); // 폴백
+  if (isNaN(temp)) return noteFail('fetchKmaWeather', 'no temp', '기온 없음(실황·예보 모두)'); // 폴백
 
   // 현재 condition: 실황 PTY 우선, 없으면 예보 SKY
   const condition = kmaToCondition(ptyNow, skyNow);

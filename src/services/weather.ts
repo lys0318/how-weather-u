@@ -8,7 +8,7 @@ import {
   getConditionFromId,
   CONDITION_META,
 } from '../constants/weather';
-import { fetchKmaWeather, isInKorea, takeKmaFailReason } from './kma';
+import { fetchKmaWeather, isInKorea, takeKmaFail } from './kma';
 import { captureMessage } from '../lib/sentry';
 import { translate } from '../i18n';
 import { setLastCoords } from '../utils/storage';
@@ -216,11 +216,15 @@ export async function fetchWeatherByCoords(lat: number, lon: number): Promise<We
     // 여기 도달 = 기상청 실패 → OpenWeather 폴백.
     // 한국에서 OpenWeather는 기상청보다 몇 도씩 어긋나므로(관측: 실황 35.1도 vs OW 30.9도)
     // 폴백 사실과 사유를 반드시 남긴다. 예전엔 무음이라 폴백된 줄도 몰랐음.
-    const reason = takeKmaFailReason() ?? (kmaThrew instanceof Error ? kmaThrew.message : '알 수 없음');
-    console.warn('[weather] 기상청 실패 → OpenWeather 폴백:', reason);
-    captureMessage('KMA fallback to OpenWeather', { reason, lat, lon }, {
-      key: 'kma-fallback',
-      throttleMs: 30 * 60 * 1000,
+    const fail = takeKmaFail();
+    const kind = fail?.kind ?? (kmaThrew ? 'threw' : 'unknown');
+    const detail = fail?.detail ?? (kmaThrew instanceof Error ? kmaThrew.message : '알 수 없음');
+    console.warn(`[weather] 기상청 실패 → OpenWeather 폴백: ${kind} / ${detail}`);
+    // kind를 제목에 실어 유형별로 이슈가 갈리게 한다.
+    // 상세(detail)가 데이터 스크러빙으로 가려져도 제목만으로 원인 분류가 가능해야 함.
+    captureMessage(`KMA fallback: ${kind}`, { diag: detail, lat, lon }, {
+      key: `kma-fallback:${kind}`,
+      throttleMs: 5 * 60 * 1000,
     });
   }
 
