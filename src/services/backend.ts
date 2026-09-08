@@ -22,7 +22,8 @@ export interface BackendResponse {
   limit?: number;
 }
 
-export async function callFunction<T extends BackendResponse = BackendResponse>(
+// 응답 형태가 { text } 가 아닌 함수(kma-proxy 등)도 있으므로 T에 제약을 두지 않는다.
+export async function callFunction<T = BackendResponse>(
   functionName: string,
   payload: Record<string, unknown>,
 ): Promise<T> {

@@ -1,10 +1,11 @@
 // 기상청(KMA) 단기예보 API 연동
 // - 한국 지역에서 OpenWeather보다 훨씬 정확 (공식 기상 데이터)
 // - 위경도 → 기상청 격자(nx, ny) 변환 후 호출
-// - 실패(키 없음/네트워크/파싱 오류) 시 null 반환 → 호출자가 OpenWeather로 폴백
+// - 실패(네트워크/파싱 오류) 시 null 반환 → 호출자가 OpenWeather로 폴백
 //
-// 공공데이터포털 "기상청_단기예보 ((구) 동네예보) 조회서비스" 사용
-// 환경변수: EXPO_PUBLIC_KMA_API_KEY (일반 인증키 Encoding 값)
+// 공공데이터포털 "기상청_단기예보 ((구) 동네예보) 조회서비스" 사용.
+// data.go.kr 호출과 API 키는 Edge Function(kma-proxy)에 있고, 여기서는
+// 격자 변환·발표시각 계산·응답 파싱만 담당한다.
 
 import {
   WeatherInfo,
@@ -14,9 +15,12 @@ import {
   DailySlot,
   CONDITION_META,
 } from '../constants/weather';
+import { callFunction } from './backend';
 
-const KMA_KEY = process.env.EXPO_PUBLIC_KMA_API_KEY;
-const BASE = 'https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0';
+// 기상청 API 키는 더 이상 클라이언트에 두지 않는다.
+// 앱에서 직접 호출하면 게이트웨이가 400으로 거부하고(전송 계층 문제),
+// EXPO_PUBLIC_ 키는 앱을 뜯으면 추출돼 남이 우리 쿼터를 소진시킬 수 있었다.
+// 호출과 키는 supabase/functions/kma-proxy 로 옮겼다.
 
 // ── 한국 영역 판별 (대략적 bounding box) ──────────────────────
 export function isInKorea(lat: number, lon: number): boolean {
@@ -255,73 +259,61 @@ function sanitizeDiag(s: string): string {
   );
 }
 
-/** 오류 본문 앞부분만 태그 제거해 요약 — 원인 파악용, 리포트 비대화 방지. */
-function snippet(text: string): string {
-  const clean = text.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
-  return clean ? `«${clean.slice(0, 200)}»` : '«empty body»';
+/**
+ * 프록시가 돌려준 오류 문자열을 기존 분류 체계(kind)로 되돌린다.
+ * kind는 Sentry 메시지 제목에 실리므로 값이 한정돼야 한다.
+ */
+function kindFromProxyError(msg: string): string {
+  const http = msg.match(/upstream http (\d{3})/);
+  if (http) return `http ${http[1]}`;
+  const rc = msg.match(/upstream resultCode (\w+)/);
+  if (rc) return `resultCode ${rc[1]}`;
+  if (msg.includes('non-json')) return 'non-json';
+  if (msg.includes('items missing')) return 'items missing';
+  if (msg.includes('abort') || msg.includes('timeout')) return 'timeout';
+  if (/network/i.test(msg)) return 'network';
+  return 'proxy error';
 }
 
-async function fetchWithTimeout(url: string, ms: number): Promise<Response> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), ms);
-  try {
-    return await fetch(url, { signal: ctrl.signal });
-  } finally {
-    clearTimeout(timer);
-  }
-}
-
-/** 한 페이지 조회. 성공 시 items + totalCount, 실패 시 null(사유 기록). */
+/**
+ * 한 페이지 조회. 성공 시 items + totalCount, 실패 시 null(사유 기록).
+ *
+ * data.go.kr을 앱에서 직접 부르지 않고 Edge Function을 거친다 — 직접 호출은
+ * 게이트웨이가 HTTP 400으로 거부했고(같은 URL이 PC·폰 브라우저에선 정상),
+ * RN 전송 계층 문제로 좁혀졌기 때문. 키도 서버에만 둔다.
+ */
 async function callKmaPage(
   endpoint: string,
   params: Record<string, string>,
   pageNo: number,
 ): Promise<{ items: KmaItem[]; totalCount: number } | null> {
-  const qs = Object.entries(params)
-    .map(([k, v]) => `${k}=${encodeURIComponent(v)}`)
-    .join('&');
-  // serviceKey는 이미 인코딩된 값이라 raw로 append
-  const url = `${BASE}/${endpoint}?serviceKey=${KMA_KEY}&dataType=JSON&numOfRows=${ROWS_PER_PAGE}&pageNo=${pageNo}&${qs}`;
-  let res: Response;
   try {
-    res = await fetchWithTimeout(url, KMA_TIMEOUT_MS);
+    const res = await withTimeout(
+      callFunction<{ items?: KmaItem[]; totalCount?: number }>('kma-proxy', {
+        endpoint,
+        ...params,
+        numOfRows: ROWS_PER_PAGE,
+        pageNo,
+      }),
+      KMA_TIMEOUT_MS,
+    );
+    if (!Array.isArray(res.items)) {
+      return noteFail(endpoint, 'items missing', 'proxy가 items를 반환하지 않음');
+    }
+    const totalCount = Number(res.totalCount ?? res.items.length);
+    return { items: res.items, totalCount: isNaN(totalCount) ? res.items.length : totalCount };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    return msg.includes('abort')
-      ? noteFail(endpoint, 'timeout', `timeout after ${KMA_TIMEOUT_MS}ms`)
-      : noteFail(endpoint, 'network', `network(${msg})`);
+    return noteFail(endpoint, kindFromProxyError(msg), msg);
   }
-  // 본문은 한 번만 읽을 수 있으므로 text로 받아두고 파싱한다.
-  // (data.go.kr은 4xx·오류 시 JSON이 아니라 XML/HTML로 진짜 사유를 담아 보냄)
-  let text: string;
-  try {
-    text = await res.text();
-  } catch (e) {
-    return noteFail(endpoint, 'body read fail', `body read fail (${e instanceof Error ? e.message : String(e)})`);
-  }
-  if (!res.ok) {
-    // 폰 브라우저로는 같은 URL이 정상인데 앱에서만 400이 나는 상태.
-    // 응답 주체를 가리기 위해 server/content-type도 같이 남긴다
-    // (중간 프록시·캡티브포털이 가로챈 경우 여기서 정체가 드러남).
-    const via = [res.headers.get('server'), res.headers.get('content-type')]
-      .filter(Boolean)
-      .join(' | ');
-    return noteFail(endpoint, `http ${res.status}`, `http ${res.status} [${via || 'no server hdr'}] ${snippet(text)}`);
-  }
-  let json: any;
-  try {
-    json = JSON.parse(text);
-  } catch {
-    return noteFail(endpoint, 'non-json', `non-json response ${snippet(text)}`);
-  }
-  const code = json?.response?.header?.resultCode;
-  if (code !== '00') {
-    return noteFail(endpoint, `resultCode ${code}`, `resultCode ${code} (${json?.response?.header?.resultMsg ?? '?'})`);
-  }
-  const items = json?.response?.body?.items?.item;
-  if (!Array.isArray(items)) return noteFail(endpoint, 'items missing', 'items missing');
-  const totalCount = Number(json?.response?.body?.totalCount ?? items.length);
-  return { items: items as KmaItem[], totalCount: isNaN(totalCount) ? items.length : totalCount };
+}
+
+/** callFunction에는 타임아웃이 없어 홈 화면이 무한 대기할 수 있다. */
+function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
+  return Promise.race([
+    p,
+    new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`timeout after ${ms}ms`)), ms)),
+  ]);
 }
 
 /**
@@ -333,8 +325,6 @@ async function callKma(
   endpoint: string,
   params: Record<string, string>,
 ): Promise<KmaItem[] | null> {
-  if (!KMA_KEY) return noteFail(endpoint, 'no api key', 'no api key');
-
   let first = await callKmaPage(endpoint, params, 1);
   if (!first) {
     // 일시적 네트워크/서버 오류일 수 있으니 1회만 재시도
@@ -361,7 +351,6 @@ export async function fetchKmaWeather(
   lat: number,
   lon: number,
 ): Promise<WeatherInfo | null> {
-  if (!KMA_KEY) return noteFail('fetchKmaWeather', 'no api key', 'no api key');
   if (!isInKorea(lat, lon)) return null; // 해외 — 실패가 아니라 정상 분기
 
   const { nx, ny } = dfsXyConv(lat, lon);
