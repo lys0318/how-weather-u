@@ -256,9 +256,11 @@ export async function fetchWeatherByCoords(lat: number, lon: number): Promise<We
     const kind = fail?.kind ?? (kmaThrew ? 'threw' : 'unknown');
     const detail = fail?.detail ?? (kmaThrew instanceof Error ? kmaThrew.message : '알 수 없음');
     console.warn(`[weather] 기상청 실패 → OpenWeather 폴백: ${kind} / ${detail}`);
-    // kind를 제목에 실어 유형별로 이슈가 갈리게 한다.
-    // 상세(detail)가 데이터 스크러빙으로 가려져도 제목만으로 원인 분류가 가능해야 함.
-    captureMessage(`KMA fallback: ${kind}`, { diag: detail, lat, lon }, {
+    // extra로 보낸 진단은 Sentry 데이터 스크러빙에 통째로 [Filtered] 처리된다(vc57·vc58에서 관측).
+    // 반면 메시지 본문은 그대로 통과했고, 이슈 그룹핑도 메시지가 아니라 스택트레이스 기준이라
+    // 내용을 실어도 이슈가 쪼개지지 않는다 → 진단 본문은 메시지로 보낸다.
+    // extra에도 남겨두긴 한다 (스크러빙 설정이 바뀌면 구조화된 형태로 보이므로).
+    captureMessage(`KMA fallback: ${kind} | ${detail}`.slice(0, 300), { diag: detail, lat, lon }, {
       key: `kma-fallback:${kind}`,
       throttleMs: 5 * 60 * 1000,
     });

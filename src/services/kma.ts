@@ -242,9 +242,17 @@ function noteFail(endpoint: string, kind: string, detail?: string): null {
  * 그런 값이 섞이면 Sentry가 필드를 통째로 가려버려 진단 자체가 불가능해진다.
  */
 function sanitizeDiag(s: string): string {
-  return s
-    .replace(/(serviceKey|authKey|apikey|api_key)=[^&\s»]*/gi, '$1=***')
-    .replace(/\b[A-Za-z0-9+/=_-]{20,}\b/g, '***');
+  return (
+    s
+      // 1) 키를 값으로 갖는 쿼리 파라미터 — 문자 구성과 무관하게 통째로 제거
+      .replace(/(serviceKey|authKey|apikey|api_key|token|secret)=[^&\s»]*/gi, '$1=***')
+      // 2) 긴 16진수 = 우리 KMA 키 형태(64자)
+      .replace(/\b[0-9a-fA-F]{32,}\b/g, '***')
+      // 3) 밑줄·하이픈이 없는 긴 랜덤 토큰(base64 등).
+      //    밑줄을 문자군에서 빼는 게 핵심 — 넣으면 SERVICE_KEY_IS_NOT_REGISTERED_ERROR 같은
+      //    에러 코드까지 지워져 정작 필요한 진단이 사라진다(실제로 그랬음).
+      .replace(/\b[A-Za-z0-9+/=]{24,}\b/g, '***')
+  );
 }
 
 /** 오류 본문 앞부분만 태그 제거해 요약 — 원인 파악용, 리포트 비대화 방지. */
