@@ -7,7 +7,8 @@ import * as QueryParams from 'expo-auth-session/build/QueryParams';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '../lib/supabase';
 import { cancelAllNotifications } from '../services/notification';
-import { setUserContext } from '../lib/sentry';
+import { setUserContext, captureMessage } from '../lib/sentry';
+import { waitForLinkOrReturn } from '../utils/oauthWait';
 
 WebBrowser.maybeCompleteAuthSession();
 
@@ -177,23 +178,32 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       tempLinkSub.remove();
       return;
     } else if (winner.result.type === 'dismiss') {
-      // 카카오톡 등 외부 앱으로 전환되는 로그인은 앱 전환 시점에 브라우저가
-      // 먼저 dismiss로 뜨고, 실제 딥링크는 뒤늦게 들어올 수 있다.
-      // 바로 실패 처리하지 않고 짧은 유예 시간을 한 번 더 준다.
-      log(`[dismiss-grace-wait:${provider}]`);
-      const graceUrl = await Promise.race([
-        linkPromise.then((r) => r.url),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 3000)),
-      ]);
+      // 카카오톡이 설치돼 있으면 카카오 인증 페이지가 뜨자마자 카카오톡 앱으로
+      // 전환된다. 그 순간 Custom Tab은 dismiss로 응답하지만 로그인은 진행 중이다.
+      //
+      // 예전엔 여기서 3초만 기다렸는데, 사용자가 카카오톡에서 승인 버튼을 누르기엔
+      // 턱없이 짧아 매번 우리가 먼저 포기했다(Supabase에 콜백이 아예 안 남음).
+      // 고정 타이머 대신 "사용자가 우리 앱으로 돌아왔는가"를 기준으로 판단한다.
+      // - 승인하면 딥링크가 들어온다 → 성공
+      // - 취소하고 직접 돌아오면 앱이 active가 된다 → 그때부터 짧은 유예 후 실패
+      log(`[dismiss-wait-return:${provider}]`);
+      const outcome = await waitForLinkOrReturn(linkPromise.then((r) => r.url));
       tempLinkSub.remove();
-      if (graceUrl) {
-        log(`[dismiss-grace-caught:${provider}]`);
-        const sess = await createSessionFromUrl(graceUrl);
-        log(`[dismiss-grace-session:${provider}] ${!!sess}`);
+      if (outcome) {
+        log(`[dismiss-link-caught:${provider}]`);
+        const sess = await createSessionFromUrl(outcome);
+        log(`[dismiss-link-session:${provider}] ${!!sess}`);
         return;
       }
+      log(`[dismiss-gave-up:${provider}]`);
+      // 지금까지 이 실패는 사용자에게 "진단 정보를 확인해주세요"라고 안내했지만
+      // 정작 그 로그를 볼 수 있는 화면이 앱에 없었다. 단계별 흔적을 Sentry로 보낸다.
+      captureMessage(`OAuth dismiss: ${provider}`, { trail: debugRef.current.slice(-1200) }, {
+        key: `oauth-dismiss:${provider}`,
+        throttleMs: 5 * 60 * 1000,
+      });
       throw new Error(
-        '로그인이 완료되지 않았어요. 잠시 후 다시 시도해보시거나, 진단 정보를 확인해주세요.'
+        '로그인이 완료되지 않았어요. 잠시 후 다시 시도해주세요.'
       );
     } else {
       tempLinkSub.remove();
