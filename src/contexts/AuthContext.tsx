@@ -147,6 +147,38 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     });
 
+    // 로그인이 끝내 안 됐을 때의 공통 처리.
+    // extra로 보낸 값은 Sentry 스크러빙에 통째로 [Filtered] 되므로(reason·diag·trail 모두
+    // 확인됨) 흔적을 메시지 본문에 싣는다. 그룹핑은 스택트레이스 기준이라 이슈가 쪼개지지 않는다.
+    const giveUp = (): never => {
+      log(`[gave-up:${provider}]`);
+      const trail = debugRef.current.replace(/\s*\n\s*/g, ' ').slice(-400);
+      captureMessage(`OAuth dismiss: ${provider} | ${trail}`.slice(0, 500), { trail }, {
+        key: `oauth-dismiss:${provider}`,
+        throttleMs: 60 * 1000,
+      });
+      throw new Error('로그인이 완료되지 않았어요. 잠시 후 다시 시도해주세요.');
+    };
+
+    // ── 카카오: 시스템 브라우저로 연다 ──────────────────────────
+    // 카카오톡이 설치돼 있으면 인증 페이지가 뜨자마자 카카오톡으로 전환되는데,
+    // 앱에 붙은 인증 탭(openAuthSessionAsync)은 그 순간 닫혀버려 돌아올 세션이
+    // 사라진다. 그래서 카카오톡에서 승인해도 딥링크가 오지 않았다.
+    // 크롬을 별도 앱으로 띄우면 우리 앱이 백그라운드로 가도 세션이 살아 있어,
+    // 카카오톡을 다녀온 뒤 리다이렉트가 정상적으로 이어진다.
+    // 구글은 앱 전환이 없어 기존 방식이 잘 동작하므로 건드리지 않는다.
+    if (provider === 'kakao') {
+      log(`[opening system browser:${provider}]`);
+      await Linking.openURL(data.url);
+      const url = await waitForLinkOrReturn(linkPromise.then((r) => r.url));
+      tempLinkSub.remove();
+      if (!url) giveUp();
+      log(`[sysbrowser-link-caught:${provider}]`);
+      const sess = await createSessionFromUrl(url as string);
+      log(`[sysbrowser-session:${provider}] ${!!sess}`);
+      return;
+    }
+
     // WebBrowser promise
     const browserPromise = WebBrowser.openAuthSessionAsync(data.url, redirectUrl).then(
       (r) => ({ source: 'browser' as const, result: r }),
@@ -195,16 +227,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         log(`[dismiss-link-session:${provider}] ${!!sess}`);
         return;
       }
-      log(`[dismiss-gave-up:${provider}]`);
-      // 지금까지 이 실패는 사용자에게 "진단 정보를 확인해주세요"라고 안내했지만
-      // 정작 그 로그를 볼 수 있는 화면이 앱에 없었다. 단계별 흔적을 Sentry로 보낸다.
-      captureMessage(`OAuth dismiss: ${provider}`, { trail: debugRef.current.slice(-1200) }, {
-        key: `oauth-dismiss:${provider}`,
-        throttleMs: 5 * 60 * 1000,
-      });
-      throw new Error(
-        '로그인이 완료되지 않았어요. 잠시 후 다시 시도해주세요.'
-      );
+      giveUp();
     } else {
       tempLinkSub.remove();
       throw new Error(`로그인 실패: ${winner.result.type}`);
