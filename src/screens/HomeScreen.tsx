@@ -47,6 +47,7 @@ import { pushWidget } from '../services/widgetContent';
 import { syncWidgetRefreshTask } from '../tasks/backgroundTask';
 import { maybeAskReview } from '../services/review';
 import ProfileEditor from '../components/ProfileEditor';
+import GuestSignInButtons from '../components/GuestSignInButtons';
 import { getMyProfile } from '../services/profile';
 import { useI18n } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
@@ -430,6 +431,7 @@ export default function HomeScreen() {
           {isGuest && (
             <View style={styles.guestBanner}>
               <Text style={styles.guestBannerText}>☁️ {t('home.guestBanner')}</Text>
+              <GuestSignInButtons />
             </View>
           )}
 

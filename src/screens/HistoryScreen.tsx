@@ -30,6 +30,7 @@ import {
 } from '../constants/weather';
 import { useI18n, getCurrentLang, translate } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
+import GuestSignInButtons from '../components/GuestSignInButtons';
 import { LinearGradient } from 'expo-linear-gradient';
 import { setStatusBarStyle } from 'expo-status-bar';
 import { COLORS, FONTS, RADII } from '../constants/theme';
@@ -368,9 +369,12 @@ function EmptyState({ tab, t, isGuest }: { tab: Tab; t: TFn; isGuest: boolean })
   if (isGuest) {
     return (
       <View style={styles.center}>
-        <Text style={styles.emptyEmoji}>👤</Text>
+        <Text style={styles.emptyEmoji}>☁️</Text>
         <Text style={styles.emptyTitle}>{t('history.guestEmptyTitle')}</Text>
         <Text style={styles.emptyDesc}>{t('history.guestEmptyDesc')}</Text>
+        <View style={styles.guestCta}>
+          <GuestSignInButtons />
+        </View>
       </View>
     );
   }
@@ -569,4 +573,5 @@ const styles = StyleSheet.create({
   emptyEmoji: { fontSize: 44, marginBottom: 16 },
   emptyTitle: { fontFamily: FONTS.serifKo, fontSize: 17, color: COLORS.ink2, marginBottom: 8 },
   emptyDesc: { fontSize: 13, color: COLORS.ink3, textAlign: 'center', lineHeight: 22 },
+  guestCta: { alignSelf: 'stretch', paddingHorizontal: 32, marginTop: 20 },
 });

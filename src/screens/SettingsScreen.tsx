@@ -40,6 +40,7 @@ import { COLORS, FONTS, RADII } from '../constants/theme';
 import { useWeather } from '../hooks/useWeather';
 import { getSkyKind, getPaperTint } from '../components/SkyBackground';
 import ProfileEditor from '../components/ProfileEditor';
+import GuestSignInButtons from '../components/GuestSignInButtons';
 
 const SLOT_LABEL_KEY: Record<NotifSlot, string> = {
   morning: 'settings.slotMorning',
@@ -48,7 +49,7 @@ const SLOT_LABEL_KEY: Record<NotifSlot, string> = {
 };
 
 export default function SettingsScreen() {
-  const { user, signOut, deleteAccount, isGuest, signInWithGoogle } = useAuth();
+  const { user, signOut, deleteAccount, isGuest } = useAuth();
   const { t, lang, setLang } = useI18n();
   const { weather } = useWeather();
   const paper = getPaperTint(getSkyKind(weather?.condition ?? null, new Date().getHours()));
@@ -56,24 +57,11 @@ export default function SettingsScreen() {
   const [monthly, setMonthly] = useState<PurchasesPackage | null>(null);
   const [subBusy, setSubBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
-  const [upgrading, setUpgrading] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
 
   // 홈 위젯 (안드로이드) — 추가/미리보기/메시지선택 모두 모달에서
   const [widgetSetupOpen, setWidgetSetupOpen] = useState(false);
 
-  // 게스트 → 구글 로그인 (성공 시 세션 전환 → 자동 라우팅)
-  const handleGuestUpgrade = async () => {
-    setUpgrading(true);
-    try {
-      await signInWithGoogle();
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : t('login.genericError');
-      Alert.alert(t('login.failTitle'), msg);
-    } finally {
-      setUpgrading(false);
-    }
-  };
   // 알림 활성화 상태 (Switch에 바인딩) — 디폴트 OFF
   const [notifEnabled, setNotifEnabled] = useState<boolean>(false);
   const [notifToggling, setNotifToggling] = useState(false);
@@ -386,9 +374,7 @@ export default function SettingsScreen() {
             <>
               <Text style={styles.desc}>{t('sub.pitch')}</Text>
               <Text style={styles.subGuestNote}>{t('sub.guestNote')}</Text>
-              <TouchableOpacity onPress={signInWithGoogle} style={styles.subBtn}>
-                <Text style={styles.subBtnText}>{t('sub.guestSignIn')}</Text>
-              </TouchableOpacity>
+              <GuestSignInButtons />
             </>
           ) : (
             <>
@@ -516,13 +502,8 @@ export default function SettingsScreen() {
       {isGuest ? (
         <>
           {/* 게스트: 구글 로그인 유도 + 게스트 종료 */}
-          <TouchableOpacity
-            style={[styles.primaryButton, upgrading && styles.buttonDisabled]}
-            onPress={handleGuestUpgrade}
-            disabled={upgrading}
-          >
-            <Text style={styles.primaryButtonText}>{t('settings.guestUpgrade')}</Text>
-          </TouchableOpacity>
+          <Text style={styles.guestUpgradeTitle}>{t('settings.guestUpgrade')}</Text>
+          <GuestSignInButtons />
           <Text style={styles.feedbackHint}>{t('settings.guestUpgradeHint')}</Text>
 
           <TouchableOpacity style={styles.logoutButton} onPress={() => signOut()}>
@@ -561,7 +542,7 @@ export default function SettingsScreen() {
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
-        <Text style={styles.appVersion}>v1.5.2</Text>
+        <Text style={styles.appVersion}>v1.6.0</Text>
       </View>
       </ScrollView>
       <ProfileEditor visible={profileOpen} onClose={() => setProfileOpen(false)} />
@@ -710,6 +691,7 @@ const styles = StyleSheet.create({
   },
   feedbackButtonText: { color: COLORS.teal, fontSize: 14, fontWeight: '600' },
   feedbackHint: { color: COLORS.ink3, fontSize: 11.5, textAlign: 'center', marginTop: 8 },
+  guestUpgradeTitle: { color: COLORS.ink, fontSize: 14, fontWeight: '600', textAlign: 'center' },
   logoutButton: { paddingVertical: 14, alignItems: 'center' },
   logoutButtonText: { color: COLORS.danger, fontSize: 14, fontWeight: '500' },
   deleteAccountButton: { paddingVertical: 12, alignItems: 'center', marginTop: 2 },
