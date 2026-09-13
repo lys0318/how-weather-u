@@ -334,6 +334,18 @@ export function todaySlots(weather: WeatherInfo, currentHour: number): HourlySlo
   });
 }
 
+/** 자정을 넘긴(=내일) 시간별 슬롯 — 저녁에 받은 hourly는 내일 오후쯤까지 담고 있음 */
+export function tomorrowSlots(weather: WeatherInfo, currentHour: number): HourlySlot[] {
+  return (weather.hourly ?? []).filter((s) => currentHour + ((s.hour - currentHour + 24) % 24) > 23);
+}
+
+/** daily에서 내일(기기 날짜 기준) 항목 */
+export function findTomorrow(weather: WeatherInfo, now: Date): DailySlot | undefined {
+  const t = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+  const key = `${t.getFullYear()}${String(t.getMonth() + 1).padStart(2, '0')}${String(t.getDate()).padStart(2, '0')}`;
+  return weather.daily?.find((d) => d.date === key);
+}
+
 export type DayPartKey = 'morning' | 'afternoon' | 'night';
 const DAY_PARTS: { key: DayPartKey; hour: number }[] = [
   { key: 'morning', hour: 8 },

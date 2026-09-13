@@ -71,7 +71,29 @@ interface RequestBody {
   mood?: string;
   situation?: string;
   profile?: ProfilePayload;
+  tomorrow?: { condition?: string; tempMin?: number; tempMax?: number };
   lang?: Lang;
+}
+
+// 저녁/밤 — 하루를 마무리하는 톤 + (있으면) 내일 날씨 한 조각
+function buildEveningBlock(lang: Lang, timeOfDay: string | undefined, tomorrow: RequestBody['tomorrow']): string {
+  if (timeOfDay !== 'evening' && timeOfDay !== 'night') return '';
+  // 숫자·enum만 통과 (프롬프트 주입 차단)
+  const temp = (v: unknown) =>
+    typeof v === 'number' && Number.isFinite(v) ? Math.round(Math.max(-60, Math.min(60, v))) : null;
+  const min = temp(tomorrow?.tempMin);
+  const max = temp(tomorrow?.tempMax);
+  const tm = tomorrow?.condition && conditionLabel('en', tomorrow.condition) !== 'unknown' && min !== null && max !== null
+    ? lang === 'ko'
+      ? `${conditionLabel('ko', tomorrow.condition)}, ${min}~${max}도`
+      : `${conditionLabel('en', tomorrow.condition)}, ${min}–${max}°C`
+    : '';
+  if (lang === 'ko') {
+    return `\n\n[하루를 마무리하는 시간]\n- 오늘 하루를 지나온 마음을 먼저 다독이고, 이제 편히 쉬어도 된다는 느낌을 주세요` +
+      (tm ? `\n- 내일 날씨(${tm})를 한 조각만 가볍게 곁들여 내일을 조금 기대하게 해주세요. 예보를 나열하지 마세요` : '');
+  }
+  return `\n\n[Winding down the day]\n- First acknowledge the day they made it through, and let them feel it's okay to rest now` +
+    (tm ? `\n- Lightly weave in a single touch of tomorrow's weather (${tm}) so they look forward to it a little. Don't list a forecast` : '');
 }
 
 // 프로필 enum 라벨 (이 함수 로컬 — _shared 미수정 → message만 재배포)
@@ -172,6 +194,7 @@ Deno.serve(async (req) => {
           + (situation ? `<user_situation>${situation}</user_situation>\n` : '')
         : '';
     const profileBlock = buildProfileBlock(lang, body.profile);
+    const eveningBlock = buildEveningBlock(lang, body.timeOfDay, body.tomorrow);
 
     const userPrompt =
       lang === 'ko'
@@ -181,14 +204,14 @@ Deno.serve(async (req) => {
 - 시간대: ${todText}
 - 메시지 톤: ${toneGuide}
 
-위 조건을 모두 자연스럽게 녹여서 감성적인 메시지를 써주세요.${noteBlock}${profileBlock}`
+위 조건을 모두 자연스럽게 녹여서 감성적인 메시지를 써주세요.${noteBlock}${profileBlock}${eveningBlock}`
         : `Current context:
 - Weather: ${condText}
 - Day: ${dowText}
 - Time of day: ${todText}
 - Message tone: ${toneGuide}
 
-Weave all of the above in naturally and write a heartfelt message in English.${noteBlock}${profileBlock}`;
+Weave all of the above in naturally and write a heartfelt message in English.${noteBlock}${profileBlock}${eveningBlock}`;
 
     const { text } = await callClaude({
       systemPrompt: lang === 'ko' ? SYSTEM_PROMPT_KO : SYSTEM_PROMPT_EN,

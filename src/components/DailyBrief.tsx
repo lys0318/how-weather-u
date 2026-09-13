@@ -1,7 +1,7 @@
 import React, { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { WeatherInfo } from '../constants/weather';
-import { buildCasterBrief } from '../services/brief';
+import { buildCasterBrief, buildTomorrowBrief } from '../services/brief';
 import { COLORS, FONTS, RADII } from '../constants/theme';
 import { useI18n } from '../i18n';
 
@@ -21,17 +21,20 @@ interface Props {
 
 export default function DailyBrief({ weather, currentHour }: Props) {
   const { t, lang } = useI18n();
-  // lang이 바뀌면 문구도 다시 만들어야 함 (buildDailySummary는 전역 언어를 참조)
-  const lines = useMemo(
-    () => buildCasterBrief(weather, currentHour),
-    [weather, currentHour, lang],
-  );
+  // 18시부터는 오늘 남은 게 밤뿐이라 내일 브리핑으로 전환 (내일 예보 없으면 오늘로 폴백)
+  // lang이 바뀌면 문구도 다시 만들어야 함 (translate는 전역 언어를 참조)
+  const { lines, tomorrow } = useMemo(() => {
+    const tm = currentHour >= 18 ? buildTomorrowBrief(weather, new Date()) : [];
+    return tm.length > 0
+      ? { lines: tm, tomorrow: true }
+      : { lines: buildCasterBrief(weather, currentHour), tomorrow: false };
+  }, [weather, currentHour, lang]);
 
   if (lines.length === 0) return null;
 
   return (
     <View style={styles.card}>
-      <Text style={styles.title}>{t('brief.title')}</Text>
+      <Text style={styles.title}>{t(tomorrow ? 'brief.titleTomorrow' : 'brief.title')}</Text>
       {lines.map((l, i) => (
         <Text
           key={i}

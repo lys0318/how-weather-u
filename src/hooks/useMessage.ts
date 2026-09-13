@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { generateMessage, GeneratedMessage, MessageContext } from '../services/message';
-import { WeatherInfo, getTimeOfDay, Preference, MsgInputs } from '../constants/weather';
+import { WeatherInfo, getTimeOfDay, Preference, MsgInputs, findTomorrow } from '../constants/weather';
 import { translate } from '../i18n';
 
 interface UseMessageResult {
@@ -20,6 +20,8 @@ export function useMessage(): UseMessageResult {
     setError(null);
 
     const now = new Date();
+    // 저녁엔 하루 마무리 + 내일 날씨 한 조각을 곁들이도록 내일 예보를 같이 보냄
+    const tm = now.getHours() >= 18 ? findTomorrow(weather, now) : undefined;
     const ctx: MessageContext = {
       condition: weather.condition,
       timeOfDay: getTimeOfDay(now.getHours()),
@@ -27,6 +29,7 @@ export function useMessage(): UseMessageResult {
       preference,
       mood: extras?.mood,
       situation: extras?.situation,
+      tomorrow: tm && { condition: tm.condition, tempMin: tm.tempMin, tempMax: tm.tempMax },
     };
 
     try {

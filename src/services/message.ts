@@ -15,6 +15,7 @@ export interface MessageContext {
   preference: Preference;
   mood?: string;
   situation?: string;
+  tomorrow?: { condition: WeatherCondition; tempMin: number; tempMax: number };
 }
 
 export interface GeneratedMessage {
@@ -36,6 +37,7 @@ export async function generateMessage(ctx: MessageContext): Promise<GeneratedMes
     preference: ctx.preference,
     mood: sanitizeFreeText(ctx.mood),
     situation: sanitizeFreeText(ctx.situation),
+    tomorrow: ctx.tomorrow,
     profile: profile ?? undefined,
     lang: getCurrentLang(),
   });

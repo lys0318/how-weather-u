@@ -9,6 +9,8 @@ import {
   humidityLevel,
   isWideTempRange,
   collectAlerts,
+  findTomorrow,
+  tomorrowSlots,
 } from '../constants/weather';
 import { translate, getCurrentLang } from '../i18n';
 
@@ -175,6 +177,71 @@ export function buildCasterBrief(weather: WeatherInfo, currentHour: number): Cas
   lines.push({
     kind: 'closing',
     text: translate('caster.closing', { advice: en ? o.en.desc : o.ko.desc }),
+  });
+
+  return lines;
+}
+
+const RAINY = ['rain', 'drizzle', 'thunderstorm'];
+
+/**
+ * 저녁용 내일 브리핑 — 기온 흐름 / 하늘 / 챙길 것(우산) / 옷차림.
+ * 내일 예보가 없으면 빈 배열(호출부가 오늘 브리핑으로 폴백).
+ */
+export function buildTomorrowBrief(weather: WeatherInfo, now: Date): CasterLine[] {
+  const day = findTomorrow(weather, now);
+  if (!day) return [];
+  const en = getCurrentLang() === 'en';
+  const slots = tomorrowSlots(weather, now.getHours());
+  const near = (hour: number) => {
+    let best: (typeof slots)[number] | undefined;
+    for (const s of slots) {
+      if (Math.abs(s.hour - hour) <= 3 && (!best || Math.abs(s.hour - hour) < Math.abs(best.hour - hour))) best = s;
+    }
+    return best;
+  };
+  const lines: CasterLine[] = [];
+
+  // 1) 기온 — 아침·낮 시각이 있으면 짚고, 없으면 범위만
+  const am = near(8);
+  const pm = near(14);
+  lines.push({
+    kind: 'temp',
+    text: am && pm
+      ? translate('tomorrow.parts', { amHour: am.hour, am: am.temp, pmHour: pm.hour, pm: pm.temp, min: day.tempMin, max: day.tempMax })
+      : translate('tomorrow.range', { min: day.tempMin, max: day.tempMax }),
+  });
+  if (day.tempMax - day.tempMin >= 10) {
+    lines.push({ kind: 'temp', text: translate('tomorrow.wideRange') });
+  }
+
+  // 2) 하늘 — 내일 낮 시간 슬롯의 최빈값(daily.condition은 밤 슬롯에 쏠림), 없으면 daily
+  let sky = day.condition;
+  if (slots.length > 0) {
+    const count = new Map<string, number>();
+    for (const s of slots) count.set(s.condition, (count.get(s.condition) ?? 0) + 1);
+    sky = [...count.entries()].sort((a, b) => b[1] - a[1])[0][0] as typeof sky;
+  }
+  const meta = CONDITION_META[sky];
+  lines.push({ kind: 'sky', text: translate('tomorrow.sky', { sky: en ? meta.en.toLowerCase() : meta.ko, emoji: meta.emoji }) });
+
+  // 3) 챙길 것 — 비 시각을 알면 시각까지, 아니면 하루 최대 강수확률
+  // 눈이 끼면 강수확률이 높아도 "비"가 아니라 눈 안내
+  const rainSlot = slots.find((s) => RAINY.includes(s.condition) || s.pop >= 0.3);
+  if (day.condition === 'snow' || slots.some((s) => s.condition === 'snow')) {
+    lines.push({ kind: 'rain', text: translate('tomorrow.snow') });
+  } else if (rainSlot) {
+    lines.push({ kind: 'rain', text: translate('tomorrow.rainFrom', { hour: rainSlot.hour, pct: Math.round(rainSlot.pop * 100) }) });
+  } else if (day.pop >= 0.3 || RAINY.includes(day.condition)) {
+    lines.push({ kind: 'rain', text: translate('tomorrow.rainChance', { pct: Math.round(day.pop * 100) }) });
+  }
+
+  // 4) 옷차림 — 낮 기온 기준
+  const o = outfitFor(pm?.temp ?? day.tempMax);
+  const oo = en ? o.en : o.ko;
+  lines.push({
+    kind: 'closing',
+    text: translate('tomorrow.outfit', { advice: oo.desc, items: oo.items.slice(0, 3).join(en ? ', ' : '·') }),
   });
 
   return lines;

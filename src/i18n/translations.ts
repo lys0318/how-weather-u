@@ -174,6 +174,7 @@ export const translations = {
     },
     brief: {
       title: '오늘의 브리핑',
+      titleTomorrow: '내일의 브리핑',
       partMorning: '아침 {temp}° {mood}',
       partAfternoon: '낮 {temp}° {mood}',
       partNight: '밤 {temp}° {mood}',
@@ -217,6 +218,16 @@ export const translations = {
       humidVery: '습도가 {pct}%까지 올라 굉장히 습한 하루가 되겠습니다.',
       alertLine: '{list}는 주의가 필요합니다.',
       closing: '오늘은 {advice}.',
+    },
+    tomorrow: {
+      parts: '내일은 아침 {amHour}시 {am}도로 시작해 낮 {pmHour}시에는 {pm}도가 예상됩니다. (최저 {min}도 · 최고 {max}도)',
+      range: '내일은 {min}도에서 {max}도 사이의 기온을 보이겠습니다.',
+      wideRange: '일교차가 크니 내일 아침엔 겉옷을 챙겨 나가세요.',
+      sky: '내일 하늘은 대체로 {sky} {emoji}',
+      rainFrom: '내일 {hour}시쯤부터 비 올 확률이 {pct}%예요. 나갈 때 우산 챙기세요 ☂️',
+      rainChance: '내일 비 올 확률이 최대 {pct}%예요. 우산을 미리 챙겨 두세요 ☂️',
+      snow: '내일 눈 소식이 있어요. 미끄럼에 주의하세요 ❄️',
+      outfit: '내일 옷차림 — {advice} ({items})',
     },
     sports: {
       title: '스포츠 지수',
@@ -520,6 +531,7 @@ export const translations = {
     },
     brief: {
       title: "Today's brief",
+      titleTomorrow: "Tomorrow's brief",
       partMorning: 'Morning {temp}° {mood}',
       partAfternoon: 'Day {temp}° {mood}',
       partNight: 'Night {temp}° {mood}',
@@ -562,6 +574,16 @@ export const translations = {
       humidVery: 'Humidity climbs to {pct}%, making for a very humid day.',
       alertLine: 'Take care with {list}.',
       closing: 'Today, {advice}.',
+    },
+    tomorrow: {
+      parts: 'Tomorrow starts around {am}° at {amHour}:00 and reaches {pm}° by {pmHour}:00 (low {min}° · high {max}°).',
+      range: 'Tomorrow ranges from {min}° to {max}°.',
+      wideRange: "It'll be a wide swing, so grab a jacket for the morning.",
+      sky: 'Skies will be mostly {sky} {emoji}',
+      rainFrom: 'Rain is {pct}% likely from about {hour}:00 — take an umbrella when you head out ☂️',
+      rainChance: 'Rain is up to {pct}% likely tomorrow, so keep an umbrella ready ☂️',
+      snow: 'Snow is expected tomorrow — watch your step ❄️',
+      outfit: 'What to wear: {advice} ({items})',
     },
     sports: {
       title: 'Sports',
