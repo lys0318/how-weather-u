@@ -132,6 +132,26 @@ export function buildCasterBrief(weather: WeatherInfo, currentHour: number): Cas
     });
   }
 
+  // 어제 대비 최저·최고. 1도 미만 차이는 노이즈라 말하지 않는다.
+  // 절대값 대신 차이만 — 어제 기온은 Open-Meteo, 화면의 오늘 기온은 기상청이라 섞으면 어긋난다.
+  const vy = weather.vsYesterday;
+  if (vy) {
+    const deg = (d: number) =>
+      translate(d > 0 ? 'caster.degUp' : 'caster.degDown', { deg: Math.abs(d) });
+    const hi = Math.abs(vy.maxDelta) >= 1;
+    const lo = Math.abs(vy.minDelta) >= 1;
+    if (hi && lo) {
+      lines.push({
+        kind: 'temp',
+        text: translate('caster.vsYesterdayBoth', { max: deg(vy.maxDelta), min: deg(vy.minDelta) }),
+      });
+    } else if (hi) {
+      lines.push({ kind: 'temp', text: translate('caster.vsYesterdayMax', { phrase: deg(vy.maxDelta) }) });
+    } else if (lo) {
+      lines.push({ kind: 'temp', text: translate('caster.vsYesterdayMin', { phrase: deg(vy.minDelta) }) });
+    }
+  }
+
   // 2) 하늘 상태 — 오늘 대부분을 차지하는 컨디션
   const dom = dominantCondition(weather, currentHour);
   const meta = CONDITION_META[dom.condition];

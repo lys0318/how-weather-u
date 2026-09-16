@@ -82,6 +82,8 @@ export interface WeatherInfo {
   rainfall?: number;     // 1시간 강수량 (mm)
   lat?: number;          // 위도 (남반구 계절 판별용)
   tempYesterday?: number; // 어제 같은 시각 기온 (Open-Meteo past_days) — 어제 대비 표시
+  // 어제 대비 최저·최고 차이. 절대값은 출처가 달라 어긋나므로 차이만 쓴다.
+  vsYesterday?: { minDelta: number; maxDelta: number };
 }
 
 // OpenWeatherMap weather ID → 앱 내부 condition 매핑

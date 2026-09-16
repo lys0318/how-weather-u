@@ -26,9 +26,18 @@ interface AirQuality {
   pm25?: number;
 }
 
-// 어제 같은 시각 기온 (Open-Meteo forecast + past_days=1, 무료·무키). 실패 시 undefined.
+// 어제 대비 기온 (Open-Meteo forecast + past_days=1, 무료·무키). 실패 시 {}.
 const FORECAST_OM_URL = 'https://api.open-meteo.com/v1/forecast';
-async function fetchYesterdayTemp(lat: number, lon: number): Promise<number | undefined> {
+
+/**
+ * 어제 같은 시각 기온 + 어제/오늘 최저·최고의 차이.
+ * 최저·최고는 "차이"만 내보낸다 — 절대값은 화면의 기상청 숫자와 출처가 달라 어긋나 보이기 때문.
+ * 차이끼리는 같은 응답(=같은 출처)에서 계산하므로 일관된다.
+ */
+async function fetchYesterdayTemp(
+  lat: number,
+  lon: number,
+): Promise<{ tempYesterday?: number; vsYesterday?: { minDelta: number; maxDelta: number } }> {
   try {
     const url = `${FORECAST_OM_URL}?latitude=${lat}&longitude=${lon}&hourly=temperature_2m&past_days=1&forecast_days=1&timezone=auto`;
     // 4초 타임아웃 — 어제 기온은 부가정보라 느리면 그냥 생략(날씨 로딩을 막지 않음).
@@ -36,21 +45,40 @@ async function fetchYesterdayTemp(lat: number, lon: number): Promise<number | un
       fetch(url),
       new Promise<Response>((_, reject) => setTimeout(() => reject(new Error('timeout')), 4000)),
     ]);
-    if (!res.ok) return undefined;
+    if (!res.ok) return {};
     const json = await res.json();
     const times: string[] = json?.hourly?.time ?? [];
     const temps: number[] = json?.hourly?.temperature_2m ?? [];
-    if (!times.length || times.length !== temps.length) return undefined;
-    // 어제, 지금과 같은 시(hour)의 값. Open-Meteo time 예: "2026-07-02T12:00" (timezone=auto=현지)
+    if (!times.length || times.length !== temps.length) return {};
+
+    // Open-Meteo time 예: "2026-07-02T12:00" (timezone=auto=현지)
     const now = new Date();
-    const y = new Date(now.getTime() - 24 * 60 * 60 * 1000);
     const p = (n: number) => String(n).padStart(2, '0');
-    const yStr = `${y.getFullYear()}-${p(y.getMonth() + 1)}-${p(y.getDate())}T${p(now.getHours())}:00`;
-    const idx = times.indexOf(yStr);
-    if (idx >= 0 && typeof temps[idx] === 'number') return Math.round(temps[idx]);
-    return undefined;
+    const dayKey = (d: Date) => `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
+    const yDay = dayKey(new Date(now.getTime() - 24 * 60 * 60 * 1000));
+    const tDay = dayKey(now);
+
+    // 어제, 지금과 같은 시(hour)의 값
+    const idx = times.indexOf(`${yDay}T${p(now.getHours())}:00`);
+    const tempYesterday =
+      idx >= 0 && typeof temps[idx] === 'number' ? Math.round(temps[idx]) : undefined;
+
+    const dayTemps = (key: string) =>
+      temps.filter((t, i) => typeof t === 'number' && times[i].startsWith(key));
+    const yT = dayTemps(yDay);
+    const tT = dayTemps(tDay);
+    // 하루가 통째로 있어야 최저·최고가 의미 있음 (부분만 있으면 생략)
+    const vsYesterday =
+      yT.length >= 20 && tT.length >= 20
+        ? {
+            minDelta: Math.round(Math.min(...tT) - Math.min(...yT)),
+            maxDelta: Math.round(Math.max(...tT) - Math.max(...yT)),
+          }
+        : undefined;
+
+    return { tempYesterday, vsYesterday };
   } catch {
-    return undefined;
+    return {};
   }
 }
 
@@ -223,7 +251,7 @@ export async function fetchWeather(forceRefresh = false): Promise<WeatherInfo> {
 // 좌표 기반 조회 — 위치 권한/GPS 없이 재사용 가능 (위젯 백그라운드 갱신용).
 export async function fetchWeatherByCoords(lat: number, lon: number): Promise<WeatherInfo> {
   // 행정구역(시/동) + 자외선/미세먼지 + 어제 기온을 병렬 조회 — 어느 날씨 소스를 쓰든 공통
-  const [koPlace, airQuality, tempYesterday] = await Promise.all([
+  const [koPlace, airQuality, yesterday] = await Promise.all([
     reverseGeocodeKo(lat, lon),
     fetchAirQuality(lat, lon),
     fetchYesterdayTemp(lat, lon),
@@ -240,7 +268,7 @@ export async function fetchWeatherByCoords(lat: number, lon: number): Promise<We
           ...kma,
           city: koPlace || kma.city || '내 위치',
           lat,
-          tempYesterday,
+          ...yesterday,
           ...airQuality,
         }, lat, lon);
         weatherCache = { data: result, fetchedAt: Date.now() };
@@ -424,7 +452,7 @@ export async function fetchWeatherByCoords(lat: number, lon: number): Promise<We
     hourly: owHourly.length > 0 ? owHourly : undefined,
     daily: owDaily.length > 0 ? owDaily : undefined,
     rainfall,
-    tempYesterday,
+    ...yesterday,
     ...airQuality,
   };
 
