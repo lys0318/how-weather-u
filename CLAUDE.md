@@ -5,7 +5,7 @@
 
 ## 기술 스택
 
-- **클라이언트**: React Native + Expo SDK 54 + TypeScript (Old Architecture, `newArchEnabled: false`)
+- **클라이언트**: React Native + Expo SDK 54 + TypeScript (New Architecture — 1.7.0부터. `app.json`과 `android/gradle.properties`의 `newArchEnabled` 두 곳이 같아야 함. 커스텀 네이티브 모듈 `WidgetBridge`는 레거시 방식이라 interop 레이어로 동작)
 - **백엔드**: Supabase (Auth + PostgreSQL + Edge Functions) — project ref `uxjpsnkecvztwlcbwwuq`
 - **AI**: Anthropic Claude API (메시지/활동/음식 전부 Sonnet, 프롬프트 캐싱 사용)
 - **날씨**: 한국 = 기상청(KMA) 단기예보 API, 해외 = OpenWeatherMap (자동 폴백)
