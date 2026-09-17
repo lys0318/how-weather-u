@@ -22,7 +22,7 @@ import WidgetSetupModal from '../components/WidgetSetupModal';
 import {
   requestNotificationPermission,
   scheduleSlotNotifications,
-  cancelAllNotifications,
+  cancelSlotNotifications,
   refreshNotificationsIfNeeded,
   sendBriefPreview,
   SLOT_CONFIG,
@@ -32,6 +32,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePremium } from '../contexts/PremiumContext';
 import { getMonthlyPackage, purchasePackage, restorePurchases } from '../services/purchases';
 import type { PurchasesPackage } from 'react-native-purchases';
+import { MONTH_EN_SHORT } from '../constants/weather';
 import { useI18n } from '../i18n';
 import { useFocusEffect } from '@react-navigation/native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -53,7 +54,7 @@ export default function SettingsScreen() {
   const { t, lang, setLang } = useI18n();
   const { weather } = useWeather();
   const paper = getPaperTint(getSkyKind(weather?.condition ?? null, new Date().getHours()));
-  const { isPremium, billingAvailable, refresh: refreshPremium } = usePremium();
+  const { isPremium, premium, billingAvailable, refresh: refreshPremium } = usePremium();
   const [monthly, setMonthly] = useState<PurchasesPackage | null>(null);
   const [subBusy, setSubBusy] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -228,7 +229,7 @@ export default function SettingsScreen() {
         setNotifEnabled(true);
       } else {
         await setNotificationsEnabled(false);
-        await cancelAllNotifications();
+        await cancelSlotNotifications();
         setNotifEnabled(false);
       }
     } catch (e) {
@@ -365,6 +366,17 @@ export default function SettingsScreen() {
           {isPremium ? (
             <>
               <Text style={styles.desc}>{t('sub.activeDesc')}</Text>
+              {premium.expiresAt !== null && (() => {
+                const d = new Date(premium.expiresAt);
+                const date = lang === 'en'
+                  ? `${MONTH_EN_SHORT[d.getMonth()]} ${d.getDate()}`
+                  : `${d.getMonth() + 1}월 ${d.getDate()}일`;
+                return (
+                  <Text style={styles.subDesc}>
+                    {t(premium.willRenew ? 'sub.nextBilling' : 'sub.cancelledUntil', { date })}
+                  </Text>
+                );
+              })()}
               <TouchableOpacity onPress={openManage} style={styles.subManageBtn}>
                 <Text style={styles.subManageText}>{t('sub.manage')}</Text>
               </TouchableOpacity>
@@ -542,7 +554,7 @@ export default function SettingsScreen() {
       {/* 앱 정보 */}
       <View style={styles.appInfo}>
         <Text style={styles.appName}>하우웨더유</Text>
-        <Text style={styles.appVersion}>v1.6.2</Text>
+        <Text style={styles.appVersion}>v1.6.3</Text>
       </View>
       </ScrollView>
       <ProfileEditor visible={profileOpen} onClose={() => setProfileOpen(false)} />

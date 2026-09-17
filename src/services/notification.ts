@@ -1,8 +1,8 @@
 import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 import { getNotificationsEnabled, getNotifSlots, NotifSlot } from '../utils/storage';
-import { translate } from '../i18n';
-import { WeatherInfo } from '../constants/weather';
+import { translate, getCurrentLang } from '../i18n';
+import { WeatherInfo, MONTH_EN_SHORT } from '../constants/weather';
 import { buildBriefLine } from './brief';
 
 // 시간대별 발송 시각 (문구는 현재 언어로 translate)
@@ -60,6 +60,64 @@ export async function cancelAllNotifications(): Promise<void> {
   await Notifications.cancelAllScheduledNotificationsAsync();
 }
 
+// ── 구독 갱신 안내 (첫 갱신 2일 전 1회) ─────────────────────
+// 날씨 알림과 달리 결제 관련 안내라, 날씨 알림을 끄거나 재예약해도 지워지지 않게 식별자로 분리한다.
+const RENEWAL_ID = 'renewal-reminder';
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+/** 날씨 알림만 취소 (갱신 안내는 유지) */
+export async function cancelSlotNotifications(): Promise<void> {
+  const all = await Notifications.getAllScheduledNotificationsAsync();
+  await Promise.all(
+    all
+      .filter((n) => n.identifier !== RENEWAL_ID)
+      .map((n) => Notifications.cancelScheduledNotificationAsync(n.identifier)),
+  );
+}
+
+/** 첫 갱신 2일 전 오전 10시 발송 시각. 보낼 상황이 아니면 null. */
+export function renewalReminderAt(
+  state: { isPremium: boolean; expiresAt: number | null; willRenew: boolean; firstPeriod: boolean },
+  now = Date.now(),
+): Date | null {
+  // 해지했거나(willRenew=false) 이미 한 번 갱신된 구독엔 보내지 않는다 — 매달 알리면 이탈만 늘어남
+  if (!state.isPremium || !state.willRenew || !state.firstPeriod || state.expiresAt === null) return null;
+  const at = new Date(state.expiresAt - 2 * DAY_MS);
+  at.setHours(10, 0, 0, 0);
+  return at.getTime() > now ? at : null; // 이미 지났으면 늦게 보내지 않음
+}
+
+/**
+ * 구독 상태가 바뀔 때마다(앱 실행·구매·해지 감지) 호출.
+ * 항상 기존 예약을 지우고 다시 판단하므로, 해지가 확인되면 안내도 사라진다.
+ * ponytail: 앱을 안 열고 스토어에서 해지하면 예약이 남아 있을 수 있음 → 문구를 "구독 중이라면"으로 완곡하게.
+ * 서버 푸시(RevenueCat 웹훅)로 옮기면 해결되며, 구독자가 늘면 그때 전환.
+ */
+export async function syncRenewalReminder(
+  state: Parameters<typeof renewalReminderAt>[0],
+): Promise<void> {
+  try {
+    await Notifications.cancelScheduledNotificationAsync(RENEWAL_ID);
+    const at = renewalReminderAt(state);
+    if (!at || state.expiresAt === null) return;
+    const renew = new Date(state.expiresAt);
+    const date = getCurrentLang() === 'en'
+      ? `${MONTH_EN_SHORT[renew.getMonth()]} ${renew.getDate()}`
+      : `${renew.getMonth() + 1}월 ${renew.getDate()}일`;
+    await Notifications.scheduleNotificationAsync({
+      identifier: RENEWAL_ID,
+      content: {
+        title: translate('notif.renewalTitle'),
+        body: translate('notif.renewalBody', { date }),
+        sound: false,
+      },
+      trigger: { type: Notifications.SchedulableTriggerInputTypes.DATE, date: at },
+    });
+  } catch (e) {
+    console.warn('[syncRenewalReminder] skip', e);
+  }
+}
+
 // 아침 브리핑 미리보기 — 현재 날씨로 브리핑 알림 즉시 발송 (테스트/확인용)
 export async function sendBriefPreview(weather?: WeatherInfo): Promise<void> {
   const h = new Date().getHours();
@@ -103,7 +161,7 @@ export async function scheduleSlotNotifications(slots: NotifSlot[], weather?: We
   }
 
   schedulingLock = (async () => {
-    await Notifications.cancelAllScheduledNotificationsAsync();
+    await cancelSlotNotifications();
     if (slots.length === 0) return;
 
     for (const slot of slots) {
@@ -148,7 +206,8 @@ export async function refreshNotificationsIfNeeded(weather?: WeatherInfo): Promi
     await scheduleSlotNotifications(slots, weather);
     return;
   }
-  const scheduled = await Notifications.getAllScheduledNotificationsAsync();
+  const scheduled = (await Notifications.getAllScheduledNotificationsAsync())
+    .filter((n) => n.identifier !== RENEWAL_ID); // 갱신 안내는 개수에서 제외
   if (scheduled.length < slots.length) {
     await scheduleSlotNotifications(slots);
   }
