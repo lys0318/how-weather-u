@@ -35,7 +35,27 @@ interface MapResponse {
 export async function fetchMapPlaces(lat: number, lon: number, ymd: string): Promise<MapPlace[]> {
   const res = await callFunction<MapResponse>('tour-map', { lat, lon, ymd });
   if (res.error) throw new Error(res.error);
-  return res.places ?? [];
+  return fillMissingWeather(res.places ?? []);
+}
+
+/**
+ * 서버는 기상청 호출을 아끼려고 격자 몇 칸만 받아온다.
+ * 날씨가 빈 장소는 마커에 "--"로 보이므로, 5km 안의 가장 가까운 장소 날씨로 채운다.
+ * (기상청 격자가 5km라 그 안에서는 사실상 같은 값)
+ */
+function fillMissingWeather(places: MapPlace[]): MapPlace[] {
+  const withWx = places.filter((p) => p.weather);
+  if (withWx.length === 0) return places;
+  return places.map((p) => {
+    if (p.weather) return p;
+    let best: MapPlace | null = null;
+    let bestKm = 5;
+    for (const q of withWx) {
+      const km = Math.hypot((q.lat - p.lat) * 111, (q.lon - p.lon) * 88);
+      if (km < bestKm) { bestKm = km; best = q; }
+    }
+    return best ? { ...p, weather: best.weather } : p;
+  });
 }
 
 // ── 혼잡도 등급 ──────────────────────────────────────────────
@@ -60,15 +80,19 @@ export const CROWD_COLOR: Record<CrowdLevel, string> = {
 export type DayKey = 'today' | 'tomorrow' | 'weekend';
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
+// 관광·기상 데이터가 모두 한국 시간 기준이라 기기 시간대와 무관하게 KST로 계산한다.
+// (기기가 다른 시간대면 날짜가 하루 어긋나 날씨가 통째로 비어 보인다)
+const kst = (now: Date) => new Date(now.getTime() + (9 * 60 + now.getTimezoneOffset()) * 60000);
 const toYmd = (d: Date) => `${d.getFullYear()}${pad2(d.getMonth() + 1)}${pad2(d.getDate())}`;
 
 export function ymdFor(key: DayKey, now = new Date()): string {
-  if (key === 'today') return toYmd(now);
-  if (key === 'tomorrow') return toYmd(new Date(now.getTime() + 86400e3));
+  const k = kst(now);
+  if (key === 'today') return toYmd(k);
+  if (key === 'tomorrow') return toYmd(new Date(k.getTime() + 86400e3));
   // 주말 = 다가오는 토요일 (오늘이 토·일이면 오늘)
-  const day = now.getDay();
-  if (day === 6 || day === 0) return toYmd(now);
-  return toYmd(new Date(now.getTime() + (6 - day) * 86400e3));
+  const day = k.getDay();
+  if (day === 6 || day === 0) return toYmd(k);
+  return toYmd(new Date(k.getTime() + (6 - day) * 86400e3));
 }
 
 // ── 추천 (규칙 기반 — AI 호출 없음) ───────────────────────────

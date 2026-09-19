@@ -1,9 +1,9 @@
 // 날씨 맵 — 주변 관광지를 기온 마커로 보여주고, 테두리 색으로 혼잡 예측을 나타낸다.
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image, ScrollView, Linking,
 } from 'react-native';
-import { NaverMapView, NaverMapMarkerOverlay } from '@mj-studio/react-native-naver-map';
+import { NaverMapView, NaverMapMarkerOverlay, NaverMapViewRef } from '@mj-studio/react-native-naver-map';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getLastCoords } from '../utils/storage';
 import { getCurrentCoords } from '../services/weather';
@@ -21,8 +21,19 @@ export default function MapScreen() {
   const { t } = useI18n();
   const insets = useSafeAreaInsets(); // 상태바 아래로 내려야 칩이 눌린다
   const [center, setCenter] = useState(FALLBACK);
-  // 지도 카메라 — 장소를 불러오면 그 중심으로 옮긴다(마커가 화면 밖에 있으면 아무것도 안 보이므로)
-  const [camera, setCamera] = useState({ ...FALLBACK, zoom: 12 });
+  // 위치를 알아내기 전에 불러오면 서울(폴백) 장소가 뜬다 → 좌표가 정해진 뒤에 부른다
+  const [coordsReady, setCoordsReady] = useState(false);
+  const [myCoords, setMyCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  // 카메라를 state로 고정하면 사용자가 확대·이동할 때마다 원래 자리로 되돌려버린다
+  // → 지도는 자유롭게 두고, 옮길 때만 ref로 직접 명령한다.
+  const mapRef = useRef<NaverMapViewRef>(null);
+  const [zoom, setZoom] = useState(12);
+  const moveTo = useCallback((lat: number, lon: number, z = 13) => {
+    mapRef.current?.animateCameraTo({ latitude: lat, longitude: lon, zoom: z, duration: 500 });
+  }, []);
+  const viewCenter = useRef(FALLBACK);           // 지금 화면 중앙 (다시 찾기 판단용)
+  const loadedCenter = useRef(FALLBACK);        // 마지막으로 장소를 불러온 지점
+  const [canSearchHere, setCanSearchHere] = useState(false);
   const [day, setDay] = useState<DayKey>('today');
   const [places, setPlaces] = useState<MapPlace[]>([]);
   const [loading, setLoading] = useState(true);
@@ -33,13 +44,19 @@ export default function MapScreen() {
   useEffect(() => {
     (async () => {
       const saved = await getLastCoords().catch(() => null);
-      if (saved) { setCenter({ latitude: saved.lat, longitude: saved.lon }); return; }
-      try {
-        const c = await getCurrentCoords();
-        setCenter({ latitude: c.lat, longitude: c.lon });
-      } catch {
-        // 권한이 없으면 서울 기준으로 둘러보게 둔다
+      if (saved) {
+        const c = { latitude: saved.lat, longitude: saved.lon };
+        setCenter(c); setMyCoords(c);
+      } else {
+        try {
+          const c = await getCurrentCoords();
+          const co = { latitude: c.lat, longitude: c.lon };
+          setCenter(co); setMyCoords(co);
+        } catch {
+          // 권한이 없으면 서울 기준으로 둘러보게 둔다
+        }
       }
+      setCoordsReady(true);
     })();
   }, []);
 
@@ -49,14 +66,8 @@ export default function MapScreen() {
     try {
       const list = await fetchMapPlaces(lat, lon, ymdFor(key));
       setPlaces(list);
-      const shown = list.slice(0, 12);
-      if (shown.length > 0) {
-        setCamera({
-          latitude: shown.reduce((a, p) => a + p.lat, 0) / shown.length,
-          longitude: shown.reduce((a, p) => a + p.lon, 0) / shown.length,
-          zoom: 12,
-        });
-      }
+      setCanSearchHere(false);
+      loadedCenter.current = { latitude: lat, longitude: lon };
     } catch (e) {
       setError(e instanceof Error ? e.message : t('common.genError'));
       setPlaces([]);
@@ -66,13 +77,16 @@ export default function MapScreen() {
   }, [t]);
 
   useEffect(() => {
+    if (!coordsReady) return;
     load(center.latitude, center.longitude, day);
-  }, [center.latitude, center.longitude, day, load]);
+  }, [coordsReady, center.latitude, center.longitude, day, load]);
 
   // 도심은 장소가 몰려 있어 마커가 서로 덮인다 → 일정 간격 안에는 하나만 남긴다.
   // 우선순위: 혼잡 정보가 있는 곳 > 가까운 곳.
   const markers = useMemo(() => {
-    const MIN_GAP_DEG = 0.011; // 위경도 약 1.1km — 줌 12에서 알약 마커가 안 겹치는 간격
+    // 확대할수록 촘촘히 보여준다 (줌 12에서 약 1.1km 간격 기준)
+    const MIN_GAP_DEG = 0.011 * Math.pow(2, 12 - zoom);
+    const cap = zoom >= 13 ? 40 : 20;
     const ranked = [...places].sort((a, b) => {
       const ac = a.crowdRate === null ? 1 : 0;
       const bc = b.crowdRate === null ? 1 : 0;
@@ -80,14 +94,14 @@ export default function MapScreen() {
     });
     const kept: MapPlace[] = [];
     for (const p of ranked) {
-      if (kept.length >= 18) break;
+      if (kept.length >= cap) break;
       const tooClose = kept.some(
         (k) => Math.abs(k.lat - p.lat) < MIN_GAP_DEG && Math.abs(k.lon - p.lon) < MIN_GAP_DEG,
       );
       if (!tooClose) kept.push(p);
     }
     return kept;
-  }, [places]);
+  }, [places, zoom]);
 
   // 추천 3곳 — 날씨·혼잡도·거리로 점수를 매긴다 (서버 호출 없음)
   const recs = useMemo(() => recommendPlaces(places), [places]);
@@ -102,12 +116,27 @@ export default function MapScreen() {
 
   return (
     <View style={styles.fill}>
+      {/* 좌표가 정해진 뒤에 지도를 올린다 — initialCamera가 내 위치로 잡히도록 */}
+      {coordsReady && (
       <NaverMapView
         style={styles.fill}
-        camera={camera}
+        ref={mapRef}
+        initialCamera={{ ...center, zoom: 12 }}
         isShowZoomControls={false}
         isShowScaleBar={false}
         onTapMap={() => setSelected(null)}
+        locationOverlay={myCoords ? { isVisible: true, position: myCoords } : undefined}
+        onCameraChanged={({ latitude, longitude, zoom: z }) => {
+          viewCenter.current = { latitude, longitude };
+          if (typeof z === 'number') {
+            const rounded = Math.round(z * 2) / 2;
+            if (rounded !== zoom) setZoom(rounded);
+          }
+          // 불러온 지점에서 3km 넘게 벗어나면 이 지역 다시 찾기를 제안
+          const far = Math.abs(latitude - loadedCenter.current.latitude) > 0.027
+            || Math.abs(longitude - loadedCenter.current.longitude) > 0.033;
+          if (far !== canSearchHere) setCanSearchHere(far);
+        }}
       >
         {markers.map((p) => {
           const level = crowdLevel(p.crowdRate);
@@ -132,6 +161,7 @@ export default function MapScreen() {
           );
         })}
       </NaverMapView>
+      )}
 
       {/* 날짜 선택 */}
       <View style={[styles.dayRow, { top: insets.top + 8 }]}>
@@ -184,6 +214,34 @@ export default function MapScreen() {
         </View>
       )}
 
+      {/* 이 지역 다시 찾기 — 지도를 옮겼을 때만 */}
+      {canSearchHere && !loading && (
+        <TouchableOpacity
+          style={[styles.searchHere, { top: insets.top + 60 }]}
+          onPress={() => {
+            const c = viewCenter.current;
+            setSelected(null);
+            setCenter(c); // load 이펙트가 이 좌표로 다시 부른다
+          }}
+        >
+          <Text style={styles.searchHereText}>{t('map.searchHere')}</Text>
+        </TouchableOpacity>
+      )}
+
+      {/* 내 위치로 */}
+      {myCoords && (
+        <TouchableOpacity
+          style={styles.myLoc}
+          onPress={() => {
+            setSelected(null);
+            moveTo(myCoords.latitude, myCoords.longitude, 13);
+            setCenter(myCoords);
+          }}
+        >
+          <Text style={styles.myLocText}>{t('map.myLocation')}</Text>
+        </TouchableOpacity>
+      )}
+
       {/* 추천 3곳 — 장소를 고르면 상세 카드로 바뀐다 */}
       {!selected && !loading && recs.length > 0 && (
         <View style={styles.recWrap}>
@@ -195,7 +253,7 @@ export default function MapScreen() {
                 style={styles.recCard}
                 onPress={() => {
                   setSelected(place);
-                  setCamera({ latitude: place.lat, longitude: place.lon, zoom: 14 });
+                  moveTo(place.lat, place.lon, 14);
                 }}
               >
                 <Text style={styles.recName} numberOfLines={1}>{place.title}</Text>
@@ -307,6 +365,21 @@ const styles = StyleSheet.create({
   },
   loadingText: { fontFamily: FONTS.serifKo, fontSize: 13, color: COLORS.ink2, textAlign: 'center' },
   retry: { fontFamily: FONTS.serifKo, fontSize: 13, color: COLORS.ember, fontWeight: '700', marginTop: 4 },
+
+  searchHere: {
+    position: 'absolute', alignSelf: 'center',
+    backgroundColor: COLORS.ember, borderRadius: 18,
+    paddingVertical: 8, paddingHorizontal: 14,
+  },
+  searchHereText: { fontFamily: FONTS.serifKo, fontSize: 13, color: COLORS.emberText, fontWeight: '700' },
+
+  myLoc: {
+    position: 'absolute', right: 12, bottom: 150,
+    backgroundColor: COLORS.card, borderRadius: 20,
+    borderWidth: 1, borderColor: COLORS.line,
+    paddingVertical: 9, paddingHorizontal: 12,
+  },
+  myLocText: { fontFamily: FONTS.mono, fontSize: 11, color: COLORS.ink2 },
 
   recWrap: { position: 'absolute', left: 0, right: 0, bottom: 8 },
   recTitle: {

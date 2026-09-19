@@ -250,6 +250,8 @@ export const translations = {
       directions: '길찾기',
       count: '{n}곳',
       recTitle: '가기 좋은 곳',
+      searchHere: '이 지역에서 다시 찾기',
+      myLocation: '내 위치',
       reason: {
         rain: '비 소식이 있어 실내로 골랐어요',
         hot: '더운 날엔 실내가 편해요',
@@ -635,6 +637,8 @@ export const translations = {
       directions: 'Directions',
       count: '{n} places',
       recTitle: 'Good to visit',
+      searchHere: 'Search this area',
+      myLocation: 'My location',
       reason: {
         rain: 'Rain expected — picked an indoor spot',
         hot: 'Hot day — indoors is easier',
