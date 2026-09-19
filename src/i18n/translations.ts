@@ -25,6 +25,7 @@ export const translations = {
     },
     tabs: {
       home: '홈',
+      map: '지도',
       messaging: '메시지',
       history: '히스토리',
       settings: '설정',
@@ -391,6 +392,7 @@ export const translations = {
     },
     tabs: {
       home: 'Home',
+      map: 'Map',
       messaging: 'Messages',
       history: 'History',
       settings: 'Settings',

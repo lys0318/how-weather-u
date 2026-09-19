@@ -100,6 +100,10 @@ cd android && ./gradlew clean bundleRelease
 - **AdMob manifest 충돌**: `tools:replace="android:value"`로 라이브러리 기본값 덮어씀.
 - **크래시 디버깅**: 네이티브 초기 크래시는 Sentry로 안 잡힘(JS 로드 전). ADB logcat 사용:
   `adb logcat -d | grep -A 20 "FATAL EXCEPTION"`
+- **네이버 지도 네이티브 설정은 android/에만 있음(gitignore)**: 새로 클론하면 두 곳을 직접 넣어야 함.
+  `android/build.gradle`의 allprojects에 `maven { url 'https://repository.map.naver.com/archive/maven' }`,
+  `AndroidManifest.xml`에 `<meta-data android:name="com.naver.maps.map.NCP_KEY_ID" android:value="qrrdxohhkv"/>`
+  (NCP Maps Application의 Client ID. 패키지명 `com.howweatheryou.app`로 제한되는 공개 식별자)
 - **prebuild 주의**: android 폴더에 커스텀(AdMob meta-data, AD_ID 권한, 인텐트 필터) 있어서 `expo prebuild` 재실행 시 덮어쓰기 위험. 직접 수정 선호.
 
 ## 알려진 개선 여지 (출시 후 정리 권장)

@@ -38,6 +38,7 @@ Notifications.setNotificationHandler({
 });
 
 import HomeScreen from './src/screens/HomeScreen';
+import MapScreen from './src/screens/MapScreen';
 import MessagingScreen from './src/screens/MessagingScreen';
 import HistoryScreen from './src/screens/HistoryScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -56,6 +57,7 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
+  Map: undefined;
   Messaging: undefined;
   History: undefined;
   Settings: undefined;
@@ -82,6 +84,16 @@ function MainTabs() {
           title: t('tabs.home'),
           tabBarIcon: ({ color, size }) => (
             <Ionicons name="home" size={size} color={color} />
+          ),
+        }}
+      />
+      <Tab.Screen
+        name="Map"
+        component={MapScreen}
+        options={{
+          title: t('tabs.map'),
+          tabBarIcon: ({ color, size }) => (
+            <Ionicons name="map" size={size} color={color} />
           ),
         }}
       />
