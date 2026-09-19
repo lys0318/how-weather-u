@@ -8,7 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getLastCoords } from '../utils/storage';
 import { getCurrentCoords } from '../services/weather';
 import {
-  fetchMapPlaces, crowdLevel, CROWD_COLOR, ymdFor, MapPlace, DayKey,
+  fetchMapPlaces, crowdLevel, CROWD_COLOR, ymdFor, recommendPlaces, MapPlace, DayKey,
 } from '../services/tourMap';
 import { CONDITION_META } from '../constants/weather';
 import { COLORS, FONTS, RADII } from '../constants/theme';
@@ -88,6 +88,9 @@ export default function MapScreen() {
     }
     return kept;
   }, [places]);
+
+  // 추천 3곳 — 날씨·혼잡도·거리로 점수를 매긴다 (서버 호출 없음)
+  const recs = useMemo(() => recommendPlaces(places), [places]);
 
   const openDirections = (p: MapPlace) => {
     // 네이버 지도 앱이 없으면 웹으로 열린다
@@ -178,6 +181,37 @@ export default function MapScreen() {
       {!loading && !error && places.length === 0 && (
         <View style={styles.loading}>
           <Text style={styles.loadingText}>{t('map.empty')}</Text>
+        </View>
+      )}
+
+      {/* 추천 3곳 — 장소를 고르면 상세 카드로 바뀐다 */}
+      {!selected && !loading && recs.length > 0 && (
+        <View style={styles.recWrap}>
+          <Text style={styles.recTitle}>{t('map.recTitle')}</Text>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.recRow}>
+            {recs.map(({ place, reason }) => (
+              <TouchableOpacity
+                key={place.id}
+                style={styles.recCard}
+                onPress={() => {
+                  setSelected(place);
+                  setCamera({ latitude: place.lat, longitude: place.lon, zoom: 14 });
+                }}
+              >
+                <Text style={styles.recName} numberOfLines={1}>{place.title}</Text>
+                <Text style={styles.recWhy} numberOfLines={2}>{t(`map.reason.${reason}`)}</Text>
+                <View style={styles.recMeta}>
+                  <View style={[styles.dot, { backgroundColor: CROWD_COLOR[crowdLevel(place.crowdRate)] }]} />
+                  <Text style={styles.recMetaText}>
+                    {place.weather?.tempMax !== null && place.weather?.tempMax !== undefined ? `${place.weather.tempMax}° · ` : ''}
+                    {place.distanceM >= 1000
+                      ? t('map.distanceKm', { km: (place.distanceM / 1000).toFixed(1) })
+                      : t('map.distanceM', { m: place.distanceM })}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
         </View>
       )}
 
@@ -273,6 +307,26 @@ const styles = StyleSheet.create({
   },
   loadingText: { fontFamily: FONTS.serifKo, fontSize: 13, color: COLORS.ink2, textAlign: 'center' },
   retry: { fontFamily: FONTS.serifKo, fontSize: 13, color: COLORS.ember, fontWeight: '700', marginTop: 4 },
+
+  recWrap: { position: 'absolute', left: 0, right: 0, bottom: 8 },
+  recTitle: {
+    fontFamily: FONTS.mono, fontSize: 11, color: COLORS.ink2,
+    marginLeft: 14, marginBottom: 6,
+    backgroundColor: COLORS.card, alignSelf: 'flex-start',
+    paddingHorizontal: 8, paddingVertical: 3, borderRadius: 10,
+    borderWidth: 1, borderColor: COLORS.line,
+  },
+  recRow: { paddingHorizontal: 10, gap: 8 },
+  recCard: {
+    width: 190, backgroundColor: COLORS.card,
+    borderRadius: RADII.card, borderWidth: 1, borderColor: COLORS.line,
+    padding: 10, gap: 3,
+  },
+  recName: { fontFamily: FONTS.serifKo, fontSize: 14, color: COLORS.ink },
+  recWhy: { fontFamily: FONTS.serifKo, fontSize: 11.5, color: COLORS.ink2, lineHeight: 16 },
+  recMeta: { flexDirection: 'row', alignItems: 'center', gap: 5, marginTop: 2 },
+  dot: { width: 7, height: 7, borderRadius: 4 },
+  recMetaText: { fontFamily: FONTS.mono, fontSize: 11, color: COLORS.ink3 },
 
   sheet: {
     position: 'absolute', left: 10, right: 10, bottom: 10,

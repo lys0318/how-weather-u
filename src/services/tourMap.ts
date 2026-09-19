@@ -70,3 +70,62 @@ export function ymdFor(key: DayKey, now = new Date()): string {
   if (day === 6 || day === 0) return toYmd(now);
   return toYmd(new Date(now.getTime() + (6 - day) * 86400e3));
 }
+
+// ── 추천 (규칙 기반 — AI 호출 없음) ───────────────────────────
+export type RecReason = 'rain' | 'hot' | 'cold' | 'quiet' | 'near';
+
+export interface Recommendation {
+  place: MapPlace;
+  reason: RecReason;
+}
+
+/** 그 날 날씨가 실내를 부르는 상황인지 */
+function weatherMood(w: MapPlaceWeather | null): RecReason | null {
+  if (!w) return null;
+  if (w.sky === 'rain' || w.sky === 'snow' || (w.pop ?? 0) >= 60) return 'rain';
+  if ((w.tempMax ?? 0) >= 31) return 'hot';
+  if ((w.tempMax ?? 99) <= 5) return 'cold';
+  return null;
+}
+
+function score(p: MapPlace): number {
+  let s = 0;
+
+  // 한산할수록 좋다 — 이 기능의 핵심.
+  // 혼잡을 모르는 곳은 "한산하다"고 말할 수 없으니 크게 깎는다(거리 점수에 밀려 뽑히던 문제).
+  const lv = crowdLevel(p.crowdRate);
+  s += lv === 'quiet' ? 30 : lv === 'normal' ? 12 : lv === 'busy' ? -12 : -25;
+
+  // 날씨 궁합 — 비·폭염·추위엔 실내, 좋은 날엔 야외
+  const mood = weatherMood(p.weather);
+  if (mood) {
+    if (p.indoor === true) s += mood === 'rain' ? 25 : 15;
+    else if (p.indoor === false) s -= mood === 'rain' ? 20 : 10;
+  } else if (p.weather) {
+    if (p.indoor === false) s += 15;
+    else if (p.indoor === true) s -= 5;
+  }
+
+  // 가까울수록 좋다 (30km에서 0점)
+  s += 20 * (1 - Math.min(p.distanceM, 30000) / 30000);
+
+  // 사진이 있으면 카드가 보기 좋다
+  if (p.image) s += 3;
+
+  return s;
+}
+
+/** 상위 3곳 + 고른 이유. 혼잡을 아는 곳이 충분하면 그중에서만 고른다. */
+export function recommendPlaces(places: MapPlace[]): Recommendation[] {
+  const known = places.filter((p) => p.crowdRate !== null);
+  const pool = known.length >= 3 ? known : places;
+  return [...pool]
+    .sort((a, b) => score(b) - score(a))
+    .slice(0, 3)
+    .map((place) => {
+      const mood = weatherMood(place.weather);
+      if (mood && place.indoor === true) return { place, reason: mood };
+      if (crowdLevel(place.crowdRate) === 'quiet') return { place, reason: 'quiet' as const };
+      return { place, reason: 'near' as const };
+    });
+}

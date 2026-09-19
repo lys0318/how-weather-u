@@ -249,6 +249,14 @@ export const translations = {
       rainPct: '비 {pct}%',
       directions: '길찾기',
       count: '{n}곳',
+      recTitle: '가기 좋은 곳',
+      reason: {
+        rain: '비 소식이 있어 실내로 골랐어요',
+        hot: '더운 날엔 실내가 편해요',
+        cold: '추운 날엔 실내가 좋아요',
+        quiet: '지금 한산해서 여유로워요',
+        near: '가깝고 다녀오기 좋아요',
+      },
     },
     sports: {
       title: '스포츠 지수',
@@ -626,6 +634,14 @@ export const translations = {
       rainPct: 'Rain {pct}%',
       directions: 'Directions',
       count: '{n} places',
+      recTitle: 'Good to visit',
+      reason: {
+        rain: 'Rain expected — picked an indoor spot',
+        hot: 'Hot day — indoors is easier',
+        cold: 'Cold day — indoors is nicer',
+        quiet: 'Quiet right now',
+        near: 'Close by and easy to reach',
+      },
     },
     sports: {
       title: 'Sports',
