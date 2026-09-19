@@ -3,11 +3,11 @@
     "name": "하우웨더유",
     "slug": "howweateryou",
     "scheme": "howweateryou",
-    "version": "1.6.3",
+    "version": "1.7.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
-    "newArchEnabled": false,
+    "newArchEnabled": true,
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
@@ -31,7 +31,7 @@
     },
     "android": {
       "package": "com.howweatheryou.app",
-      "versionCode": 66,
+      "versionCode": 67,
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#7A6796"
