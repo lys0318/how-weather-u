@@ -139,10 +139,16 @@ function score(p: MapPlace): number {
   return s;
 }
 
-/** 상위 3곳 + 고른 이유. 혼잡을 아는 곳이 충분하면 그중에서만 고른다. */
-export function recommendPlaces(places: MapPlace[]): Recommendation[] {
-  const known = places.filter((p) => p.crowdRate !== null);
-  const pool = known.length >= 3 ? known : places;
+/**
+ * 상위 3곳 + 고른 이유.
+ * - 지도를 멀리 옮겨도 추천은 "다녀올 만한 거리"여야 하므로 30km 안에서 고른다
+ * - 혼잡을 아는 곳이 충분하면 그중에서만 고른다
+ */
+export function recommendPlaces(places: MapPlace[], maxKm = 30): Recommendation[] {
+  const near = places.filter((p) => p.distanceM <= maxKm * 1000);
+  const base = near.length >= 3 ? near : places;
+  const known = base.filter((p) => p.crowdRate !== null);
+  const pool = known.length >= 3 ? known : base;
   return [...pool]
     .sort((a, b) => score(b) - score(a))
     .slice(0, 3)

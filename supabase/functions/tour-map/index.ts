@@ -40,7 +40,7 @@ const WEATHER_TTL_MS = 3 * 3600e3;
 // 한 요청에서 새로 수집할 상한 (할당량 보호)
 const MAX_NEW_REGIONS = 2;
 const MAX_CROWD_PAGES = 3;
-const MAX_WEATHER_GRIDS = 6;
+const MAX_WEATHER_GRIDS = 10;
 
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const kstNow = () => new Date(Date.now() + 9 * 3600e3);
@@ -69,14 +69,20 @@ function dfsXyConv(lat: number, lon: number): { nx: number; ny: number } {
   return { nx: Math.floor(ra * Math.sin(theta) + XO + 0.5), ny: Math.floor(ro - ra * Math.cos(theta) + YO + 0.5) };
 }
 
-/** 단기예보 발표 기준 (02,05,08,11,14,17,20,23시 + 10분) */
+/**
+ * 단기예보 발표 기준 (02,05,08,11,14,17,20,23시 + 10분).
+ * 23시 발표는 '오늘' 예보가 없고 내일부터라, 23:10~24:00엔 직전 20시 발표를 쓴다.
+ * (그 시간대에 지도의 '오늘' 기온이 통째로 비던 문제)
+ */
 function vilageBase(): { base_date: string; base_time: string } {
   const kst = kstNow();
   const h = kst.getUTCHours(), m = kst.getUTCMinutes();
   for (const t of [23, 20, 17, 14, 11, 8, 5, 2]) {
-    if (h > t || (h === t && m >= 10)) return { base_date: fmtDate(kst), base_time: pad2(t) + '00' };
+    if (h > t || (h === t && m >= 10)) {
+      return { base_date: fmtDate(kst), base_time: pad2(t === 23 ? 20 : t) + '00' };
+    }
   }
-  return { base_date: fmtDate(new Date(kst.getTime() - 86400e3)), base_time: '2300' };
+  return { base_date: fmtDate(new Date(kst.getTime() - 86400e3)), base_time: '2000' };
 }
 
 function distanceM(aLat: number, aLon: number, bLat: number, bLon: number): number {
@@ -270,20 +276,21 @@ Deno.serve(async (req) => {
     const ymd: string = /^\d{8}$/.test(body.ymd ?? '') ? body.ymd : fmtDate(kstNow());
     const now = Date.now();
 
-    // 1) 주변 장소 — 캐시에 최근 데이터가 없으면 관광공사에서 수집
-    const box = 0.25; // 위경도 ±0.25도 ≈ 25km
-    const fresh = new Date(now - PLACE_TTL_MS).toISOString();
-    let { data: places } = await supabaseAdmin
-      .from('tour_place').select('*')
-      .gte('lat', lat - box).lte('lat', lat + box).gte('lon', lon - box).lte('lon', lon + box)
-      .gte('updated_at', fresh).limit(200);
+    // 1) 주변 장소 — 반드시 "거리순"으로 본다.
+    //    네모 범위 + limit 만 쓰면 정렬이 없어 이미 쌓인 먼 지역(예: 서울) 데이터가 먼저 잡히고,
+    //    "충분히 있다"고 판단해 정작 사용자 동네(예: 안양)를 수집하지 않는 문제가 있었다.
+    const nearby = async () => {
+      const { data } = await supabaseAdmin.rpc('nearby_places', { p_lat: lat, p_lon: lon, p_limit: 200 });
+      return (data ?? []) as any[];
+    };
+    let places = await nearby();
+    const closeCount = (rows: any[]) =>
+      rows.filter((p) => distanceM(lat, lon, p.lat, p.lon) <= 15000).length;
 
-    if (!places || places.length < 10) {
+    // 15km 안에 쓸 만큼 없으면 이 좌표 기준으로 새로 수집한다
+    if (closeCount(places) < 8) {
       await collectPlaces(lat, lon);
-      const r = await supabaseAdmin
-        .from('tour_place').select('*')
-        .gte('lat', lat - box).lte('lat', lat + box).gte('lon', lon - box).lte('lon', lon + box).limit(200);
-      places = r.data ?? [];
+      places = await nearby();
     }
     if (places.length === 0) return json({ places: [], note: 'no places nearby' });
 
@@ -312,9 +319,7 @@ Deno.serve(async (req) => {
       if (needCrowd) await collectCrowd(rc as string);
     }
     if (placesAdded) {
-      const r2 = await supabaseAdmin
-        .from('tour_place').select('*')
-        .gte('lat', lat - box).lte('lat', lat + box).gte('lon', lon - box).lte('lon', lon + box).limit(400);
+      const r2 = { data: await nearby() };
       sorted = (r2.data ?? [])
         .map((p: any) => ({ ...p, distance_m: distanceM(lat, lon, p.lat, p.lon) }))
         .sort((a: any, b: any) => a.distance_m - b.distance_m)

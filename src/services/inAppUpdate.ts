@@ -11,7 +11,10 @@ try {
   mod = null;
 }
 
-let checked = false;
+// 플레이 스토어 앱이 새 버전 정보를 캐시해 두는 구조라, 방금 올린 버전은
+// 기기가 캐시를 갱신하기 전까지 안 보일 수 있다 → 앱이 앞으로 돌아올 때 다시 확인한다.
+let lastCheck = 0;
+const RECHECK_MS = 30 * 60 * 1000;
 
 /**
  * 앱 시작 시 1회 호출.
@@ -19,8 +22,9 @@ let checked = false;
  * - true: Immediate(전체화면 강제) / false: Flexible(배너)
  */
 export async function checkForUpdate(): Promise<void> {
-  if (!mod || checked) return;
-  checked = true;
+  if (!mod) return;
+  if (Date.now() - lastCheck < RECHECK_MS) return;
+  lastCheck = Date.now();
   try {
     // checkAndStartUpdate(true) → Android Immediate 업데이트
     if (typeof mod.checkAndStartUpdate === 'function') {
