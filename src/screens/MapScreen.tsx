@@ -1,14 +1,15 @@
 // 날씨 맵 — 주변 관광지를 기온 마커로 보여주고, 테두리 색으로 혼잡 예측을 나타낸다.
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
-  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image, ScrollView, Linking,
+  View, Text, StyleSheet, TouchableOpacity, ActivityIndicator, Image, ScrollView, Linking, Modal,
 } from 'react-native';
 import { NaverMapView, NaverMapMarkerOverlay, NaverMapViewRef } from '@mj-studio/react-native-naver-map';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { getLastCoords } from '../utils/storage';
 import { getCurrentCoords } from '../services/weather';
 import {
-  fetchMapPlaces, crowdLevel, CROWD_COLOR, ymdFor, recommendPlaces, MapPlace, DayKey,
+  fetchMapPlaces, fetchRegionPlaces, fetchRegions, medianCenter, COORD_REGIONS,
+  crowdLevel, CROWD_COLOR, ymdFor, recommendPlaces, MapPlace, DayKey, RegionGroup, RegionItem,
 } from '../services/tourMap';
 import { CONDITION_META } from '../constants/weather';
 import { COLORS, FONTS, RADII } from '../constants/theme';
@@ -24,6 +25,8 @@ export default function MapScreen() {
   // 위치를 알아내기 전에 불러오면 서울(폴백) 장소가 뜬다 → 좌표가 정해진 뒤에 부른다
   const [coordsReady, setCoordsReady] = useState(false);
   const [myCoords, setMyCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const myRef = useRef<{ latitude: number; longitude: number } | null>(null);
+  useEffect(() => { myRef.current = myCoords; }, [myCoords]);
   // 카메라를 state로 고정하면 사용자가 확대·이동할 때마다 원래 자리로 되돌려버린다
   // → 지도는 자유롭게 두고, 옮길 때만 ref로 직접 명령한다.
   const mapRef = useRef<NaverMapViewRef>(null);
@@ -31,14 +34,18 @@ export default function MapScreen() {
   const moveTo = useCallback((lat: number, lon: number, z = 13) => {
     mapRef.current?.animateCameraTo({ latitude: lat, longitude: lon, zoom: z, duration: 500 });
   }, []);
-  const viewCenter = useRef(FALLBACK);           // 지금 화면 중앙 (다시 찾기 판단용)
-  const loadedCenter = useRef(FALLBACK);        // 마지막으로 장소를 불러온 지점
-  const [canSearchHere, setCanSearchHere] = useState(false);
+  // 지역 선택 — null이면 '내 주변' 모드
+  const [region, setRegion] = useState<RegionItem | null>(null);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [regions, setRegions] = useState<RegionGroup[] | null>(null);
+  const [pickSido, setPickSido] = useState<RegionGroup | null>(null);
   const [day, setDay] = useState<DayKey>('today');
   const [places, setPlaces] = useState<MapPlace[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [selected, setSelected] = useState<MapPlace | null>(null);
+  // 상세 카드 높이 — 카드가 떠 있으면 '내 위치' 버튼을 그 위로 올린다 (가려지던 문제)
+  const [sheetH, setSheetH] = useState(0);
 
   // 지도 때문에 GPS를 새로 켜지 않는다 — 저장된 좌표 우선, 없을 때만 위치 조회
   useEffect(() => {
@@ -60,26 +67,44 @@ export default function MapScreen() {
     })();
   }, []);
 
-  const load = useCallback(async (lat: number, lon: number, key: DayKey) => {
+  const load = useCallback(async (lat: number, lon: number, key: DayKey, reg: RegionItem | null) => {
     setLoading(true);
     setError(null);
     try {
-      const list = await fetchMapPlaces(lat, lon, ymdFor(key));
+      const ymd = ymdFor(key);
+      let list: MapPlace[];
+      if (reg) {
+        const coord = COORD_REGIONS[reg.cd];
+        const me = myRef.current;
+        list = coord
+          ? await fetchMapPlaces(coord.lat, coord.lon, ymd)
+          : await fetchRegionPlaces(reg.cd, ymd, me ? { lat: me.latitude, lon: me.longitude } : null);
+        const mc = medianCenter(list);
+        if (mc) moveTo(mc.latitude, mc.longitude, 12);
+      } else {
+        list = await fetchMapPlaces(lat, lon, ymd);
+      }
       setPlaces(list);
-      setCanSearchHere(false);
-      loadedCenter.current = { latitude: lat, longitude: lon };
     } catch (e) {
       setError(e instanceof Error ? e.message : t('common.genError'));
       setPlaces([]);
     } finally {
       setLoading(false);
     }
-  }, [t]);
+  }, [t, moveTo]);
 
   useEffect(() => {
     if (!coordsReady) return;
-    load(center.latitude, center.longitude, day);
-  }, [coordsReady, center.latitude, center.longitude, day, load]);
+    load(center.latitude, center.longitude, day, region);
+  }, [coordsReady, center.latitude, center.longitude, day, region, load]);
+
+  const openPicker = async () => {
+    setPickSido(null);
+    setPickerOpen(true);
+    if (!regions) {
+      try { setRegions(await fetchRegions()); } catch { setRegions([]); }
+    }
+  };
 
   // 도심은 장소가 몰려 있어 마커가 서로 덮인다 → 일정 간격 안에는 하나만 남긴다.
   // 우선순위: 혼잡 정보가 있는 곳 > 가까운 곳.
@@ -104,7 +129,7 @@ export default function MapScreen() {
   }, [places, zoom]);
 
   // 추천 3곳 — 날씨·혼잡도·거리로 점수를 매긴다 (서버 호출 없음)
-  const recs = useMemo(() => recommendPlaces(places), [places]);
+  const recs = useMemo(() => recommendPlaces(places, region ? Infinity : 30), [places, region]);
 
   const openDirections = (p: MapPlace) => {
     // 네이버 지도 앱이 없으면 웹으로 열린다
@@ -126,16 +151,11 @@ export default function MapScreen() {
         isShowScaleBar={false}
         onTapMap={() => setSelected(null)}
         locationOverlay={myCoords ? { isVisible: true, position: myCoords } : undefined}
-        onCameraChanged={({ latitude, longitude, zoom: z }) => {
-          viewCenter.current = { latitude, longitude };
+        onCameraChanged={({ zoom: z }) => {
           if (typeof z === 'number') {
             const rounded = Math.round(z * 2) / 2;
             if (rounded !== zoom) setZoom(rounded);
           }
-          // 불러온 지점에서 3km 넘게 벗어나면 이 지역 다시 찾기를 제안
-          const far = Math.abs(latitude - loadedCenter.current.latitude) > 0.027
-            || Math.abs(longitude - loadedCenter.current.longitude) > 0.033;
-          if (far !== canSearchHere) setCanSearchHere(far);
         }}
       >
         {markers.map((p) => {
@@ -186,11 +206,11 @@ export default function MapScreen() {
         ))}
       </View>
 
-      {!loading && !error && places.length > 0 && (
-        <View style={[styles.countChip, { top: insets.top + 60 }]}>
-          <Text style={styles.countText}>{t('map.count', { n: places.length })}</Text>
-        </View>
-      )}
+      <TouchableOpacity style={[styles.regionBtn, { top: insets.top + 60 }]} onPress={openPicker}>
+        <Text style={styles.regionBtnText} numberOfLines={1}>
+          📍 {region ? region.nm : t('map.nearMe')} ▾
+        </Text>
+      </TouchableOpacity>
 
       {loading && (
         <View style={styles.loading}>
@@ -202,7 +222,7 @@ export default function MapScreen() {
       {!loading && error && (
         <View style={styles.loading}>
           <Text style={styles.loadingText}>{error}</Text>
-          <TouchableOpacity onPress={() => load(center.latitude, center.longitude, day)}>
+          <TouchableOpacity onPress={() => load(center.latitude, center.longitude, day, region)}>
             <Text style={styles.retry}>{t('common.retry')}</Text>
           </TouchableOpacity>
         </View>
@@ -214,26 +234,13 @@ export default function MapScreen() {
         </View>
       )}
 
-      {/* 이 지역 다시 찾기 — 지도를 옮겼을 때만 */}
-      {canSearchHere && !loading && (
-        <TouchableOpacity
-          style={[styles.searchHere, { top: insets.top + 60 }]}
-          onPress={() => {
-            const c = viewCenter.current;
-            setSelected(null);
-            setCenter(c); // load 이펙트가 이 좌표로 다시 부른다
-          }}
-        >
-          <Text style={styles.searchHereText}>{t('map.searchHere')}</Text>
-        </TouchableOpacity>
-      )}
-
       {/* 내 위치로 */}
       {myCoords && (
         <TouchableOpacity
-          style={styles.myLoc}
+          style={[styles.myLoc, { bottom: selected ? sheetH + 20 : 150 }]}
           onPress={() => {
             setSelected(null);
+            setRegion(null);
             moveTo(myCoords.latitude, myCoords.longitude, 13);
             setCenter(myCoords);
           }}
@@ -261,7 +268,11 @@ export default function MapScreen() {
                 <View style={styles.recMeta}>
                   <View style={[styles.dot, { backgroundColor: CROWD_COLOR[crowdLevel(place.crowdRate)] }]} />
                   <Text style={styles.recMetaText}>
-                    {place.weather?.tempMax !== null && place.weather?.tempMax !== undefined ? `${place.weather.tempMax}° · ` : ''}
+                    {/* 마커와 같은 값(지금 기온, 미래 날짜면 최고)을 써야 서로 달라 보이지 않는다 */}
+                    {(() => {
+                      const tv = place.weather?.tempNow ?? place.weather?.tempMax;
+                      return tv === null || tv === undefined ? '' : `${tv}° · `;
+                    })()}
                     {place.distanceM >= 1000
                       ? t('map.distanceKm', { km: (place.distanceM / 1000).toFixed(1) })
                       : t('map.distanceM', { m: place.distanceM })}
@@ -275,7 +286,7 @@ export default function MapScreen() {
 
       {/* 선택한 장소 */}
       {selected && (
-        <View style={styles.sheet}>
+        <View style={styles.sheet} onLayout={(e) => setSheetH(e.nativeEvent.layout.height)}>
           <ScrollView horizontal={false} showsVerticalScrollIndicator={false}>
             <View style={styles.sheetTop}>
               {selected.image ? (
@@ -313,6 +324,68 @@ export default function MapScreen() {
           </ScrollView>
         </View>
       )}
+      {/* 지역 선택 — 시/도 → 시/군/구 */}
+      <Modal visible={pickerOpen} animationType="slide" transparent onRequestClose={() => setPickerOpen(false)}>
+        <View style={styles.pickerBackdrop}>
+          <View style={[styles.picker, { paddingBottom: insets.bottom + 12 }]}>
+            <View style={styles.pickerHead}>
+              {pickSido ? (
+                <TouchableOpacity onPress={() => setPickSido(null)}>
+                  <Text style={styles.pickerNav}>‹ {t('map.back')}</Text>
+                </TouchableOpacity>
+              ) : <View />}
+              <Text style={styles.pickerTitle}>{pickSido ? pickSido.regnNm : t('map.regionTitle')}</Text>
+              <TouchableOpacity onPress={() => setPickerOpen(false)}>
+                <Text style={styles.pickerNav}>{t('map.close')}</Text>
+              </TouchableOpacity>
+            </View>
+            {!regions ? (
+              <ActivityIndicator color={COLORS.ember} style={{ marginVertical: 30 }} />
+            ) : (
+              <ScrollView contentContainerStyle={styles.pickerGrid}>
+                {!pickSido && (
+                  <TouchableOpacity
+                    style={[styles.pickerChip, !region && styles.pickerChipOn]}
+                    onPress={() => {
+                      setPickerOpen(false);
+                      setRegion(null);
+                      if (myCoords) { moveTo(myCoords.latitude, myCoords.longitude, 12); setCenter(myCoords); }
+                    }}
+                  >
+                    <Text style={[styles.pickerChipText, !region && styles.pickerChipTextOn]}>{t('map.nearMe')}</Text>
+                  </TouchableOpacity>
+                )}
+                {(pickSido ? pickSido.list : regions).map((it: any) => {
+                  const isSido = !pickSido;
+                  const key = isSido ? it.regnCd : it.cd;
+                  const label = isSido ? it.regnNm : it.nm;
+                  const on = !isSido && region?.cd === it.cd;
+                  return (
+                    <TouchableOpacity
+                      key={key}
+                      style={[styles.pickerChip, on && styles.pickerChipOn]}
+                      onPress={() => {
+                        if (isSido) {
+                          // 시군구가 하나뿐이면(세종 등) 바로 고른다
+                          if (it.list.length === 1) {
+                            setPickerOpen(false); setSelected(null); setRegion(it.list[0]);
+                          } else {
+                            setPickSido(it);
+                          }
+                        } else {
+                          setPickerOpen(false); setSelected(null); setRegion(it);
+                        }
+                      }}
+                    >
+                      <Text style={[styles.pickerChipText, on && styles.pickerChipTextOn]}>{label}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            )}
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -346,13 +419,6 @@ const styles = StyleSheet.create({
     borderWidth: 1, borderColor: COLORS.line,
     paddingVertical: 6, paddingHorizontal: 9, gap: 4,
   },
-  countChip: {
-    position: 'absolute', right: 12,
-    backgroundColor: COLORS.card, borderRadius: RADII.card,
-    borderWidth: 1, borderColor: COLORS.line,
-    paddingVertical: 5, paddingHorizontal: 10,
-  },
-  countText: { fontFamily: FONTS.mono, fontSize: 11, color: COLORS.ink2 },
   legendItem: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
   legendText: { fontFamily: FONTS.mono, fontSize: 10, color: COLORS.ink2 },
@@ -366,15 +432,34 @@ const styles = StyleSheet.create({
   loadingText: { fontFamily: FONTS.serifKo, fontSize: 13, color: COLORS.ink2, textAlign: 'center' },
   retry: { fontFamily: FONTS.serifKo, fontSize: 13, color: COLORS.ember, fontWeight: '700', marginTop: 4 },
 
-  searchHere: {
-    position: 'absolute', alignSelf: 'center',
-    backgroundColor: COLORS.ember, borderRadius: 18,
-    paddingVertical: 8, paddingHorizontal: 14,
+  regionBtn: {
+    position: 'absolute', right: 12, maxWidth: 190,
+    backgroundColor: COLORS.card, borderRadius: 18,
+    borderWidth: 1, borderColor: COLORS.line,
+    paddingVertical: 7, paddingHorizontal: 12,
   },
-  searchHereText: { fontFamily: FONTS.serifKo, fontSize: 13, color: COLORS.emberText, fontWeight: '700' },
+  regionBtnText: { fontFamily: FONTS.serifKo, fontSize: 13, color: COLORS.ink },
+
+  pickerBackdrop: { flex: 1, backgroundColor: 'rgba(43,38,32,0.35)', justifyContent: 'flex-end' },
+  picker: {
+    maxHeight: '78%', backgroundColor: COLORS.paper,
+    borderTopLeftRadius: RADII.sheet, borderTopRightRadius: RADII.sheet,
+    paddingTop: 14, paddingHorizontal: 14,
+  },
+  pickerHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 },
+  pickerTitle: { fontFamily: FONTS.serifKo, fontSize: 16, color: COLORS.ink },
+  pickerNav: { fontFamily: FONTS.mono, fontSize: 12, color: COLORS.ember, minWidth: 44 },
+  pickerGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, paddingBottom: 12 },
+  pickerChip: {
+    paddingVertical: 9, paddingHorizontal: 13, borderRadius: 16,
+    backgroundColor: COLORS.card, borderWidth: 1, borderColor: COLORS.line,
+  },
+  pickerChipOn: { backgroundColor: COLORS.ember, borderColor: COLORS.ember },
+  pickerChipText: { fontFamily: FONTS.serifKo, fontSize: 13, color: COLORS.ink },
+  pickerChipTextOn: { color: COLORS.emberText },
 
   myLoc: {
-    position: 'absolute', right: 12, bottom: 150,
+    position: 'absolute', right: 12,
     backgroundColor: COLORS.card, borderRadius: 20,
     borderWidth: 1, borderColor: COLORS.line,
     paddingVertical: 9, paddingHorizontal: 12,

@@ -260,6 +260,92 @@ async function collectWeather(nx: number, ny: number): Promise<void> {
   if (rows.length) await supabaseAdmin.from('grid_weather').upsert(rows);
 }
 
+// ── 지역 목록 (시도/시군구) ─────────────────────────────────────
+/** 처음 한 번만 관광공사 ldongCode2로 받아 region_code에 저장한다 (시도 17 + 시군구 250여 개) */
+async function loadRegionCodes(): Promise<any[]> {
+  const { data: cached } = await supabaseAdmin.from('region_code').select('*').order('region_cd');
+  if (cached && cached.length > 100) return cached;
+
+  const sido = tourItems(await getJson(
+    `${TOUR_BASE}/KorService2/ldongCode2?serviceKey=${DATA_KEY}&${TOUR_COMMON}&numOfRows=50&pageNo=1`,
+  ));
+  const rows: any[] = [];
+  for (const sd of sido) {
+    const items = tourItems(await getJson(
+      `${TOUR_BASE}/KorService2/ldongCode2?serviceKey=${DATA_KEY}&${TOUR_COMMON}&numOfRows=100&pageNo=1&lDongRegnCd=${sd.code}`,
+    ));
+    for (const sg of items) {
+      rows.push({
+        region_cd: `${sd.code}${sg.code}`,
+        regn_cd: String(sd.code),
+        regn_nm: sd.name,
+        signgu_nm: sg.name,
+        updated_at: new Date().toISOString(),
+      });
+    }
+  }
+  if (rows.length) await supabaseAdmin.from('region_code').upsert(rows);
+  return rows.sort((a, b) => a.region_cd.localeCompare(b.region_cd));
+}
+
+/** 장소에 혼잡도·날씨를 붙여 응답 모양으로 만든다 (주변 모드/지역 모드 공용) */
+async function attach(sorted: any[], regions: string[], ymd: string, now: number) {
+  const { data: crowdRows } = await supabaseAdmin
+    .from('tour_crowd').select('region_cd, norm_name, rate').in('region_cd', regions).eq('ymd', ymd);
+  const crowdMap = new Map((crowdRows ?? []).map((c: any) => [`${c.region_cd}|${c.norm_name}`, Number(c.rate)]));
+  const byRegion = new Map<string, { name: string; rate: number }[]>();
+  for (const c of (crowdRows ?? []) as any[]) {
+    const arr = byRegion.get(c.region_cd) ?? [];
+    arr.push({ name: c.norm_name, rate: Number(c.rate) });
+    byRegion.set(c.region_cd, arr);
+  }
+  // 정확히 안 맞으면 포함 관계로 한 번 더 찾는다 ('덕수궁' <-> '덕수궁 대한문')
+  const crowdFor = (regionCd: string, normTitle: string): number | null => {
+    const exact = crowdMap.get(`${regionCd}|${normTitle}`);
+    if (exact !== undefined) return exact;
+    if (normTitle.length < 4) return null;
+    let best: { name: string; rate: number } | null = null;
+    for (const c of byRegion.get(regionCd) ?? []) {
+      if (c.name.length < 4) continue;
+      if (!normTitle.includes(c.name) && !c.name.includes(normTitle)) continue;
+      if (!best || c.name.length > best.name.length) best = c;
+    }
+    return best ? best.rate : null;
+  };
+
+  // 날씨 — 장소가 많이 몰린 격자부터 최대 N칸 (나머지는 앱이 가까운 값으로 채운다)
+  const gridCount = new Map<string, number>();
+  for (const p of sorted) gridCount.set(`${p.nx}:${p.ny}`, (gridCount.get(`${p.nx}:${p.ny}`) ?? 0) + 1);
+  const grids = [...gridCount.entries()].sort((a, b) => b[1] - a[1]).map(([g]) => g).slice(0, MAX_WEATHER_GRIDS);
+  const nxs = grids.map((g) => Number(g.split(':')[0]));
+  const { data: wxRows } = await supabaseAdmin.from('grid_weather').select('*').eq('ymd', ymd).in('nx', nxs);
+  const wxMap = new Map((wxRows ?? []).map((w: any) => [`${w.nx}:${w.ny}`, w]));
+  for (const g of grids) {
+    const w = wxMap.get(g);
+    if (w && now - new Date(w.fetched_at).getTime() < WEATHER_TTL_MS) continue;
+    const [nx, ny] = g.split(':').map(Number);
+    await collectWeather(nx, ny);
+  }
+  const { data: wxFinal } = await supabaseAdmin.from('grid_weather').select('*').eq('ymd', ymd).in('nx', nxs);
+  const wx = new Map((wxFinal ?? []).map((w: any) => [`${w.nx}:${w.ny}`, w]));
+
+  return sorted.map((p: any) => {
+    const w = wx.get(`${p.nx}:${p.ny}`);
+    return {
+      id: p.content_id,
+      title: p.title,
+      lat: p.lat, lon: p.lon,
+      distanceM: p.distance_m,
+      addr: p.addr,
+      image: p.image_url,
+      indoor: p.indoor,
+      contentTypeId: p.content_type_id,
+      crowdRate: crowdFor(p.region_cd, p.norm_title), // 0~100, 없으면 null
+      weather: w ? { tempMin: w.temp_min, tempMax: w.temp_max, tempNow: w.temp_now, sky: w.sky, pop: w.pop } : null,
+    };
+  });
+}
+
 // ── 본체 ─────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders });
@@ -271,10 +357,59 @@ Deno.serve(async (req) => {
     if (!DATA_KEY) return json({ error: 'DATA_GO_KR_KEY 미설정' }, 500);
 
     const body = await req.json();
-    const lat = Number(body.lat), lon = Number(body.lon);
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json({ error: 'lat/lon 필요' }, 400);
     const ymd: string = /^\d{8}$/.test(body.ymd ?? '') ? body.ymd : fmtDate(kstNow());
     const now = Date.now();
+
+    // ── 지역 목록 ──
+    if (body.mode === 'regions') {
+      const rows = await loadRegionCodes();
+      const grouped = new Map<string, { regnCd: string; regnNm: string; list: { cd: string; nm: string }[] }>();
+      for (const r of rows) {
+        const g = grouped.get(r.regn_cd) ?? { regnCd: r.regn_cd, regnNm: r.regn_nm, list: [] };
+        g.list.push({ cd: r.region_cd, nm: r.signgu_nm });
+        grouped.set(r.regn_cd, g);
+      }
+      return json({ regions: [...grouped.values()] });
+    }
+
+    // ── 지역 모드: 고른 시군구의 장소 전체 ──
+    if (body.mode === 'region') {
+      const regionCd = String(body.regionCd ?? '');
+      if (!/^\d{5}$/.test(regionCd)) return json({ error: 'regionCd 필요' }, 400);
+      const { data: m } = await supabaseAdmin
+        .from('tour_region').select('places_at, crowd_at').eq('region_cd', regionCd).maybeSingle();
+      if (!m?.places_at || now - new Date(m.places_at).getTime() > PLACE_TTL_MS) await collectPlacesByRegion(regionCd);
+      if (!m?.crowd_at || now - new Date(m.crowd_at).getTime() > CROWD_TTL_MS) await collectCrowd(regionCd);
+
+      const { data: rows } = await supabaseAdmin.from('tour_place').select('*').eq('region_cd', regionCd).limit(300);
+      const list = rows ?? [];
+      if (list.length === 0) return json({ ymd, places: [], note: 'no places in region' });
+
+      // 거리는 내 위치 기준(있으면), 정렬은 지역 중심에서 가까운 순
+      const myLat = Number(body.lat), myLon = Number(body.lon);
+      const hasMe = Number.isFinite(myLat) && Number.isFinite(myLon);
+      const cLat = list.reduce((a: number, p: any) => a + p.lat, 0) / list.length;
+      const cLon = list.reduce((a: number, p: any) => a + p.lon, 0) / list.length;
+      const sorted = list
+        .map((p: any) => ({
+          ...p,
+          distance_m: hasMe ? distanceM(myLat, myLon, p.lat, p.lon) : distanceM(cLat, cLon, p.lat, p.lon),
+          _c: distanceM(cLat, cLon, p.lat, p.lon),
+        }))
+        .sort((a: any, b: any) => a._c - b._c)
+        .slice(0, 120);
+      const out = await attach(sorted, [regionCd], ymd, now);
+      return json({
+        ymd,
+        center: { lat: cLat, lon: cLon },
+        places: out,
+        stats: { total: out.length, withCrowd: out.filter((p) => p.crowdRate !== null).length, regions: 1 },
+      });
+    }
+
+    // ── 주변 모드 ──
+    const lat = Number(body.lat), lon = Number(body.lon);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return json({ error: 'lat/lon 필요' }, 400);
 
     // 1) 주변 장소 — 반드시 "거리순"으로 본다.
     //    네모 범위 + limit 만 쓰면 정렬이 없어 이미 쌓인 먼 지역(예: 서울) 데이터가 먼저 잡히고,
@@ -326,64 +461,7 @@ Deno.serve(async (req) => {
         .slice(0, 60);
       regions = [...new Set(sorted.map((p: any) => p.region_cd))];
     }
-    const { data: crowdRows } = await supabaseAdmin
-      .from('tour_crowd').select('region_cd, norm_name, rate').in('region_cd', regions).eq('ymd', ymd);
-    const crowdMap = new Map((crowdRows ?? []).map((c: any) => [`${c.region_cd}|${c.norm_name}`, Number(c.rate)]));
-    // 지역별 이름 목록 — 정확히 안 맞으면 포함 관계로 한 번 더 찾는다 ('덕수궁' <-> '덕수궁 대한문')
-    const byRegion = new Map<string, { name: string; rate: number }[]>();
-    for (const c of (crowdRows ?? []) as any[]) {
-      const arr = byRegion.get(c.region_cd) ?? [];
-      arr.push({ name: c.norm_name, rate: Number(c.rate) });
-      byRegion.set(c.region_cd, arr);
-    }
-    const crowdFor = (regionCd: string, normTitle: string): number | null => {
-      const exact = crowdMap.get(`${regionCd}|${normTitle}`);
-      if (exact !== undefined) return exact;
-      if (normTitle.length < 4) return null;
-      let best: { name: string; rate: number } | null = null;
-      for (const c of byRegion.get(regionCd) ?? []) {
-        if (c.name.length < 4) continue;
-        if (!normTitle.includes(c.name) && !c.name.includes(normTitle)) continue;
-        // 겹치는 이름이 길수록 더 구체적인 일치로 본다
-        if (!best || c.name.length > best.name.length) best = c;
-      }
-      return best ? best.rate : null;
-    };
-
-    // 3) 날씨 — 장소가 몰린 격자부터 최대 6칸
-    const grids = [...new Set(sorted.map((p: any) => `${p.nx}:${p.ny}`))].slice(0, MAX_WEATHER_GRIDS);
-    const { data: wxRows } = await supabaseAdmin
-      .from('grid_weather').select('*').eq('ymd', ymd)
-      .in('nx', grids.map((g) => Number(g.split(':')[0])));
-    const wxMap = new Map((wxRows ?? []).map((w: any) => [`${w.nx}:${w.ny}`, w]));
-    for (const g of grids) {
-      const w = wxMap.get(g);
-      if (w && now - new Date(w.fetched_at).getTime() < WEATHER_TTL_MS) continue;
-      const [nx, ny] = g.split(':').map(Number);
-      await collectWeather(nx, ny);
-    }
-    const { data: wxFinal } = await supabaseAdmin
-      .from('grid_weather').select('*').eq('ymd', ymd)
-      .in('nx', grids.map((g) => Number(g.split(':')[0])));
-    const wx = new Map((wxFinal ?? []).map((w: any) => [`${w.nx}:${w.ny}`, w]));
-
-    // 4) 합쳐서 응답
-    const out = sorted.map((p: any) => {
-      const w = wx.get(`${p.nx}:${p.ny}`);
-      const rate = crowdFor(p.region_cd, p.norm_title);
-      return {
-        id: p.content_id,
-        title: p.title,
-        lat: p.lat, lon: p.lon,
-        distanceM: p.distance_m,
-        addr: p.addr,
-        image: p.image_url,
-        indoor: p.indoor,
-        contentTypeId: p.content_type_id,
-        crowdRate: rate,                       // 0~100, 없으면 null
-        weather: w ? { tempMin: w.temp_min, tempMax: w.temp_max, tempNow: w.temp_now, sky: w.sky, pop: w.pop } : null,
-      };
-    });
+    const out = await attach(sorted, regions as string[], ymd, now);
 
     return json({
       ymd,

@@ -38,18 +38,65 @@ export async function fetchMapPlaces(lat: number, lon: number, ymd: string): Pro
   return fillMissingWeather(res.places ?? []);
 }
 
+// ── 지역 선택 ────────────────────────────────────────────────
+export interface RegionItem { cd: string; nm: string }
+export interface RegionGroup { regnCd: string; regnNm: string; list: RegionItem[] }
+
+// 세종은 시도 코드 자체가 5자리라 시군구 체계에 안 맞는다 → 시청 좌표 기준 주변 보기로 대신한다
+export const COORD_REGIONS: Record<string, { lat: number; lon: number }> = {
+  '3611036110': { lat: 36.48, lon: 127.289 },
+};
+
+let regionCache: RegionGroup[] | null = null;
+
+/** 시도/시군구 목록. 거의 안 바뀌므로 앱 실행 중엔 한 번만 받는다. */
+export async function fetchRegions(): Promise<RegionGroup[]> {
+  if (regionCache) return regionCache;
+  const res = await callFunction<{ regions?: RegionGroup[]; error?: string }>('tour-map', { mode: 'regions' });
+  if (res.error || !res.regions) throw new Error(res.error ?? 'regions');
+  // '수원시'처럼 구를 가진 상위 시는 장소가 구 단위로만 달려 있어 고르면 비어 보인다 → 목록에서 뺀다
+  regionCache = res.regions.map((g) => ({
+    ...g,
+    list: g.list.filter((r) => !g.list.some((o) => o !== r && o.nm.startsWith(`${r.nm} `))),
+  }));
+  return regionCache;
+}
+
+/** 고른 시군구의 장소 전체 (거리는 내 위치 기준) */
+export async function fetchRegionPlaces(
+  regionCd: string,
+  ymd: string,
+  me: { lat: number; lon: number } | null,
+): Promise<MapPlace[]> {
+  const res = await callFunction<MapResponse>('tour-map', {
+    mode: 'region', regionCd, ymd, ...(me ? { lat: me.lat, lon: me.lon } : {}),
+  });
+  if (res.error) throw new Error(res.error);
+  return fillMissingWeather(res.places ?? [], 12); // 군 단위는 넓어서 채우는 반경을 넓힌다
+}
+
+/** 장소들의 중앙값 좌표 — 평균은 원본의 튀는 좌표 하나에도 크게 끌려간다 */
+export function medianCenter(places: MapPlace[]): { latitude: number; longitude: number } | null {
+  if (places.length === 0) return null;
+  const mid = (xs: number[]) => {
+    const s = [...xs].sort((a, b) => a - b);
+    return s[Math.floor(s.length / 2)];
+  };
+  return { latitude: mid(places.map((p) => p.lat)), longitude: mid(places.map((p) => p.lon)) };
+}
+
 /**
  * 서버는 기상청 호출을 아끼려고 격자 몇 칸만 받아온다.
  * 날씨가 빈 장소는 마커에 "--"로 보이므로, 5km 안의 가장 가까운 장소 날씨로 채운다.
  * (기상청 격자가 5km라 그 안에서는 사실상 같은 값)
  */
-function fillMissingWeather(places: MapPlace[]): MapPlace[] {
+function fillMissingWeather(places: MapPlace[], maxKm = 5): MapPlace[] {
   const withWx = places.filter((p) => p.weather);
   if (withWx.length === 0) return places;
   return places.map((p) => {
     if (p.weather) return p;
     let best: MapPlace | null = null;
-    let bestKm = 5;
+    let bestKm = maxKm;
     for (const q of withWx) {
       const km = Math.hypot((q.lat - p.lat) * 111, (q.lon - p.lon) * 88);
       if (km < bestKm) { bestKm = km; best = q; }
