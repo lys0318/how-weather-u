@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, ActivityIndicator } from 'react-native';
+import { View, ActivityIndicator, AppState } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
@@ -174,6 +174,15 @@ function AppNavigator() {
 }
 
 export default function App() {
+  // 앱이 앞으로 돌아올 때 업데이트를 다시 확인한다.
+  // 플레이 스토어가 새 버전 정보를 캐시해 두는 구조라, 실행 시점 한 번만 보면 놓칠 수 있다.
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') checkForUpdate();
+    });
+    return () => sub.remove();
+  }, []);
+
   const [fontsLoaded, fontError] = useFonts({
     GowunBatang: require('./assets/fonts/GowunBatang-Regular.ttf'),
     GowunBatangBold: require('./assets/fonts/GowunBatang-Bold.ttf'),
