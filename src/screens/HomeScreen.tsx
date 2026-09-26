@@ -17,6 +17,7 @@ import {
   Linking,
 } from 'react-native';
 import { useWeather } from '../hooks/useWeather';
+import TodayPickCard from '../components/TodayPickCard';
 import { useMessage } from '../hooks/useMessage';
 import {
   getTimeOfDay,
@@ -549,6 +550,13 @@ export default function HomeScreen() {
           {weather?.hourly && weather.hourly.length > 0 && (
             <View style={styles.forecastSection}>
               <HourlyForecast slots={weather.hourly} currentHour={hour} />
+            </View>
+          )}
+
+          {/* 오늘 가기 좋은 곳 — 날씨 맵으로 이어진다 (한국만, 추천이 없으면 숨김) */}
+          {weather && (
+            <View style={styles.forecastSection}>
+              <TodayPickCard stamp={weather} />
             </View>
           )}
 

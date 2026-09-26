@@ -35,6 +35,8 @@ src/
 │   ├── inAppUpdate.ts        강제 업데이트
 │   ├── notification.ts       OS 예약 알림 (스케줄 락 포함)
 │   └── bookmarks.ts          북마크 클라우드 동기화
+│   ├── tourMap.ts            날씨 맵 데이터·추천 (tour-map 호출, 10분 캐시)
+│   └── appEvent.ts           앱 열림·지도 사용 기록 (app_event, 하루 1행)
 ├── contexts/AuthContext.tsx  구글 OAuth (PKCE + WebBrowser/Linking race)
 ├── constants/weather.ts      WeatherCondition / WeatherInfo / ForecastSlot 타입
 ├── utils/storage.ts          AsyncStorage (메시지/북마크/설정/알림 플래그)
@@ -49,6 +51,7 @@ supabase/functions/    Edge Functions (Deno)
 ├── get-usage/                오늘 사용량 조회 (기록 추가 X)
 ├── redeem-ad-credit/         보상형 광고 시청 → +1 충전
 └── delete-account/           계정 영구 삭제
+└── tour-map/                 날씨 맵 (관광공사 장소·집중률 + 서울 실시간 + 격자 날씨, DB 캐시)
 ```
 
 ## 핵심 동작 규칙
@@ -65,6 +68,12 @@ supabase/functions/    Edge Functions (Deno)
 - `weather.ts.fetchWeather()`가 진입점. 한국(`isInKorea`)이면 기상청, 아니면 OpenWeather
 - 최저/최고 기온 = 향후 24시간 예보 범위 (밤에도 의미 있게)
 - 10분 인메모리 캐시
+
+### 날씨 맵
+- `tour-map` 한 함수가 원본 API(관광공사·기상청·서울 도시데이터)를 모두 부르고 DB에 캐시. 앱은 이 함수만 호출
+- 혼잡: 관광공사 집중률 예측(시군구·일 단위) + 서울 121곳은 '오늘'이면 실시간(`seoul_area`, 10분 캐시). 장소와는 이름으로 매칭(`nameScore`)
+- 홈 '오늘 가기 좋은 곳' 카드·아침 알림 한 줄이 같은 추천(`recommendPlaces`)을 씀. 누르면 지도 탭 `focus` 파라미터로 장소를 연다
+- 실사용 측정: `app_event`(open/map, KST 하루 1행). AI 생성만 보려면 `usage_log`
 
 ### 알림
 - OS AlarmManager 기반 Date 트리거 48개 예약 (`scheduleUpcomingNotifications`)

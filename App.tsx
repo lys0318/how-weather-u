@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator, AppState } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { NavigationContainer, useNavigation } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { StatusBar } from 'expo-status-bar';
@@ -48,6 +48,8 @@ import { getHasOnboarded } from './src/utils/storage';
 import { AuthProvider, useAuth } from './src/contexts/AuthContext';
 import { PremiumProvider } from './src/contexts/PremiumContext';
 import { LanguageProvider, useI18n } from './src/i18n';
+import { logAppEvent } from './src/services/appEvent';
+import type { MapPlace } from './src/services/tourMap';
 
 export type RootStackParamList = {
   Login: undefined;
@@ -57,7 +59,7 @@ export type RootStackParamList = {
 
 export type MainTabParamList = {
   Home: undefined;
-  Map: undefined;
+  Map: { focus?: MapPlace } | undefined;
   Messaging: undefined;
   History: undefined;
   Settings: undefined;
@@ -66,8 +68,24 @@ export type MainTabParamList = {
 const Stack = createNativeStackNavigator<RootStackParamList>();
 const Tab = createBottomTabNavigator<MainTabParamList>();
 
+// 알림을 눌러 앱이 열렸을 때 같은 알림을 두 번 처리하지 않도록 (화면이 다시 올라와도)
+let handledNotif: string | null = null;
+
 function MainTabs() {
   const { t } = useI18n();
+  const navigation = useNavigation<any>();
+
+  // 아침 알림의 '가기 좋은 곳'을 누르면 지도 탭에서 그 장소를 연다
+  const response = Notifications.useLastNotificationResponse();
+  useEffect(() => {
+    if (!response) return;
+    const id = `${response.notification.request.identifier}:${response.notification.date}`;
+    const data = response.notification.request.content.data as { screen?: string; focus?: MapPlace } | undefined;
+    if (handledNotif === id || data?.screen !== 'Map' || !data.focus) return;
+    handledNotif = id;
+    navigation.navigate('Main', { screen: 'Map', params: { focus: data.focus } });
+  }, [response, navigation]);
+
   return (
     <Tab.Navigator
       screenOptions={{
@@ -147,6 +165,11 @@ function AppNavigator() {
     getHasOnboarded().then((value) => setHasOnboarded(value));
   }, []);
 
+  // 실사용자 측정 — 하루 한 번 '앱 열림'을 남긴다 (로그인·게스트 세션이 생긴 뒤)
+  useEffect(() => {
+    if (session) logAppEvent('open');
+  }, [session]);
+
   if (hasOnboarded === null || authLoading) {
     return <LoadingScreen />;
   }
@@ -178,7 +201,10 @@ export default function App() {
   // 플레이 스토어가 새 버전 정보를 캐시해 두는 구조라, 실행 시점 한 번만 보면 놓칠 수 있다.
   useEffect(() => {
     const sub = AppState.addEventListener('change', (state) => {
-      if (state === 'active') checkForUpdate();
+      if (state === 'active') {
+        checkForUpdate();
+        logAppEvent('open'); // 날짜가 바뀐 뒤 돌아온 경우도 센다
+      }
     });
     return () => sub.remove();
   }, []);

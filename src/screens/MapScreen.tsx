@@ -5,11 +5,14 @@ import {
 } from 'react-native';
 import { NaverMapView, NaverMapMarkerOverlay, NaverMapViewRef } from '@mj-studio/react-native-naver-map';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { RouteProp, useFocusEffect, useNavigation, useRoute } from '@react-navigation/native';
+import type { MainTabParamList } from '../../App';
+import { logAppEvent } from '../services/appEvent';
 import { getLastCoords } from '../utils/storage';
 import { getCurrentCoords } from '../services/weather';
 import {
   fetchMapPlaces, fetchRegionPlaces, fetchRegions, medianCenter, COORD_REGIONS,
-  crowdLevel, CROWD_COLOR, ymdFor, recommendPlaces, MapPlace, DayKey, RegionGroup, RegionItem,
+  crowdLevel, CROWD_COLOR, ymdFor, recommendPlaces, distanceLabel, MapPlace, DayKey, RegionGroup, RegionItem,
 } from '../services/tourMap';
 import { CONDITION_META } from '../constants/weather';
 import { COLORS, FONTS, RADII } from '../constants/theme';
@@ -46,6 +49,10 @@ export default function MapScreen() {
   const [selected, setSelected] = useState<MapPlace | null>(null);
   // 상세 카드 높이 — 카드가 떠 있으면 '내 위치' 버튼을 그 위로 올린다 (가려지던 문제)
   const [sheetH, setSheetH] = useState(0);
+  const route = useRoute<RouteProp<MainTabParamList, 'Map'>>();
+  const navigation = useNavigation<any>();
+
+  useFocusEffect(useCallback(() => { logAppEvent('map'); }, []));
 
   // 지도 때문에 GPS를 새로 켜지 않는다 — 저장된 좌표 우선, 없을 때만 위치 조회
   useEffect(() => {
@@ -85,6 +92,8 @@ export default function MapScreen() {
         list = await fetchMapPlaces(lat, lon, ymd);
       }
       setPlaces(list);
+      // 홈·알림에서 넘어온 장소는 방금 받은 최신 값(혼잡·기온)으로 바꿔 보여준다
+      setSelected((s) => (s ? list.find((p) => p.id === s.id) ?? s : s));
     } catch (e) {
       setError(e instanceof Error ? e.message : t('common.genError'));
       setPlaces([]);
@@ -97,6 +106,18 @@ export default function MapScreen() {
     if (!coordsReady) return;
     load(center.latitude, center.longitude, day, region);
   }, [coordsReady, center.latitude, center.longitude, day, region, load]);
+
+  // 홈 카드·아침 알림에서 장소를 눌러 들어오면 그 장소를 열어준다 (내 주변·오늘 기준)
+  const focus = route.params?.focus;
+  useEffect(() => {
+    if (!focus || !coordsReady) return;
+    navigation.setParams({ focus: undefined }); // 한 번만
+    setRegion(null);
+    setDay('today');
+    setSelected(focus);
+    // 지도가 막 올라온 참이면 ref가 아직 없어 잠깐 뒤에 옮긴다
+    setTimeout(() => moveTo(focus.lat, focus.lon, 14), 400);
+  }, [focus, coordsReady, navigation, moveTo]);
 
   const openPicker = async () => {
     setPickSido(null);
@@ -113,6 +134,9 @@ export default function MapScreen() {
     const MIN_GAP_DEG = 0.011 * Math.pow(2, 12 - zoom);
     const cap = zoom >= 13 ? 40 : 20;
     const ranked = [...places].sort((a, b) => {
+      // 고른 장소는 항상 보이게 맨 앞 (옆 장소에 가려 마커가 사라지던 문제)
+      if (a.id === selected?.id) return -1;
+      if (b.id === selected?.id) return 1;
       const ac = a.crowdRate === null ? 1 : 0;
       const bc = b.crowdRate === null ? 1 : 0;
       return ac !== bc ? ac - bc : a.distanceM - b.distanceM;
@@ -126,7 +150,7 @@ export default function MapScreen() {
       if (!tooClose) kept.push(p);
     }
     return kept;
-  }, [places, zoom]);
+  }, [places, zoom, selected]);
 
   // 추천 3곳 — 날씨·혼잡도·거리로 점수를 매긴다 (서버 호출 없음)
   const recs = useMemo(() => recommendPlaces(places, region ? Infinity : 30), [places, region]);
@@ -268,14 +292,13 @@ export default function MapScreen() {
                 <View style={styles.recMeta}>
                   <View style={[styles.dot, { backgroundColor: CROWD_COLOR[crowdLevel(place.crowdRate)] }]} />
                   <Text style={styles.recMetaText}>
+                    {place.crowdLive ? `${t('map.live')} · ` : ''}
                     {/* 마커와 같은 값(지금 기온, 미래 날짜면 최고)을 써야 서로 달라 보이지 않는다 */}
                     {(() => {
                       const tv = place.weather?.tempNow ?? place.weather?.tempMax;
                       return tv === null || tv === undefined ? '' : `${tv}° · `;
                     })()}
-                    {place.distanceM >= 1000
-                      ? t('map.distanceKm', { km: (place.distanceM / 1000).toFixed(1) })
-                      : t('map.distanceM', { m: place.distanceM })}
+                    {distanceLabel(place.distanceM, t)}
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -297,15 +320,14 @@ export default function MapScreen() {
               <View style={styles.sheetInfo}>
                 <Text style={styles.sheetTitle} numberOfLines={2}>{selected.title}</Text>
                 <Text style={styles.sheetSub} numberOfLines={1}>
-                  {selected.distanceM >= 1000
-                    ? t('map.distanceKm', { km: (selected.distanceM / 1000).toFixed(1) })
-                    : t('map.distanceM', { m: selected.distanceM })}
+                  {distanceLabel(selected.distanceM, t)}
                   {selected.addr ? ` · ${selected.addr}` : ''}
                 </Text>
                 <View style={styles.badgeRow}>
                   <View style={[styles.badge, { borderColor: CROWD_COLOR[crowdLevel(selected.crowdRate)] }]}>
                     <Text style={[styles.badgeText, { color: CROWD_COLOR[crowdLevel(selected.crowdRate)] }]}>
                       {t(`map.${crowdLevel(selected.crowdRate)}`)}
+                      {selected.crowdLive ? ` · ${t('map.live')}` : ''}
                     </Text>
                   </View>
                   {selected.weather && (

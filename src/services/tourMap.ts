@@ -1,5 +1,6 @@
 // 날씨 맵 데이터 — 서버(tour-map)가 관광공사·기상청을 모아 캐시해 둔 걸 받아온다.
 import { callFunction } from './backend';
+import { isInKorea } from './kma';
 import { WeatherCondition } from '../constants/weather';
 
 export interface MapPlaceWeather {
@@ -22,6 +23,8 @@ export interface MapPlace {
   contentTypeId: string;
   /** 0~100 혼잡 예측. 집중률 데이터에 없는 장소는 null */
   crowdRate: number | null;
+  /** 서울 실시간 도시데이터 값이면 true (예측이 아니라 지금 붐빔) */
+  crowdLive?: boolean;
   weather: MapPlaceWeather | null;
 }
 
@@ -32,10 +35,29 @@ interface MapResponse {
   error?: string;
 }
 
+// 홈 카드·지도·아침 알림이 같은 좌표를 연달아 부른다 → 잠깐은 받아둔 걸 쓴다
+const CACHE_MS = 10 * 60 * 1000;
+const placeCache = new Map<string, { at: number; places: MapPlace[] }>();
+
 export async function fetchMapPlaces(lat: number, lon: number, ymd: string): Promise<MapPlace[]> {
+  const key = `${lat.toFixed(3)},${lon.toFixed(3)},${ymd}`;
+  const hit = placeCache.get(key);
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.places;
   const res = await callFunction<MapResponse>('tour-map', { lat, lon, ymd });
   if (res.error) throw new Error(res.error);
-  return fillMissingWeather(res.places ?? []);
+  const places = fillMissingWeather(res.places ?? []);
+  placeCache.set(key, { at: Date.now(), places });
+  return places;
+}
+
+/** 홈 카드·아침 알림용 추천 1곳. 관광 데이터가 한국만 있어 해외면 null */
+export async function fetchTopPick(lat: number, lon: number, ymd: string): Promise<Recommendation | null> {
+  if (!isInKorea(lat, lon)) return null;
+  return recommendPlaces(await fetchMapPlaces(lat, lon, ymd))[0] ?? null;
+}
+
+export function distanceLabel(m: number, t: (k: string, p?: Record<string, string | number>) => string): string {
+  return m >= 1000 ? t('map.distanceKm', { km: (m / 1000).toFixed(1) }) : t('map.distanceM', { m });
 }
 
 // ── 지역 선택 ────────────────────────────────────────────────

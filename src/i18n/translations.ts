@@ -52,6 +52,8 @@ export const translations = {
       testBody: '테스트 알림이에요. 알림이 정상적으로 작동하고 있어요!',
       renewalTitle: '구독 갱신 안내',
       renewalBody: '구독 중이시라면 {date}에 월 구독이 자동 갱신돼요. 해지는 설정 > 구독 관리에서 할 수 있어요.',
+      pickLine: '📍 가기 좋은 곳: {name}',
+      pickLineCrowd: '📍 가기 좋은 곳: {name} · {crowd}',
     },
     login: {
       tagline: '오늘의 날씨가\n당신에게 건네는 한마디',
@@ -254,6 +256,9 @@ export const translations = {
       back: '뒤로',
       close: '닫기',
       myLocation: '내 위치',
+      live: '실시간',
+      pickTitle: '오늘 가기 좋은 곳',
+      pickMore: '지도',
       reason: {
         rain: '비 소식이 있어 실내로 골랐어요',
         hot: '더운 날엔 실내가 편해요',
@@ -442,6 +447,8 @@ export const translations = {
       testBody: 'This is a test notification. Notifications are working!',
       renewalTitle: 'Subscription renewal',
       renewalBody: "If you're still subscribed, your monthly plan renews on {date}. You can cancel anytime in Settings > Manage subscription.",
+      pickLine: '📍 Good to visit: {name}',
+      pickLineCrowd: '📍 Good to visit: {name} · {crowd}',
     },
     login: {
       tagline: 'A word from today’s weather,\njust for you',
@@ -643,6 +650,9 @@ export const translations = {
       back: 'Back',
       close: 'Close',
       myLocation: 'My location',
+      live: 'Live',
+      pickTitle: 'Good to visit today',
+      pickMore: 'Map',
       reason: {
         rain: 'Rain expected — picked an indoor spot',
         hot: 'Hot day — indoors is easier',

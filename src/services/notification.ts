@@ -4,6 +4,8 @@ import { getNotificationsEnabled, getNotifSlots, NotifSlot } from '../utils/stor
 import { translate, getCurrentLang } from '../i18n';
 import { WeatherInfo, MONTH_EN_SHORT } from '../constants/weather';
 import { buildBriefLine } from './brief';
+import { fetchTopPick, ymdFor, crowdLevel, Recommendation } from './tourMap';
+import { getLastCoords } from '../utils/storage';
 
 // 시간대별 발송 시각 (문구는 현재 언어로 translate)
 export const SLOT_CONFIG: Record<NotifSlot, { hour: number; minute: number }> = {
@@ -24,6 +26,33 @@ function buildBriefContent(weather: WeatherInfo, slot: NotifSlot): { title: stri
   const title = `${translate('common.appName')} ${weather.emoji}`;
   const body = buildBriefLine(weather, SLOT_CONFIG[slot].hour);
   return { title, body };
+}
+
+/**
+ * 아침 알림에 붙일 '가기 좋은 곳' — 알림이 나갈 날 기준으로 고른다.
+ * 백그라운드 갱신 시간이 짧아 4초 안에 못 받으면 빼고 예약한다.
+ */
+async function morningPick(): Promise<Recommendation | null> {
+  try {
+    const c = await getLastCoords();
+    if (!c) return null;
+    const now = new Date();
+    const { hour, minute } = SLOT_CONFIG.morning;
+    const passed = now.getHours() * 60 + now.getMinutes() >= hour * 60 + minute;
+    return await Promise.race([
+      fetchTopPick(c.lat, c.lon, ymdFor(passed ? 'tomorrow' : 'today')),
+      new Promise<null>((resolve) => setTimeout(() => resolve(null), 4000)),
+    ]);
+  } catch {
+    return null;
+  }
+}
+
+function pickLine(pick: Recommendation): string {
+  const level = crowdLevel(pick.place.crowdRate);
+  return level === 'unknown'
+    ? translate('notif.pickLine', { name: pick.place.title })
+    : translate('notif.pickLineCrowd', { name: pick.place.title, crowd: translate(`map.${level}`) });
 }
 
 export async function requestNotificationPermission(): Promise<boolean> {
@@ -161,6 +190,8 @@ export async function scheduleSlotNotifications(slots: NotifSlot[], weather?: We
   }
 
   schedulingLock = (async () => {
+    // 추천을 먼저 받는다 — 지운 뒤 기다리다 백그라운드 작업이 끊기면 알림이 비어버린다
+    const pick = slots.includes('morning') ? await morningPick() : null;
     await cancelSlotNotifications();
     if (slots.length === 0) return;
 
@@ -171,9 +202,16 @@ export async function scheduleSlotNotifications(slots: NotifSlot[], weather?: We
       const content = weather
         ? buildBriefContent(weather, slot)
         : { title: translate(SLOT_TEXT_KEY[slot].title), body: translate(SLOT_TEXT_KEY[slot].body) };
+      const withPick = slot === 'morning' && pick;
       try {
         await Notifications.scheduleNotificationAsync({
-          content: { title: content.title, body: content.body, sound: false },
+          content: {
+            title: content.title,
+            body: withPick ? `${content.body}\n${pickLine(pick)}` : content.body,
+            sound: false,
+            // 누르면 지도 탭에서 이 장소를 연다 (App.tsx)
+            data: withPick ? { screen: 'Map', focus: pick.place } : {},
+          },
           trigger: {
             type: Notifications.SchedulableTriggerInputTypes.DAILY,
             hour: cfg.hour,
