@@ -37,6 +37,7 @@ const TOUR_COMMON = 'MobileOS=ETC&MobileApp=howweatheryou&_type=json';
 const PLACE_TTL_MS = 7 * 24 * 3600e3;
 const CROWD_TTL_MS = 24 * 3600e3;
 const WEATHER_TTL_MS = 3 * 3600e3;
+const WEATHER_MAX_AGE_MS = 12 * 3600e3; // 이보다 오래된 예보만 기다렸다 새로 받는다 (그 사이는 뒤에서 갱신)
 const LIVE_TTL_MS = 10 * 60e3; // 서울 실시간 인구는 5분마다 갱신된다
 
 // 한 요청에서 새로 수집할 상한 (할당량 보호)
@@ -208,6 +209,7 @@ async function collectCrowd(regionCd: string): Promise<number> {
   const areaCd = regionCd.slice(0, 2);
   let saved = 0;
   const rawNames = new Set<string>();
+  let first: any = null;
   for (let page = 1; page <= MAX_CROWD_PAGES; page++) {
     const url = `${TOUR_BASE}/TatsCnctrRateService/tatsCnctrRatedList?serviceKey=${DATA_KEY}&${TOUR_COMMON}`
       + `&areaCd=${areaCd}&signguCd=${regionCd}&numOfRows=1000&pageNo=${page}`;
@@ -219,6 +221,7 @@ async function collectCrowd(regionCd: string): Promise<number> {
       ymd: i.baseYmd, rate: Number(i.cnctrRate),
     }));
     for (const i of items) rawNames.add(i.tAtsNm);
+    first ??= items[0];
     // 같은 관광지·날짜가 중복으로 오면 마지막 값만 남긴다 (upsert 충돌 방지)
     const dedup = new Map(rows.map((r) => [`${r.norm_name}|${r.ymd}`, r]));
     await supabaseAdmin.from('tour_crowd').upsert([...dedup.values()]);
@@ -226,10 +229,6 @@ async function collectCrowd(regionCd: string): Promise<number> {
     const total = j?.response?.body?.totalCount ?? 0;
     if (page * 1000 >= total) break;
   }
-  const meta = await getJson(
-    `${TOUR_BASE}/TatsCnctrRateService/tatsCnctrRatedList?serviceKey=${DATA_KEY}&${TOUR_COMMON}&areaCd=${areaCd}&signguCd=${regionCd}&numOfRows=1&pageNo=1`,
-  );
-  const first = tourItems(meta)[0];
   await supabaseAdmin.from('tour_region').upsert({
     region_cd: regionCd,
     area_nm: first?.areaNm ?? null,
@@ -371,13 +370,14 @@ async function collectWeather(nx: number, ny: number): Promise<void> {
   const items = j?.response?.body?.items?.item;
   if (!Array.isArray(items)) return;
 
-  const byDay = new Map<string, { tmps: number[]; pops: number[]; pty: string; sky: string; tmn?: number; tmx?: number; now?: number }>();
+  const byDay = new Map<string, { tmps: number[]; hourly: Record<string, number>; pops: number[]; pty: string; sky: string; tmn?: number; tmx?: number; now?: number }>();
   const curHour = pad2(kstNow().getUTCHours()) + '00';
   for (const it of items) {
-    const d = byDay.get(it.fcstDate) ?? { tmps: [], pops: [], pty: '0', sky: '1' };
+    const d = byDay.get(it.fcstDate) ?? { tmps: [], hourly: {}, pops: [], pty: '0', sky: '1' };
     const v = it.fcstValue;
     if (it.category === 'TMP') {
       d.tmps.push(Number(v));
+      d.hourly[it.fcstTime] = Number(v);
       if (it.fcstTime === curHour) d.now = Number(v);
     } else if (it.category === 'POP') d.pops.push(Number(v));
     else if (it.category === 'PTY' && v !== '0') d.pty = v;
@@ -394,6 +394,7 @@ async function collectWeather(nx: number, ny: number): Promise<void> {
     sky: skyFrom(d.pty, d.sky),
     pop: d.pops.length ? Math.max(...d.pops) : null,
     temp_now: d.now ?? null,
+    hourly: d.hourly,
     fetched_at: new Date().toISOString(),
   }));
   if (rows.length) await supabaseAdmin.from('grid_weather').upsert(rows);
@@ -471,15 +472,27 @@ async function attach(all: any[], regions: string[], ymd: string, now: number, l
   const nxs = grids.map((g) => Number(g.split(':')[0]));
   const { data: wxRows } = await supabaseAdmin.from('grid_weather').select('*').eq('ymd', ymd).in('nx', nxs);
   const wxMap = new Map((wxRows ?? []).map((w: any) => [`${w.nx}:${w.ny}`, w]));
-  for (const g of grids) {
+  // 없거나 너무 오래된 격자만 기다린다. 3~12시간 된 예보는 그대로 쓰고 뒤에서 새로 받는다.
+  // (앱을 하루 한두 번 여는 사람에겐 매번이 '캐시 만료 후 첫 요청'이라 여기서 몇 초씩 걸렸다)
+  const ageOf = (g: string) => {
     const w = wxMap.get(g);
-    if (w && now - new Date(w.fetched_at).getTime() < WEATHER_TTL_MS) continue;
+    return w ? now - new Date(w.fetched_at).getTime() : Infinity;
+  };
+  const fetchGrid = (g: string) => {
     const [nx, ny] = g.split(':').map(Number);
-    await collectWeather(nx, ny);
+    return collectWeather(nx, ny);
+  };
+  const refreshLater = grids.filter((g) => ageOf(g) > WEATHER_TTL_MS && ageOf(g) <= WEATHER_MAX_AGE_MS);
+  if (refreshLater.length) background(Promise.all(refreshLater.map(fetchGrid)));
+  const missing = grids.filter((g) => ageOf(g) > WEATHER_MAX_AGE_MS);
+  await Promise.all(missing.map(fetchGrid));
+  let wx = wxMap;
+  if (missing.length) {
+    const { data: wxFinal } = await supabaseAdmin.from('grid_weather').select('*').eq('ymd', ymd).in('nx', nxs);
+    wx = new Map((wxFinal ?? []).map((w: any) => [`${w.nx}:${w.ny}`, w]));
   }
-  const { data: wxFinal } = await supabaseAdmin.from('grid_weather').select('*').eq('ymd', ymd).in('nx', nxs);
-  const wx = new Map((wxFinal ?? []).map((w: any) => [`${w.nx}:${w.ny}`, w]));
 
+  const curHour = pad2(kstNow().getUTCHours()) + '00';
   return picked.map(({ p, rate, isLive }) => {
     const w = wx.get(`${p.nx}:${p.ny}`);
     return {
@@ -493,7 +506,9 @@ async function attach(all: any[], regions: string[], ymd: string, now: number, l
       contentTypeId: p.content_type_id,
       crowdRate: rate, // 0~100, 없으면 null. 서울 실시간이 있으면 그 값이 우선
       crowdLive: isLive,
-      weather: w ? { tempMin: w.temp_min, tempMax: w.temp_max, tempNow: w.temp_now, sky: w.sky, pop: w.pop } : null,
+      weather: w
+        ? { tempMin: w.temp_min, tempMax: w.temp_max, tempNow: w.hourly?.[curHour] ?? w.temp_now, sky: w.sky, pop: w.pop }
+        : null,
     };
   });
 }
@@ -530,8 +545,18 @@ Deno.serve(async (req) => {
       if (!/^\d{5}$/.test(regionCd)) return json({ error: 'regionCd 필요' }, 400);
       const { data: m } = await supabaseAdmin
         .from('tour_region').select('places_at, crowd_at').eq('region_cd', regionCd).maybeSingle();
-      if (!m?.places_at || now - new Date(m.places_at).getTime() > PLACE_TTL_MS) await collectPlacesByRegion(regionCd);
-      if (!m?.crowd_at || now - new Date(m.crowd_at).getTime() > CROWD_TTL_MS) await collectCrowd(regionCd);
+      // 처음 보는 지역만 기다린다. 받아둔 게 있으면(기한만 지남) 응답은 바로 하고 뒤에서 새로 받는다.
+      // (집중률은 30일치가 한 번에 와서 어제 받은 값에도 오늘 예측이 들어 있다)
+      const placesStale = !!m?.places_at && now - new Date(m.places_at).getTime() > PLACE_TTL_MS;
+      const crowdStale = !!m?.crowd_at && now - new Date(m.crowd_at).getTime() > CROWD_TTL_MS;
+      if (!m?.places_at) await collectPlacesByRegion(regionCd);
+      if (!m?.crowd_at) await collectCrowd(regionCd);
+      if (placesStale || crowdStale) {
+        background((async () => {
+          if (placesStale) await collectPlacesByRegion(regionCd);
+          if (crowdStale) await collectCrowd(regionCd);
+        })());
+      }
 
       const { data: rows } = await supabaseAdmin.from('tour_place').select('*').eq('region_cd', regionCd).limit(1000);
       const list = rows ?? [];
@@ -592,18 +617,28 @@ Deno.serve(async (req) => {
     const { data: regionRows } = await supabaseAdmin
       .from('tour_region').select('region_cd, crowd_at, places_at').in('region_cd', regions);
     const meta = new Map((regionRows ?? []).map((r: any) => [r.region_cd, r]));
-    let filled = 0;
-    let placesAdded = false;
-    for (const rc of regions) {
-      const m: any = meta.get(rc);
-      const needPlaces = !m?.places_at || now - new Date(m.places_at).getTime() > PLACE_TTL_MS;
-      const needCrowd = !m?.crowd_at || now - new Date(m.crowd_at).getTime() > CROWD_TTL_MS;
-      if (!needPlaces && !needCrowd) continue;
-      if (filled >= MAX_NEW_REGIONS) break;
-      filled++;
-      if (needPlaces) { await collectPlacesByRegion(rc as string); placesAdded = true; }
-      if (needCrowd) await collectCrowd(rc as string);
-    }
+    const todo = regions
+      .map((rc) => {
+        const m: any = meta.get(rc);
+        return {
+          rc: rc as string,
+          needPlaces: !m?.places_at || now - new Date(m.places_at).getTime() > PLACE_TTL_MS,
+          needCrowd: !m?.crowd_at || now - new Date(m.crowd_at).getTime() > CROWD_TTL_MS,
+          firstTime: !m?.places_at || !m?.crowd_at, // 받아둔 게 없으면 기다려야 한다
+        };
+      })
+      .filter((x) => x.needPlaces || x.needCrowd)
+      .slice(0, MAX_NEW_REGIONS);
+    const refresh = async (x: { rc: string; needPlaces: boolean; needCrowd: boolean }) => {
+      if (x.needPlaces) await collectPlacesByRegion(x.rc);
+      if (x.needCrowd) await collectCrowd(x.rc);
+    };
+    // 기한만 지난 지역은 응답을 막지 않고 뒤에서 새로 받는다 (첫 화면이 몇 초씩 비던 문제)
+    // ponytail: 거의 동시에 온 요청이 같은 지역을 두 번 새로 받을 수 있다 — 요청당 2곳 상한이라 둠
+    for (const x of todo.filter((t) => !t.firstTime)) background(refresh(x));
+    const blocking = todo.filter((t) => t.firstTime);
+    const placesAdded = blocking.some((x) => x.needPlaces);
+    await Promise.all(blocking.map(refresh));
     if (placesAdded) {
       const r2 = { data: await nearby() };
       sorted = (r2.data ?? [])

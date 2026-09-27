@@ -22,6 +22,7 @@ const KEYS = {
   LAST_COORDS: 'lastCoords',                      // 위젯 백그라운드 갱신용 마지막 좌표
   GEN_COUNT: 'genCount',                          // 누적 생성 횟수 (인앱 리뷰 트리거)
   REVIEW_PROMPTED: 'reviewPrompted',              // 인앱 리뷰 노출 완료 여부
+  TODAY_PICK: 'todayPick',                        // 홈 '오늘 가기 좋은 곳' 마지막 추천 (서버 응답 전에 먼저 보여주기용)
 } as const;
 
 // ─── 로그인 후 프로필 작성 유도 (1회) ───────────────────────
@@ -271,6 +272,23 @@ export async function getLastCoords(): Promise<{ lat: number; lon: number; saved
   } catch {
     return null;
   }
+}
+
+// ─── 홈 '오늘 가기 좋은 곳' — 마지막 추천을 두었다가 서버 응답 전에 먼저 보여준다 ──
+// 오늘(KST) 같은 동네(약 5km 안)에서 받은 것만 쓴다.
+export async function getCachedPick<T>(lat: number, lon: number): Promise<T | null> {
+  try {
+    const v = await AsyncStorage.getItem(KEYS.TODAY_PICK);
+    const c = v ? JSON.parse(v) : null;
+    if (!c || c.day !== kstTodayStr()) return null;
+    if (Math.abs(c.lat - lat) > 0.05 || Math.abs(c.lon - lon) > 0.05) return null;
+    return c.pick as T;
+  } catch {
+    return null;
+  }
+}
+export async function setCachedPick(lat: number, lon: number, pick: unknown): Promise<void> {
+  await AsyncStorage.setItem(KEYS.TODAY_PICK, JSON.stringify({ day: kstTodayStr(), lat, lon, pick })).catch(() => {});
 }
 
 // ─── 인앱 리뷰 (누적 생성 N회 도달 시 1회 노출) ──────────────

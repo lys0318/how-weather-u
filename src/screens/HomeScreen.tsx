@@ -553,12 +553,8 @@ export default function HomeScreen() {
             </View>
           )}
 
-          {/* 오늘 가기 좋은 곳 — 날씨 맵으로 이어진다 (한국만, 추천이 없으면 숨김) */}
-          {weather && (
-            <View style={styles.forecastSection}>
-              <TodayPickCard stamp={weather} />
-            </View>
-          )}
+          {/* 오늘 가기 좋은 곳 — 날씨 맵으로 이어진다 (한국만, 추천이 없으면 틀까지 숨김) */}
+          {weather && <TodayPickCard stamp={weather} style={styles.forecastSection} />}
 
           {/* 주간 예보 */}
           {weather?.daily && weather.daily.length > 0 && (

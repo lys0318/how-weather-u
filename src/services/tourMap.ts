@@ -35,19 +35,22 @@ interface MapResponse {
   error?: string;
 }
 
-// 홈 카드·지도·아침 알림이 같은 좌표를 연달아 부른다 → 잠깐은 받아둔 걸 쓴다
+// 홈 카드·지도·아침 알림이 같은 좌표를 연달아(때로는 동시에) 부른다.
+// 진행 중인 요청까지 함께 나눠 써서 서버가 같은 일을 두 번 하지 않게 한다.
 const CACHE_MS = 10 * 60 * 1000;
-const placeCache = new Map<string, { at: number; places: MapPlace[] }>();
+const placeCache = new Map<string, { at: number; promise: Promise<MapPlace[]> }>();
 
-export async function fetchMapPlaces(lat: number, lon: number, ymd: string): Promise<MapPlace[]> {
+export function fetchMapPlaces(lat: number, lon: number, ymd: string): Promise<MapPlace[]> {
   const key = `${lat.toFixed(3)},${lon.toFixed(3)},${ymd}`;
   const hit = placeCache.get(key);
-  if (hit && Date.now() - hit.at < CACHE_MS) return hit.places;
-  const res = await callFunction<MapResponse>('tour-map', { lat, lon, ymd });
-  if (res.error) throw new Error(res.error);
-  const places = fillMissingWeather(res.places ?? []);
-  placeCache.set(key, { at: Date.now(), places });
-  return places;
+  if (hit && Date.now() - hit.at < CACHE_MS) return hit.promise;
+  const promise = callFunction<MapResponse>('tour-map', { lat, lon, ymd }).then((res) => {
+    if (res.error) throw new Error(res.error);
+    return fillMissingWeather(res.places ?? []);
+  });
+  placeCache.set(key, { at: Date.now(), promise });
+  promise.catch(() => placeCache.delete(key)); // 실패는 기억하지 않는다
+  return promise;
 }
 
 /** 홈 카드·아침 알림용 추천 1곳. 관광 데이터가 한국만 있어 해외면 null */
